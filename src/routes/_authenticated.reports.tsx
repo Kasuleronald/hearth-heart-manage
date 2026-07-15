@@ -75,6 +75,7 @@ function ReportsPage() {
   const classAttendance = useLiveQuery(() => db.classAttendance.toArray(), []) ?? [];
   const givings = useLiveQuery(() => db.givings.toArray(), []) ?? [];
   const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
+  const projects = useLiveQuery(() => db.projects.toArray(), []) ?? [];
 
   const report: ReportResult = useMemo(() => {
     switch (reportType) {
@@ -103,6 +104,7 @@ function ReportsPage() {
           classSessions,
           classes,
           events,
+          projects,
         });
         return buildGivingsReport(entries, from, to);
       }
@@ -132,6 +134,7 @@ function ReportsPage() {
     givings,
     users,
     cellSingular,
+    projects,
   ]);
 
   if (!session || !canAccessGivings(session.role)) return null;

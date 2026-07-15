@@ -1,8 +1,8 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Download, HandCoins } from "lucide-react";
-import { db, uid, type Giving, type GivingCategory } from "@/lib/db";
+import { db, uid, type Giving, type GivingCategory, type Partner, type Project } from "@/lib/db";
 import { downloadCsv } from "@/lib/download";
 import { formatUGX } from "@/lib/currency";
 import { PageHeader } from "@/components/page-header";
@@ -32,7 +32,9 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -61,6 +63,9 @@ function GivingsPage() {
   const { session } = useSession();
   const givings = useLiveQuery(() => db.givings.orderBy("date").reverse().toArray(), []) ?? [];
   const members = useLiveQuery(() => db.members.toArray(), []) ?? [];
+  const partners = useLiveQuery(() => db.partners.orderBy("name").toArray(), []) ?? [];
+  const projects = useLiveQuery(() => db.projects.orderBy("name").toArray(), []) ?? [];
+  const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [editing, setEditing] = useState<Giving | null>(null);
   const [open, setOpen] = useState(false);
@@ -80,6 +85,23 @@ function GivingsPage() {
     total: thisMonth.filter((g) => g.category === c.value).reduce((sum, g) => sum + g.amount, 0),
   }));
 
+  function giverName(g: Giving): string {
+    if (g.memberId) {
+      const m = members.find((mem) => mem.id === g.memberId);
+      return m ? `${m.firstName} ${m.lastName}` : "Unknown member";
+    }
+    if (g.partnerId) {
+      const p = partners.find((pt) => pt.id === g.partnerId);
+      return p ? `${p.name} (partner)` : "Unknown partner";
+    }
+    return "Anonymous";
+  }
+
+  function projectName(g: Giving): string {
+    if (g.projectId) return projects.find((p) => p.id === g.projectId)?.name ?? "Unknown project";
+    return g.projectName ?? "";
+  }
+
   return (
     <div>
       <PageHeader
@@ -91,16 +113,17 @@ function GivingsPage() {
               variant="outline"
               onClick={() => {
                 const rows = [
-                  ["Date", "Category", "Amount (UGX)", "Member", "Project", "Notes"],
+                  ["Date", "Category", "Amount (UGX)", "Giver", "Project", "Notes", "Added by"],
                   ...filtered.map((g) => {
-                    const m = members.find((mem) => mem.id === g.memberId);
+                    const addedBy = users.find((u) => u.id === g.createdBy);
                     return [
                       g.date,
                       CATEGORY_LABEL[g.category],
                       String(g.amount),
-                      m ? `${m.firstName} ${m.lastName}` : "Anonymous",
-                      g.projectName ?? "",
+                      giverName(g),
+                      projectName(g),
                       g.notes ?? "",
+                      addedBy?.fullName ?? "",
                     ];
                   }),
                 ];
@@ -121,7 +144,14 @@ function GivingsPage() {
                   <Plus className="mr-2 h-4 w-4" /> Record giving
                 </Button>
               </DialogTrigger>
-              <GivingDialog giving={editing} members={members} onClose={() => setOpen(false)} />
+              <GivingDialog
+                giving={editing}
+                members={members}
+                partners={partners}
+                projects={projects}
+                currentUserId={session.userId}
+                onClose={() => setOpen(false)}
+              />
             </Dialog>
           </div>
         }
@@ -164,12 +194,14 @@ function GivingsPage() {
                 <TableHead>Category</TableHead>
                 <TableHead>Amount</TableHead>
                 <TableHead>Giver</TableHead>
+                <TableHead>Added by</TableHead>
                 <TableHead className="w-[100px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.map((g) => {
-                const m = members.find((mem) => mem.id === g.memberId);
+                const addedBy = users.find((u) => u.id === g.createdBy);
+                const proj = projectName(g);
                 return (
                   <TableRow key={g.id}>
                     <TableCell className="text-muted-foreground">
@@ -177,14 +209,15 @@ function GivingsPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary">
-                        {g.category === "project" && g.projectName
-                          ? `${CATEGORY_LABEL[g.category]} — ${g.projectName}`
+                        {g.category === "project" && proj
+                          ? `${CATEGORY_LABEL[g.category]} — ${proj}`
                           : CATEGORY_LABEL[g.category]}
                       </Badge>
                     </TableCell>
                     <TableCell className="font-medium">{formatUGX(g.amount)}</TableCell>
+                    <TableCell className="text-muted-foreground">{giverName(g)}</TableCell>
                     <TableCell className="text-muted-foreground">
-                      {m ? `${m.firstName} ${m.lastName}` : "Anonymous"}
+                      {addedBy?.fullName ?? "—"}
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">
@@ -222,7 +255,7 @@ function GivingsPage() {
               {filtered.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={5}
+                    colSpan={6}
                     className="py-10 text-center text-sm text-muted-foreground"
                   >
                     <HandCoins className="mx-auto mb-2 h-6 w-6 text-muted-foreground/60" />
@@ -241,16 +274,28 @@ function GivingsPage() {
 function GivingDialog({
   giving,
   members,
+  partners,
+  projects,
+  currentUserId,
   onClose,
 }: {
   giving: Giving | null;
   members: { id: string; firstName: string; lastName: string }[];
+  partners: Partner[];
+  projects: Project[];
+  currentUserId: string;
   onClose: () => void;
 }) {
   const [amount, setAmount] = useState(giving ? String(giving.amount) : "");
   const [category, setCategory] = useState<GivingCategory>(giving?.category ?? "tithe");
-  const [memberId, setMemberId] = useState(giving?.memberId ?? "");
-  const [projectName, setProjectName] = useState(giving?.projectName ?? "");
+  const [giverChoice, setGiverChoice] = useState(
+    giving?.memberId
+      ? `member:${giving.memberId}`
+      : giving?.partnerId
+        ? `partner:${giving.partnerId}`
+        : "anonymous",
+  );
+  const [projectId, setProjectId] = useState(giving?.projectId ?? "");
   const [date, setDate] = useState(giving?.date ?? format(new Date(), "yyyy-MM-dd"));
   const [notes, setNotes] = useState(giving?.notes ?? "");
 
@@ -260,15 +305,22 @@ function GivingDialog({
       toast.error("Enter a valid amount");
       return;
     }
+    if (category === "project" && !projectId) {
+      toast.error("Select a project");
+      return;
+    }
+    const [giverType, giverId] = giverChoice.split(":");
     try {
       await db.givings.put({
         id: giving?.id ?? uid(),
-        memberId: memberId || undefined,
+        memberId: giverType === "member" ? giverId : undefined,
+        partnerId: giverType === "partner" ? giverId : undefined,
         category,
         amount: numericAmount,
-        projectName: category === "project" ? projectName || undefined : undefined,
+        projectId: category === "project" ? projectId || undefined : undefined,
         date,
         notes: notes || undefined,
+        createdBy: giving?.createdBy ?? currentUserId,
         createdAt: giving?.createdAt ?? Date.now(),
       });
       toast.success(giving ? "Giving updated" : "Giving recorded");
@@ -314,31 +366,63 @@ function GivingDialog({
         </div>
         {category === "project" && (
           <div className="space-y-1.5">
-            <Label>Project name</Label>
-            <Input
-              value={projectName}
-              onChange={(e) => setProjectName(e.target.value)}
-              placeholder="Building Fund"
-            />
+            <Label>Project</Label>
+            <Select
+              value={projectId || "none"}
+              onValueChange={(v) => setProjectId(v === "none" ? "" : v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select a project" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Select a project…</SelectItem>
+                {projects.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {projects.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                No projects yet — create one on the{" "}
+                <Link to="/projects" className="underline hover:text-foreground">
+                  Projects
+                </Link>{" "}
+                page first.
+              </p>
+            )}
           </div>
         )}
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label>Giver</Label>
-            <Select
-              value={memberId || "anonymous"}
-              onValueChange={(v) => setMemberId(v === "anonymous" ? "" : v)}
-            >
+            <Select value={giverChoice} onValueChange={setGiverChoice}>
               <SelectTrigger>
                 <SelectValue placeholder="Anonymous" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="anonymous">Anonymous</SelectItem>
-                {members.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.firstName} {m.lastName}
-                  </SelectItem>
-                ))}
+                {members.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>Members</SelectLabel>
+                    {members.map((m) => (
+                      <SelectItem key={m.id} value={`member:${m.id}`}>
+                        {m.firstName} {m.lastName}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
+                {partners.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>Partners</SelectLabel>
+                    {partners.map((p) => (
+                      <SelectItem key={p.id} value={`partner:${p.id}`}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
               </SelectContent>
             </Select>
           </div>

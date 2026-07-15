@@ -15,6 +15,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated.users'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated.settings'
 import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated.reports'
+import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated.projects'
+import { Route as AuthenticatedPartnersRouteImport } from './routes/_authenticated.partners'
 import { Route as AuthenticatedMembersRouteImport } from './routes/_authenticated.members'
 import { Route as AuthenticatedHouseholdsRouteImport } from './routes/_authenticated.households'
 import { Route as AuthenticatedGivingsRouteImport } from './routes/_authenticated.givings'
@@ -55,6 +57,16 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
 const AuthenticatedReportsRoute = AuthenticatedReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedProjectsRoute = AuthenticatedProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedPartnersRoute = AuthenticatedPartnersRouteImport.update({
+  id: '/partners',
+  path: '/partners',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedMembersRoute = AuthenticatedMembersRouteImport.update({
@@ -130,6 +142,8 @@ export interface FileRoutesByFullPath {
   '/givings': typeof AuthenticatedGivingsRoute
   '/households': typeof AuthenticatedHouseholdsRoute
   '/members': typeof AuthenticatedMembersRouteWithChildren
+  '/partners': typeof AuthenticatedPartnersRoute
+  '/projects': typeof AuthenticatedProjectsRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/users': typeof AuthenticatedUsersRoute
@@ -149,6 +163,8 @@ export interface FileRoutesByTo {
   '/givings': typeof AuthenticatedGivingsRoute
   '/households': typeof AuthenticatedHouseholdsRoute
   '/members': typeof AuthenticatedMembersRouteWithChildren
+  '/partners': typeof AuthenticatedPartnersRoute
+  '/projects': typeof AuthenticatedProjectsRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/users': typeof AuthenticatedUsersRoute
@@ -170,6 +186,8 @@ export interface FileRoutesById {
   '/_authenticated/givings': typeof AuthenticatedGivingsRoute
   '/_authenticated/households': typeof AuthenticatedHouseholdsRoute
   '/_authenticated/members': typeof AuthenticatedMembersRouteWithChildren
+  '/_authenticated/partners': typeof AuthenticatedPartnersRoute
+  '/_authenticated/projects': typeof AuthenticatedProjectsRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
@@ -191,6 +209,8 @@ export interface FileRouteTypes {
     | '/givings'
     | '/households'
     | '/members'
+    | '/partners'
+    | '/projects'
     | '/reports'
     | '/settings'
     | '/users'
@@ -210,6 +230,8 @@ export interface FileRouteTypes {
     | '/givings'
     | '/households'
     | '/members'
+    | '/partners'
+    | '/projects'
     | '/reports'
     | '/settings'
     | '/users'
@@ -230,6 +252,8 @@ export interface FileRouteTypes {
     | '/_authenticated/givings'
     | '/_authenticated/households'
     | '/_authenticated/members'
+    | '/_authenticated/partners'
+    | '/_authenticated/projects'
     | '/_authenticated/reports'
     | '/_authenticated/settings'
     | '/_authenticated/users'
@@ -287,6 +311,20 @@ declare module '@tanstack/react-router' {
       path: '/reports'
       fullPath: '/reports'
       preLoaderRoute: typeof AuthenticatedReportsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/projects': {
+      id: '/_authenticated/projects'
+      path: '/projects'
+      fullPath: '/projects'
+      preLoaderRoute: typeof AuthenticatedProjectsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/partners': {
+      id: '/_authenticated/partners'
+      path: '/partners'
+      fullPath: '/partners'
+      preLoaderRoute: typeof AuthenticatedPartnersRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/members': {
@@ -429,6 +467,8 @@ interface AuthenticatedRouteChildren {
   AuthenticatedGivingsRoute: typeof AuthenticatedGivingsRoute
   AuthenticatedHouseholdsRoute: typeof AuthenticatedHouseholdsRoute
   AuthenticatedMembersRoute: typeof AuthenticatedMembersRouteWithChildren
+  AuthenticatedPartnersRoute: typeof AuthenticatedPartnersRoute
+  AuthenticatedProjectsRoute: typeof AuthenticatedProjectsRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
@@ -443,6 +483,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedGivingsRoute: AuthenticatedGivingsRoute,
   AuthenticatedHouseholdsRoute: AuthenticatedHouseholdsRoute,
   AuthenticatedMembersRoute: AuthenticatedMembersRouteWithChildren,
+  AuthenticatedPartnersRoute: AuthenticatedPartnersRoute,
+  AuthenticatedProjectsRoute: AuthenticatedProjectsRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,

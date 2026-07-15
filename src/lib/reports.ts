@@ -10,6 +10,7 @@ import type {
   Giving,
   Member,
   MemberCategory,
+  Project,
   User,
 } from "@/lib/db";
 
@@ -49,14 +50,21 @@ export function collectGivingEntries(data: {
   classSessions: ClassSession[];
   classes: DiscipleshipClass[];
   events: ChurchEvent[];
+  projects?: Project[];
 }): GivingEntry[] {
-  const entries: GivingEntry[] = data.givings.map((g) => ({
-    date: g.date,
-    category: g.category,
-    amount: g.amount,
-    source:
-      g.category === "project" && g.projectName ? `Project: ${g.projectName}` : "Givings record",
-  }));
+  const projectById = new Map((data.projects ?? []).map((p) => [p.id, p]));
+  const entries: GivingEntry[] = data.givings.map((g) => {
+    const projectLabel = g.projectId
+      ? (projectById.get(g.projectId)?.name ?? g.projectName)
+      : g.projectName;
+    return {
+      date: g.date,
+      category: g.category,
+      amount: g.amount,
+      source:
+        g.category === "project" && projectLabel ? `Project: ${projectLabel}` : "Givings record",
+    };
+  });
 
   const cellById = new Map(data.cells.map((c) => [c.id, c]));
   for (const m of data.cellMeetings) {

@@ -120,12 +120,44 @@ export type GivingCategory = "love_offering" | "tithe" | "first_fruit" | "seed" 
 
 export interface Giving {
   id: string;
-  memberId?: string; // omitted for anonymous givings
+  memberId?: string; // giver — mutually exclusive with partnerId; omitted if anonymous
+  partnerId?: string; // giver — mutually exclusive with memberId
   category: GivingCategory;
   amount: number; // UGX
-  projectName?: string; // only meaningful when category === "project"
+  projectId?: string; // only meaningful when category === "project"
+  projectName?: string; // legacy free-text project label, kept for old records
   date: string; // YYYY-MM-DD
   notes?: string;
+  createdBy?: string; // User.id — who recorded this entry
+  createdAt: number;
+}
+
+// A fundraising initiative (Building, Bible Distribution, etc.) with target
+// amounts. Actual progress is derived from Giving records where
+// category === "project" and projectId matches — not stored here.
+export interface Project {
+  id: string;
+  name: string;
+  scope?: string;
+  financialTarget?: number; // UGX, overall goal
+  weeklyTarget?: number; // UGX
+  monthlyTarget?: number; // UGX
+  createdBy?: string;
+  createdAt: number;
+}
+
+// An external supporting individual/organization — distinct from Members,
+// who are congregation. Giving records can attribute an amount to a partner
+// via Giving.partnerId.
+export interface Partner {
+  id: string;
+  name: string;
+  type?: "individual" | "organization" | "church";
+  phone?: string;
+  email?: string;
+  pledgeAmount?: number; // UGX, optional recurring commitment
+  notes?: string;
+  createdBy?: string;
   createdAt: number;
 }
 
@@ -159,6 +191,8 @@ export class MyChurchDB extends Dexie {
   classAttendance!: EntityTable<ClassAttendance, "id">;
   givings!: EntityTable<Giving, "id">;
   departments!: EntityTable<Department, "id">;
+  projects!: EntityTable<Project, "id">;
+  partners!: EntityTable<Partner, "id">;
   settings!: EntityTable<Settings, "key">;
 
   constructor() {
@@ -183,6 +217,11 @@ export class MyChurchDB extends Dexie {
     });
     this.version(3).stores({
       departments: "id, name, leaderId",
+    });
+    this.version(4).stores({
+      givings: "id, memberId, partnerId, category, date, projectId",
+      projects: "id, name",
+      partners: "id, name",
     });
   }
 }
@@ -252,6 +291,22 @@ export async function deleteEventCascade(eventId: string) {
   await db.transaction("rw", [db.events, db.eventAttendance], async () => {
     await db.eventAttendance.where("eventId").equals(eventId).delete();
     await db.events.delete(eventId);
+  });
+}
+
+export async function deleteProjectCascade(projectId: string) {
+  await db.transaction("rw", [db.projects, db.givings], async () => {
+    const givings = await db.givings.where("projectId").equals(projectId).toArray();
+    await Promise.all(givings.map((g) => db.givings.update(g.id, { projectId: undefined })));
+    await db.projects.delete(projectId);
+  });
+}
+
+export async function deletePartnerCascade(partnerId: string) {
+  await db.transaction("rw", [db.partners, db.givings], async () => {
+    const givings = await db.givings.where("partnerId").equals(partnerId).toArray();
+    await Promise.all(givings.map((g) => db.givings.update(g.id, { partnerId: undefined })));
+    await db.partners.delete(partnerId);
   });
 }
 
@@ -327,6 +382,8 @@ const BACKUP_TABLES = [
   "classAttendance",
   "givings",
   "departments",
+  "projects",
+  "partners",
 ] as const;
 
 export interface DatabaseBackup {

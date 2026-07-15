@@ -280,3 +280,12 @@ export function canAccessGivings(role: Role) {
 export function canAccessDepartments(role: Role) {
   return role === "admin" || role === "pastor";
 }
+export function canManageEvents(role: Role) {
+  return role === "admin" || role === "pastor";
+}
+export function canManageProjects(role: Role) {
+  return role === "admin" || role === "pastor";
+}
+export function canAccessPartners(role: Role) {
+  return role === "admin" || role === "pastor" || role === "treasurer";
+}

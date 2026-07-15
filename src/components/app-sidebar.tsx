@@ -13,6 +13,8 @@ import {
   HandCoins,
   BarChart3,
   Building2,
+  Target,
+  Handshake,
 } from "lucide-react";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
 import {
@@ -73,12 +75,24 @@ function getNav(cellTermPlural: string) {
       title: "Events",
       url: "/events",
       icon: CalendarDays,
-      roles: ["admin", "pastor", "cell_leader"] as const,
+      roles: ["admin", "pastor", "cell_leader", "leader", "treasurer"] as const,
+    },
+    {
+      title: "Projects",
+      url: "/projects",
+      icon: Target,
+      roles: ["admin", "pastor", "cell_leader", "leader", "treasurer"] as const,
     },
     {
       title: "Givings",
       url: "/givings",
       icon: HandCoins,
+      roles: ["admin", "pastor", "treasurer"] as const,
+    },
+    {
+      title: "Partners",
+      url: "/partners",
+      icon: Handshake,
       roles: ["admin", "pastor", "treasurer"] as const,
     },
     {

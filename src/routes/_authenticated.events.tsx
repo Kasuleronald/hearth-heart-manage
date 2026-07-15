@@ -27,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useSession, canManageEvents } from "@/lib/auth";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -42,6 +43,8 @@ const TYPES: { value: EventType; label: string }[] = [
 ];
 
 function EventsPage() {
+  const { session } = useSession();
+  const canManage = session ? canManageEvents(session.role) : false;
   const events = useLiveQuery(() => db.events.orderBy("date").reverse().toArray(), []) ?? [];
   const [editing, setEditing] = useState<ChurchEvent | null>(null);
   const [open, setOpen] = useState(false);
@@ -52,20 +55,22 @@ function EventsPage() {
         title="Events"
         description="Services, prayer meetings and special gatherings."
         actions={
-          <Dialog
-            open={open}
-            onOpenChange={(o) => {
-              setOpen(o);
-              if (!o) setEditing(null);
-            }}
-          >
-            <DialogTrigger asChild>
-              <Button onClick={() => setEditing(null)}>
-                <Plus className="mr-2 h-4 w-4" /> New event
-              </Button>
-            </DialogTrigger>
-            <EventDialog event={editing} onClose={() => setOpen(false)} />
-          </Dialog>
+          canManage && (
+            <Dialog
+              open={open}
+              onOpenChange={(o) => {
+                setOpen(o);
+                if (!o) setEditing(null);
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button onClick={() => setEditing(null)}>
+                  <Plus className="mr-2 h-4 w-4" /> New event
+                </Button>
+              </DialogTrigger>
+              <EventDialog event={editing} onClose={() => setOpen(false)} />
+            </Dialog>
+          )
         }
       />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -81,32 +86,36 @@ function EventsPage() {
                     {format(new Date(e.date), "PPPP")}
                   </p>
                 </Link>
-                <div className="flex gap-1">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    aria-label={`Edit ${e.title}`}
-                    onClick={() => {
-                      setEditing(e);
-                      setOpen(true);
-                    }}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <DeleteButton
-                    label={`Delete ${e.title}`}
-                    title={`Delete "${e.title}"?`}
-                    description="This also removes its attendance records. This can't be undone."
-                    onConfirm={async () => {
-                      try {
-                        await deleteEventCascade(e.id);
-                        toast.success("Event deleted");
-                      } catch (err) {
-                        toast.error(err instanceof Error ? err.message : "Failed to delete event");
-                      }
-                    }}
-                  />
-                </div>
+                {canManage && (
+                  <div className="flex gap-1">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`Edit ${e.title}`}
+                      onClick={() => {
+                        setEditing(e);
+                        setOpen(true);
+                      }}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <DeleteButton
+                      label={`Delete ${e.title}`}
+                      title={`Delete "${e.title}"?`}
+                      description="This also removes its attendance records. This can't be undone."
+                      onConfirm={async () => {
+                        try {
+                          await deleteEventCascade(e.id);
+                          toast.success("Event deleted");
+                        } catch (err) {
+                          toast.error(
+                            err instanceof Error ? err.message : "Failed to delete event",
+                          );
+                        }
+                      }}
+                    />
+                  </div>
+                )}
               </div>
               <div className="mt-3 flex items-center gap-2">
                 <Badge variant="secondary" className="capitalize">
