@@ -11,6 +11,12 @@ import type { ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
+import { ThemeToggle } from "@/components/theme-toggle";
+
+// Runs before hydration so the correct theme applies on first paint — reads the
+// stored preference, falling back to the OS setting, with no flash of the
+// wrong theme.
+const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem("mychurch.theme");var d=t?t==="dark":window.matchMedia("(prefers-color-scheme: dark)").matches;if(d)document.documentElement.classList.add("dark");}catch(e){}})();`;
 
 function NotFoundComponent() {
   return (
@@ -98,6 +104,7 @@ function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <HeadContent />
       </head>
       <body>
@@ -113,6 +120,7 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <Outlet />
+      <ThemeToggle />
       <Toaster richColors position="top-right" />
     </QueryClientProvider>
   );
