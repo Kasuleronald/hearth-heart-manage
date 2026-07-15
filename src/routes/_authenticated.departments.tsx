@@ -1,8 +1,14 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useState } from "react";
-import { Plus, Pencil, Building2 } from "lucide-react";
-import { db, uid, unassignDepartmentLeader, type Department } from "@/lib/db";
+import { Plus, Pencil, Building2, Sparkles } from "lucide-react";
+import {
+  db,
+  uid,
+  unassignDepartmentLeader,
+  seedDefaultDepartments,
+  type Department,
+} from "@/lib/db";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,20 +68,35 @@ function DepartmentsPage() {
         title="Departments"
         description="Ministries and teams — Ushering, Sound, Worship, Youth, and the leader assigned to each."
         actions={
-          <Dialog
-            open={open}
-            onOpenChange={(o) => {
-              setOpen(o);
-              if (!o) setEditing(null);
-            }}
-          >
-            <DialogTrigger asChild>
-              <Button onClick={() => setEditing(null)}>
-                <Plus className="mr-2 h-4 w-4" /> New department
-              </Button>
-            </DialogTrigger>
-            <DepartmentDialog dept={editing} users={users} onClose={() => setOpen(false)} />
-          </Dialog>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  await seedDefaultDepartments();
+                  toast.success("Common departments added");
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Failed to add departments");
+                }
+              }}
+            >
+              <Sparkles className="mr-2 h-4 w-4" /> Add common departments
+            </Button>
+            <Dialog
+              open={open}
+              onOpenChange={(o) => {
+                setOpen(o);
+                if (!o) setEditing(null);
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button onClick={() => setEditing(null)}>
+                  <Plus className="mr-2 h-4 w-4" /> New department
+                </Button>
+              </DialogTrigger>
+              <DepartmentDialog dept={editing} users={users} onClose={() => setOpen(false)} />
+            </Dialog>
+          </div>
         }
       />
 

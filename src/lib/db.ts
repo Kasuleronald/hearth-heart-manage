@@ -269,14 +269,18 @@ export async function deleteUserCascade(userId: string) {
 
 // ---- Department seeding ----
 // A starter set of ministries common to most churches, so the admin doesn't
-// have to type them all in by hand on day one. Only ever run once, guarded by
-// the departments table being empty (see login.tsx first-run setup).
+// have to type them all in by hand. Runs on first admin setup (login.tsx) and
+// can also be re-run on demand from the Departments page — safe either way,
+// since it only adds names that don't already exist.
 const DEFAULT_DEPARTMENTS = [
   "Protocol",
   "Ushering",
   "Hospitality",
   "Missions",
   "Service",
+  "Programs",
+  "Finance",
+  "Events",
   "Sound",
   "Worship",
   "Media",
@@ -298,11 +302,12 @@ const DEFAULT_DEPARTMENTS = [
 ];
 
 export async function seedDefaultDepartments() {
-  if ((await db.departments.count()) > 0) return;
+  const existing = await db.departments.toArray();
+  const existingNames = new Set(existing.map((d) => d.name.trim().toLowerCase()));
+  const missing = DEFAULT_DEPARTMENTS.filter((name) => !existingNames.has(name.toLowerCase()));
+  if (missing.length === 0) return;
   const now = Date.now();
-  await db.departments.bulkAdd(
-    DEFAULT_DEPARTMENTS.map((name) => ({ id: uid(), name, createdAt: now })),
-  );
+  await db.departments.bulkAdd(missing.map((name) => ({ id: uid(), name, createdAt: now })));
 }
 
 // ---- Backup & restore ----
