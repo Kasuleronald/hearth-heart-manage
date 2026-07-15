@@ -3,6 +3,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
 import { Plus, Pencil } from "lucide-react";
 import { db, uid, type Household } from "@/lib/db";
+import { useSession } from "@/lib/auth";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,8 +25,10 @@ export const Route = createFileRoute("/_authenticated/households")({
 });
 
 function HouseholdsPage() {
+  const { session } = useSession();
   const households = useLiveQuery(() => db.households.orderBy("name").toArray(), []) ?? [];
   const members = useLiveQuery(() => db.members.toArray(), []) ?? [];
+  const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
   const [editing, setEditing] = useState<Household | null>(null);
   const [open, setOpen] = useState(false);
 
@@ -47,7 +50,11 @@ function HouseholdsPage() {
                 <Plus className="mr-2 h-4 w-4" /> New household
               </Button>
             </DialogTrigger>
-            <HouseholdDialog hh={editing} onClose={() => setOpen(false)} />
+            <HouseholdDialog
+              hh={editing}
+              currentUserId={session?.userId}
+              onClose={() => setOpen(false)}
+            />
           </Dialog>
         }
       />
@@ -56,6 +63,7 @@ function HouseholdsPage() {
         {households.map((h) => {
           const hhMembers = members.filter((m) => m.householdId === h.id);
           const head = hhMembers.find((m) => m.isHeadOfHousehold);
+          const addedBy = users.find((u) => u.id === h.createdBy);
           return (
             <Card key={h.id}>
               <CardContent className="p-5">
@@ -142,6 +150,11 @@ function HouseholdsPage() {
                       </span>
                     </p>
                   )}
+                  {addedBy && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Added by: <span className="text-foreground">{addedBy.fullName}</span>
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -155,7 +168,15 @@ function HouseholdsPage() {
   );
 }
 
-function HouseholdDialog({ hh, onClose }: { hh: Household | null; onClose: () => void }) {
+function HouseholdDialog({
+  hh,
+  currentUserId,
+  onClose,
+}: {
+  hh: Household | null;
+  currentUserId: string | undefined;
+  onClose: () => void;
+}) {
   const [name, setName] = useState(hh?.name ?? "");
   const [address, setAddress] = useState(hh?.address ?? "");
 
@@ -166,6 +187,7 @@ function HouseholdDialog({ hh, onClose }: { hh: Household | null; onClose: () =>
         id: hh?.id ?? uid(),
         name: name.trim(),
         address: address || undefined,
+        createdBy: hh?.createdBy ?? currentUserId,
         createdAt: hh?.createdAt ?? Date.now(),
       });
       toast.success(hh ? "Household updated" : "Household added");

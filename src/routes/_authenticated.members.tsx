@@ -11,6 +11,8 @@ import {
   type MemberStatus,
 } from "@/lib/db";
 import { downloadCsv } from "@/lib/download";
+import { useSession } from "@/lib/auth";
+import { useCellTerm } from "@/lib/terminology";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,10 +60,13 @@ const CATEGORIES: { value: MemberCategory; label: string }[] = [
 ];
 
 function MembersPage() {
+  const { session } = useSession();
+  const { singular: cellSingular } = useCellTerm();
   const members = useLiveQuery(() => db.members.orderBy("lastName").toArray(), []) ?? [];
   const households = useLiveQuery(() => db.households.toArray(), []) ?? [];
   const cells = useLiveQuery(() => db.cells.toArray(), []) ?? [];
   const classes = useLiveQuery(() => db.classes.toArray(), []) ?? [];
+  const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [editing, setEditing] = useState<Member | null>(null);
@@ -85,10 +90,20 @@ function MembersPage() {
               variant="outline"
               onClick={() => {
                 const rows = [
-                  ["First name", "Last name", "Status", "Phone", "Email", "Household", "Cell"],
+                  [
+                    "First name",
+                    "Last name",
+                    "Status",
+                    "Phone",
+                    "Email",
+                    "Household",
+                    cellSingular,
+                    "Added by",
+                  ],
                   ...filtered.map((m) => {
                     const hh = households.find((h) => h.id === m.householdId);
                     const cell = cells.find((c) => c.id === m.cellId);
+                    const addedBy = users.find((u) => u.id === m.createdBy);
                     return [
                       m.firstName,
                       m.lastName,
@@ -97,6 +112,7 @@ function MembersPage() {
                       m.email ?? "",
                       hh?.name ?? "",
                       cell?.name ?? "",
+                      addedBy?.fullName ?? "",
                     ];
                   }),
                 ];
@@ -122,6 +138,8 @@ function MembersPage() {
                 households={households}
                 cells={cells}
                 classes={classes}
+                cellSingular={cellSingular}
+                currentUserId={session?.userId}
                 onClose={() => setOpen(false)}
               />
             </Dialog>
@@ -163,7 +181,8 @@ function MembersPage() {
                 <TableHead>Status</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Household</TableHead>
-                <TableHead>Cell</TableHead>
+                <TableHead>{cellSingular}</TableHead>
+                <TableHead>Added by</TableHead>
                 <TableHead className="w-[100px]"></TableHead>
               </TableRow>
             </TableHeader>
@@ -171,6 +190,7 @@ function MembersPage() {
               {filtered.map((m) => {
                 const hh = households.find((h) => h.id === m.householdId);
                 const cell = cells.find((c) => c.id === m.cellId);
+                const addedBy = users.find((u) => u.id === m.createdBy);
                 return (
                   <TableRow key={m.id}>
                     <TableCell className="font-medium">
@@ -184,6 +204,9 @@ function MembersPage() {
                     <TableCell className="text-muted-foreground">{m.phone ?? "—"}</TableCell>
                     <TableCell className="text-muted-foreground">{hh?.name ?? "—"}</TableCell>
                     <TableCell className="text-muted-foreground">{cell?.name ?? "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {addedBy?.fullName ?? "—"}
+                    </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">
                         <Button
@@ -220,7 +243,7 @@ function MembersPage() {
               {filtered.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={7}
                     className="py-10 text-center text-sm text-muted-foreground"
                   >
                     No members yet. Add your first member to get started.
@@ -250,12 +273,16 @@ function MemberDialog({
   households,
   cells,
   classes,
+  cellSingular,
+  currentUserId,
   onClose,
 }: {
   member: Member | null;
   households: { id: string; name: string }[];
   cells: { id: string; name: string }[];
   classes: { id: string; name: string }[];
+  cellSingular: string;
+  currentUserId: string | undefined;
   onClose: () => void;
 }) {
   const [firstName, setFirstName] = useState(member?.firstName ?? "");
@@ -294,6 +321,7 @@ function MemberDialog({
       cellId: cellId || undefined,
       classId: classId || undefined,
       notes: notes || undefined,
+      createdBy: member?.createdBy ?? currentUserId,
       createdAt: member?.createdAt ?? Date.now(),
     };
     try {
@@ -394,7 +422,7 @@ function MemberDialog({
             </SelectContent>
           </Select>
         </Field>
-        <Field label="Cell fellowship">
+        <Field label={cellSingular}>
           <Select value={cellId || "none"} onValueChange={(v) => setCellId(v === "none" ? "" : v)}>
             <SelectTrigger>
               <SelectValue placeholder="—" />

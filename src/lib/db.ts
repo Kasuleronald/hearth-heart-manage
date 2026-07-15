@@ -18,6 +18,7 @@ export interface Household {
   id: string;
   name: string;
   address?: string;
+  createdBy?: string; // User.id — who added this record
   createdAt: number;
 }
 
@@ -38,6 +39,7 @@ export interface Member {
   cellId?: string;
   classId?: string;
   notes?: string;
+  createdBy?: string; // User.id — who added this record
   createdAt: number;
 }
 

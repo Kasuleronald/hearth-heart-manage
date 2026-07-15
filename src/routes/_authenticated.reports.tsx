@@ -6,6 +6,7 @@ import { format, subDays } from "date-fns";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
 import { db } from "@/lib/db";
 import { useSession, canAccessGivings } from "@/lib/auth";
+import { useCellTerm } from "@/lib/terminology";
 import {
   buildAttendanceReport,
   buildGivingsReport,
@@ -53,6 +54,7 @@ type ReportType = (typeof REPORT_TYPES)[number]["value"];
 function ReportsPage() {
   const navigate = useNavigate();
   const { session } = useSession();
+  const { singular: cellSingular } = useCellTerm();
   const [reportType, setReportType] = useState<ReportType>("attendance");
   const [from, setFrom] = useState(format(subDays(new Date(), 90), "yyyy-MM-dd"));
   const [to, setTo] = useState(format(new Date(), "yyyy-MM-dd"));
@@ -72,6 +74,7 @@ function ReportsPage() {
   const classSessions = useLiveQuery(() => db.classSessions.toArray(), []) ?? [];
   const classAttendance = useLiveQuery(() => db.classAttendance.toArray(), []) ?? [];
   const givings = useLiveQuery(() => db.givings.toArray(), []) ?? [];
+  const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
 
   const report: ReportResult = useMemo(() => {
     switch (reportType) {
@@ -90,6 +93,7 @@ function ReportsPage() {
           },
           from,
           to,
+          cellSingular,
         );
       case "givings": {
         const entries = collectGivingEntries({
@@ -103,12 +107,13 @@ function ReportsPage() {
         return buildGivingsReport(entries, from, to);
       }
       case "membership":
-        return buildMembershipReport(members, from, to);
+        return buildMembershipReport(members, users, from, to);
       case "performance":
         return buildGroupPerformanceReport(
           { cells, cellMeetings, cellAttendance, classes, classSessions, classAttendance, members },
           from,
           to,
+          cellSingular,
         );
     }
   }, [
@@ -125,11 +130,16 @@ function ReportsPage() {
     classAttendance,
     classes,
     givings,
+    users,
+    cellSingular,
   ]);
 
   if (!session || !canAccessGivings(session.role)) return null;
 
-  const reportLabel = REPORT_TYPES.find((r) => r.value === reportType)!.label;
+  const reportLabel =
+    reportType === "performance"
+      ? `${cellSingular} & class performance`
+      : REPORT_TYPES.find((r) => r.value === reportType)!.label;
   const seriesKey = report.chartSeries[0]?.key;
 
   return (
@@ -150,7 +160,7 @@ function ReportsPage() {
               <SelectContent>
                 {REPORT_TYPES.map((r) => (
                   <SelectItem key={r.value} value={r.value}>
-                    {r.label}
+                    {r.value === "performance" ? `${cellSingular} & class performance` : r.label}
                   </SelectItem>
                 ))}
               </SelectContent>

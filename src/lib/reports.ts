@@ -10,6 +10,7 @@ import type {
   Giving,
   Member,
   MemberCategory,
+  User,
 } from "@/lib/db";
 
 export interface ReportResult {
@@ -161,6 +162,7 @@ export function buildAttendanceReport(
   },
   from: string,
   to: string,
+  cellSingular: string = "Cell",
 ): ReportResult {
   const memberById = new Map(data.members.map((m) => [m.id, m]));
 
@@ -203,8 +205,8 @@ export function buildAttendanceReport(
       .map((a) => a.memberId);
     occurrences.push({
       date: m.date,
-      type: "Cell Meeting",
-      name: cellById.get(m.cellId)?.name ?? "Unknown cell",
+      type: `${cellSingular} Meeting`,
+      name: cellById.get(m.cellId)?.name ?? `Unknown ${cellSingular.toLowerCase()}`,
       counts: countByCategory(presentIds),
       total: presentIds.length,
     });
@@ -258,8 +260,16 @@ export function buildAttendanceReport(
 
 // ---- Membership & growth ----
 
-export function buildMembershipReport(members: Member[], from: string, to: string): ReportResult {
-  const newInRange = members.filter((m) => m.joinDate && inRange(m.joinDate, from, to));
+export function buildMembershipReport(
+  members: Member[],
+  users: Pick<User, "id" | "fullName">[],
+  from: string,
+  to: string,
+): ReportResult {
+  const userById = new Map(users.map((u) => [u.id, u.fullName]));
+  const newInRange = [...members]
+    .filter((m) => m.joinDate && inRange(m.joinDate, from, to))
+    .sort((a, b) => (a.joinDate! < b.joinDate! ? 1 : -1));
 
   const byMonth = new Map<string, number>();
   for (const m of newInRange) {
@@ -270,25 +280,14 @@ export function buildMembershipReport(members: Member[], from: string, to: strin
     .sort(([a], [b]) => (a < b ? -1 : 1))
     .map(([month, count]) => ({ name: month, newMembers: count }));
 
-  const statusCounts: Record<string, number> = {};
-  for (const m of members) statusCounts[m.status] = (statusCounts[m.status] ?? 0) + 1;
-
-  const categoryCounts: Record<string, number> = {};
-  for (const m of members) {
-    const c = m.category ?? "uncategorized";
-    categoryCounts[c] = (categoryCounts[c] ?? 0) + 1;
-  }
-
-  const tableHeaders = ["Breakdown", "Value", "Count"];
-  const tableRows = [
-    ...Object.entries(statusCounts).map(([status, count]) => ["Status", status, String(count)]),
-    ...Object.entries(categoryCounts).map(([cat, count]) => [
-      "Category",
-      CATEGORY_COLUMN_LABELS[cat] ?? cat,
-      String(count),
-    ]),
-    ["New members", `${from} → ${to}`, String(newInRange.length)],
-  ];
+  const tableHeaders = ["Name", "Status", "Category", "Join Date", "Added By"];
+  const tableRows = newInRange.map((m) => [
+    `${m.firstName} ${m.lastName}`,
+    m.status,
+    m.category ? (CATEGORY_COLUMN_LABELS[m.category] ?? m.category) : "—",
+    m.joinDate!,
+    m.createdBy ? (userById.get(m.createdBy) ?? "Unknown") : "—",
+  ]);
 
   return {
     chartData,
@@ -312,6 +311,7 @@ export function buildGroupPerformanceReport(
   },
   from: string,
   to: string,
+  cellSingular: string = "Cell",
 ): ReportResult {
   interface GroupRow {
     name: string;
@@ -335,7 +335,7 @@ export function buildGroupPerformanceReport(
     ).length;
     rows.push({
       name: cell.name,
-      type: "Cell",
+      type: cellSingular,
       memberCount,
       occurrenceCount: meetings.length,
       avgAttendance: meetings.length > 0 ? Math.round(presentCount / meetings.length) : 0,
