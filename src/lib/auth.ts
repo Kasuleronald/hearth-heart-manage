@@ -16,13 +16,13 @@ async function pbkdf2(password: string, saltHex: string): Promise<string> {
   const salt = hexToBytes(saltHex);
   const key = await crypto.subtle.importKey(
     "raw",
-    enc.encode(password),
+    enc.encode(password) as unknown as BufferSource,
     { name: "PBKDF2" },
     false,
     ["deriveBits"],
   );
   const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", salt, iterations: 100_000, hash: "SHA-256" },
+    { name: "PBKDF2", salt: salt as unknown as BufferSource, iterations: 100_000, hash: "SHA-256" },
     key,
     256,
   );
