@@ -2,6 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { Users, Users2, CalendarDays, GraduationCap } from "lucide-react";
 import { db } from "@/lib/db";
+import { useCellTerm } from "@/lib/terminology";
 import {
   CommandDialog,
   CommandEmpty,
@@ -20,6 +21,7 @@ export function QuickSearch({
   onOpenChange: (open: boolean) => void;
 }) {
   const navigate = useNavigate();
+  const { plural: cellPlural } = useCellTerm();
   const members = useLiveQuery(() => db.members.toArray(), []) ?? [];
   const cells = useLiveQuery(() => db.cells.toArray(), []) ?? [];
   const classes = useLiveQuery(() => db.classes.toArray(), []) ?? [];
@@ -47,7 +49,7 @@ export function QuickSearch({
             </CommandItem>
           ))}
         </CommandGroup>
-        <CommandGroup heading="Cell fellowships">
+        <CommandGroup heading={cellPlural}>
           {cells.map((c) => (
             <CommandItem
               key={c.id}

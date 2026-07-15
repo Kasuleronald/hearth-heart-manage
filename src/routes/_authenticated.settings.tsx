@@ -1,11 +1,18 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Download, Upload, Database } from "lucide-react";
+import { Download, Upload, Database, Tag } from "lucide-react";
 import { exportDatabase, importDatabase, type DatabaseBackup } from "@/lib/db";
 import { downloadJson } from "@/lib/download";
+import {
+  useCellTerm,
+  setCellTerm,
+  DEFAULT_CELL_SINGULAR,
+  DEFAULT_CELL_PLURAL,
+} from "@/lib/terminology";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -51,10 +58,70 @@ function SettingsPage() {
     <div>
       <PageHeader title="Settings" description="Back up and restore your church's data." />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <TerminologyCard />
         <ExportCard />
         <ImportCard />
       </div>
     </div>
+  );
+}
+
+function TerminologyCard() {
+  const { singular, plural } = useCellTerm();
+  const [editSingular, setEditSingular] = useState(singular);
+  const [editPlural, setEditPlural] = useState(plural);
+
+  // Re-sync the inputs once the live values load (they start empty on first render).
+  useEffect(() => {
+    setEditSingular(singular);
+    setEditPlural(plural);
+  }, [singular, plural]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="font-display flex items-center gap-2">
+          <Tag className="h-5 w-5" /> Terminology
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Some churches call their small groups something other than "Cell Fellowship" — Zonal
+          Fellowship, Garage, Patria Gathering, and so on. Rename it here and it updates everywhere
+          in the app.
+        </p>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label>Singular</Label>
+            <Input
+              value={editSingular}
+              onChange={(e) => setEditSingular(e.target.value)}
+              placeholder={DEFAULT_CELL_SINGULAR}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Plural</Label>
+            <Input
+              value={editPlural}
+              onChange={(e) => setEditPlural(e.target.value)}
+              placeholder={DEFAULT_CELL_PLURAL}
+            />
+          </div>
+        </div>
+        <Button
+          onClick={async () => {
+            try {
+              await setCellTerm(editSingular, editPlural);
+              toast.success("Terminology updated");
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : "Failed to save");
+            }
+          }}
+        >
+          Save terminology
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 

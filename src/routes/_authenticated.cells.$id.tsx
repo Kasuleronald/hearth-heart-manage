@@ -22,17 +22,19 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useSession, canEditCell } from "@/lib/auth";
+import { useCellTerm } from "@/lib/terminology";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/cells/$id")({
   component: CellDetail,
-  notFoundComponent: () => <div className="p-6 text-sm text-muted-foreground">Cell not found.</div>,
+  notFoundComponent: () => <div className="p-6 text-sm text-muted-foreground">Not found.</div>,
 });
 
 function CellDetail() {
   const { id } = Route.useParams();
   const { session } = useSession();
+  const { singular, plural } = useCellTerm();
   const cell = useLiveQuery(() => db.cells.get(id), [id]);
   const leader = useLiveQuery(
     () => (cell?.leaderId ? db.users.get(cell.leaderId) : undefined),
@@ -58,7 +60,7 @@ function CellDetail() {
     <div>
       <Button asChild variant="ghost" size="sm" className="mb-2">
         <Link to="/cells">
-          <ArrowLeft className="mr-1 h-4 w-4" /> All cells
+          <ArrowLeft className="mr-1 h-4 w-4" /> All {plural.toLowerCase()}
         </Link>
       </Button>
       <PageHeader
@@ -90,7 +92,7 @@ function CellDetail() {
                     <div className="max-h-80 overflow-y-auto">
                       {unassigned.length === 0 ? (
                         <p className="text-sm text-muted-foreground">
-                          All members already belong to a cell.
+                          All members already belong to a {singular.toLowerCase()}.
                         </p>
                       ) : (
                         <ul className="space-y-1">
@@ -162,6 +164,7 @@ function CellDetail() {
                   <MeetingDialog
                     cellId={cell.id}
                     meeting={editingMeeting}
+                    singular={singular}
                     onClose={() => setMeetingDialogOpen(false)}
                   />
                 </Dialog>
@@ -226,6 +229,7 @@ function CellDetail() {
           roster={members}
           allMembers={allMembers}
           canEdit={canEdit}
+          singular={singular}
           onClose={() => setAttMeeting(null)}
         />
       )}
@@ -236,10 +240,12 @@ function CellDetail() {
 function MeetingDialog({
   cellId,
   meeting,
+  singular,
   onClose,
 }: {
   cellId: string;
   meeting: CellMeeting | null;
+  singular: string;
   onClose: () => void;
 }) {
   const [date, setDate] = useState(meeting?.date ?? format(new Date(), "yyyy-MM-dd"));
@@ -252,7 +258,9 @@ function MeetingDialog({
     <DialogContent>
       <DialogHeader>
         <DialogTitle className="font-display">
-          {meeting ? "Edit cell meeting" : "New cell meeting"}
+          {meeting
+            ? `Edit ${singular.toLowerCase()} meeting`
+            : `New ${singular.toLowerCase()} meeting`}
         </DialogTitle>
       </DialogHeader>
       <div className="space-y-4">
@@ -326,12 +334,14 @@ function AttendanceDialog({
   roster,
   allMembers,
   canEdit,
+  singular,
   onClose,
 }: {
   meeting: CellMeeting;
   roster: Member[];
   allMembers: Member[];
   canEdit: boolean;
+  singular: string;
   onClose: () => void;
 }) {
   const records =
@@ -391,7 +401,9 @@ function AttendanceDialog({
             );
           })}
           {displayed.length === 0 && (
-            <p className="text-sm text-muted-foreground">No members in this cell yet.</p>
+            <p className="text-sm text-muted-foreground">
+              No members in this {singular.toLowerCase()} yet.
+            </p>
           )}
         </div>
         <DialogFooter>

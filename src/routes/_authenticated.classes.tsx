@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { DeleteButton } from "@/components/delete-button";
 import { useSession, canManageUsers } from "@/lib/auth";
+import { useCellTerm } from "@/lib/terminology";
 import {
   Dialog,
   DialogContent,
@@ -36,6 +37,7 @@ const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", 
 
 function ClassesPage() {
   const { session } = useSession();
+  const { leaderLabel } = useCellTerm();
   const classes = useLiveQuery(() => db.classes.orderBy("name").toArray(), []) ?? [];
   const users =
     useLiveQuery(
@@ -71,7 +73,12 @@ function ClassesPage() {
                   <Plus className="mr-2 h-4 w-4" /> New class
                 </Button>
               </DialogTrigger>
-              <ClassDialog cls={editing} users={users} onClose={() => setOpen(false)} />
+              <ClassDialog
+                cls={editing}
+                users={users}
+                leaderLabel={leaderLabel}
+                onClose={() => setOpen(false)}
+              />
             </Dialog>
           )
         }
@@ -152,10 +159,12 @@ function ClassesPage() {
 function ClassDialog({
   cls,
   users,
+  leaderLabel,
   onClose,
 }: {
   cls: DiscipleshipClass | null;
   users: { id: string; fullName: string; role: string }[];
+  leaderLabel: string;
   onClose: () => void;
 }) {
   const [name, setName] = useState(cls?.name ?? "");
@@ -237,14 +246,14 @@ function ClassDialog({
               <SelectItem value="none">Unassigned</SelectItem>
               {users.map((u) => (
                 <SelectItem key={u.id} value={u.id}>
-                  {u.fullName} ({u.role.replace("_", " ")})
+                  {u.fullName} ({u.role === "cell_leader" ? leaderLabel : u.role.replace("_", " ")})
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
           {users.length === 0 && (
             <p className="text-xs text-muted-foreground">
-              Create a user with role "Cell Leader" or "Pastor" in the Users page to assign as
+              Create a user with role "{leaderLabel}" or "Pastor" in the Users page to assign as
               facilitator.
             </p>
           )}

@@ -2,6 +2,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { ArrowLeft } from "lucide-react";
 import { db } from "@/lib/db";
+import { useCellTerm } from "@/lib/terminology";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ export const Route = createFileRoute("/_authenticated/members/$id")({
 
 function MemberDetail() {
   const { id } = Route.useParams();
+  const { singular: cellSingular } = useCellTerm();
   const member = useLiveQuery(() => db.members.get(id), [id]);
   const household = useLiveQuery(
     () => (member?.householdId ? db.households.get(member.householdId) : undefined),
@@ -70,7 +72,7 @@ function MemberDetail() {
             <h3 className="font-display text-lg font-semibold">Belonging</h3>
             <Row label="Household" value={household?.name} />
             <Row
-              label="Cell fellowship"
+              label={cellSingular}
               value={
                 cell ? (
                   <Link

@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { seedDefaultDepartments } from "@/lib/db";
 import { createUser, getLoginLockoutMs, getSession, hasAnyUser, login } from "@/lib/auth";
+import { useCellTerm } from "@/lib/terminology";
 import { toast } from "sonner";
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -18,6 +19,7 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const navigate = useNavigate();
+  const { plural: cellTermPlural } = useCellTerm();
   const [firstRun, setFirstRun] = useState<boolean | null>(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -91,8 +93,8 @@ function LoginPage() {
             Shepherd your flock with clarity.
           </h2>
           <p className="mt-4 max-w-md text-sidebar-foreground/70">
-            Members, households, cell fellowships, events and attendance — all in one reverent,
-            local-first workspace.
+            Members, households, {cellTermPlural.toLowerCase()}, events and attendance — all in one
+            reverent, local-first workspace.
           </p>
         </div>
         <p className="text-xs text-sidebar-foreground/50">

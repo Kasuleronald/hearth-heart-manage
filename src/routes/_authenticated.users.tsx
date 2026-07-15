@@ -34,18 +34,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createUser, resetPassword, useSession, canManageUsers } from "@/lib/auth";
+import { useCellTerm } from "@/lib/terminology";
 import { toast } from "sonner";
 
 const MIN_PASSWORD_LENGTH = 8;
 
-const ROLES: { value: Role; label: string }[] = [
-  { value: "admin", label: "Admin" },
-  { value: "pastor", label: "Pastor" },
-  { value: "cell_leader", label: "Cell Leader" },
-  { value: "leader", label: "Department Leader" },
-  { value: "treasurer", label: "Treasurer" },
-];
-const ROLE_LABEL = Object.fromEntries(ROLES.map((r) => [r.value, r.label])) as Record<Role, string>;
+function getRoles(leaderLabel: string): { value: Role; label: string }[] {
+  return [
+    { value: "admin", label: "Admin" },
+    { value: "pastor", label: "Pastor" },
+    { value: "cell_leader", label: leaderLabel },
+    { value: "leader", label: "Department Leader" },
+    { value: "treasurer", label: "Treasurer" },
+  ];
+}
 
 // Assigns (or clears) this user's department leadership based on their role and
 // the picked department. "Other" creates a brand-new department on the fly.
@@ -73,6 +75,12 @@ export const Route = createFileRoute("/_authenticated/users")({
 function UsersPage() {
   const navigate = useNavigate();
   const { session } = useSession();
+  const { leaderLabel } = useCellTerm();
+  const roles = getRoles(leaderLabel);
+  const roleLabel = Object.fromEntries(roles.map((r) => [r.value, r.label])) as Record<
+    Role,
+    string
+  >;
   const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
   const departments = useLiveQuery(() => db.departments.orderBy("name").toArray(), []) ?? [];
   const [open, setOpen] = useState(false);
@@ -88,7 +96,7 @@ function UsersPage() {
     <div>
       <PageHeader
         title="Users"
-        description="Admins, pastors, cell leaders, department leaders, and treasurers who can sign in."
+        description={`Admins, pastors, ${leaderLabel.toLowerCase()}s, department leaders, and treasurers who can sign in.`}
         actions={
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
@@ -96,7 +104,7 @@ function UsersPage() {
                 <Plus className="mr-2 h-4 w-4" /> New user
               </Button>
             </DialogTrigger>
-            <NewUserDialog departments={departments} onClose={() => setOpen(false)} />
+            <NewUserDialog departments={departments} roles={roles} onClose={() => setOpen(false)} />
           </Dialog>
         }
       />
@@ -118,7 +126,7 @@ function UsersPage() {
                       </Badge>
                     )}
                     <Badge variant="secondary" className="capitalize">
-                      {ROLE_LABEL[u.role] ?? u.role.replace("_", " ")}
+                      {roleLabel[u.role] ?? u.role.replace("_", " ")}
                     </Badge>
                     <Button
                       size="icon"
@@ -156,6 +164,7 @@ function UsersPage() {
           <EditUserDialog
             user={editing}
             departments={departments}
+            roles={roles}
             onClose={() => setEditing(null)}
           />
         )}
@@ -209,9 +218,11 @@ function DepartmentField({
 
 function NewUserDialog({
   departments,
+  roles,
   onClose,
 }: {
   departments: Department[];
+  roles: { value: Role; label: string }[];
   onClose: () => void;
 }) {
   const [fullName, setFullName] = useState("");
@@ -259,7 +270,7 @@ function NewUserDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {ROLES.map((r) => (
+                {roles.map((r) => (
                   <SelectItem key={r.value} value={r.value}>
                     {r.label}
                   </SelectItem>
@@ -311,10 +322,12 @@ function NewUserDialog({
 function EditUserDialog({
   user,
   departments,
+  roles,
   onClose,
 }: {
   user: User;
   departments: Department[];
+  roles: { value: Role; label: string }[];
   onClose: () => void;
 }) {
   const [fullName, setFullName] = useState(user.fullName);
@@ -361,7 +374,7 @@ function EditUserDialog({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {ROLES.map((r) => (
+              {roles.map((r) => (
                 <SelectItem key={r.value} value={r.value}>
                   {r.label}
                 </SelectItem>

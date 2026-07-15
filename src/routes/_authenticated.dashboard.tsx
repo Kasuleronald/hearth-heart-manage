@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { useSession } from "@/lib/auth";
+import { useCellTerm } from "@/lib/terminology";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Users2, CalendarDays, TrendingUp, Cake } from "lucide-react";
@@ -14,6 +15,7 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 
 function Dashboard() {
   const { session } = useSession();
+  const { singular: cellSingular, plural: cellPlural } = useCellTerm();
   const members = useLiveQuery(() => db.members.toArray(), []) ?? [];
   const cells = useLiveQuery(() => db.cells.toArray(), []) ?? [];
   const events = useLiveQuery(() => db.events.orderBy("date").reverse().toArray(), []) ?? [];
@@ -82,13 +84,13 @@ function Dashboard() {
         />
         <StatCard
           icon={<Users2 className="h-5 w-5" />}
-          label="Cell fellowships"
+          label={cellPlural}
           value={cells.length}
           sub="active groups"
         />
         <StatCard
           icon={<TrendingUp className="h-5 w-5" />}
-          label="Cell attendance"
+          label={`${cellSingular} attendance`}
           value={`${avgAtt}%`}
           sub="last 4 meetings"
         />
@@ -103,12 +105,14 @@ function Dashboard() {
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="font-display">Recent cell attendance</CardTitle>
+            <CardTitle className="font-display">
+              Recent {cellSingular.toLowerCase()} attendance
+            </CardTitle>
           </CardHeader>
           <CardContent className="h-72">
             {chartData.length === 0 ? (
               <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                No cell meetings recorded yet.
+                No {cellSingular.toLowerCase()} meetings recorded yet.
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">

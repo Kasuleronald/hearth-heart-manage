@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { DeleteButton } from "@/components/delete-button";
 import { useSession, canManageUsers } from "@/lib/auth";
+import { useCellTerm } from "@/lib/terminology";
 import {
   Dialog,
   DialogContent,
@@ -36,6 +37,7 @@ const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", 
 
 function CellsPage() {
   const { session } = useSession();
+  const { singular, plural, leaderLabel } = useCellTerm();
   const cells = useLiveQuery(() => db.cells.orderBy("name").toArray(), []) ?? [];
   const users =
     useLiveQuery(
@@ -53,8 +55,8 @@ function CellsPage() {
   return (
     <div>
       <PageHeader
-        title="Cell Fellowships"
-        description="Small groups shepherded by cell leaders."
+        title={plural}
+        description={`Small groups shepherded by their leaders.`}
         actions={
           canManage && (
             <Dialog
@@ -66,10 +68,16 @@ function CellsPage() {
             >
               <DialogTrigger asChild>
                 <Button onClick={() => setEditing(null)}>
-                  <Plus className="mr-2 h-4 w-4" /> New cell
+                  <Plus className="mr-2 h-4 w-4" /> New {singular.toLowerCase()}
                 </Button>
               </DialogTrigger>
-              <CellDialog cell={editing} users={users} onClose={() => setOpen(false)} />
+              <CellDialog
+                cell={editing}
+                users={users}
+                singular={singular}
+                leaderLabel={leaderLabel}
+                onClose={() => setOpen(false)}
+              />
             </Dialog>
           )
         }
@@ -111,9 +119,13 @@ function CellsPage() {
                           onConfirm={async () => {
                             try {
                               await deleteCellCascade(c.id);
-                              toast.success("Cell deleted");
+                              toast.success(`${singular} deleted`);
                             } catch (e) {
-                              toast.error(e instanceof Error ? e.message : "Failed to delete cell");
+                              toast.error(
+                                e instanceof Error
+                                  ? e.message
+                                  : `Failed to delete ${singular.toLowerCase()}`,
+                              );
                             }
                           }}
                         />
@@ -137,7 +149,7 @@ function CellsPage() {
           );
         })}
         {visibleCells.length === 0 && (
-          <p className="text-sm text-muted-foreground">No cell fellowships yet.</p>
+          <p className="text-sm text-muted-foreground">No {plural.toLowerCase()} yet.</p>
         )}
       </div>
     </div>
@@ -147,10 +159,14 @@ function CellsPage() {
 function CellDialog({
   cell,
   users,
+  singular,
+  leaderLabel,
   onClose,
 }: {
   cell: Cell | null;
   users: { id: string; fullName: string; role: string }[];
+  singular: string;
+  leaderLabel: string;
   onClose: () => void;
 }) {
   const [name, setName] = useState(cell?.name ?? "");
@@ -171,10 +187,10 @@ function CellDialog({
         description: description || undefined,
         createdAt: cell?.createdAt ?? Date.now(),
       });
-      toast.success(cell ? "Cell updated" : "Cell created");
+      toast.success(cell ? `${singular} updated` : `${singular} created`);
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save cell");
+      toast.error(e instanceof Error ? e.message : `Failed to save ${singular.toLowerCase()}`);
     }
   }
 
@@ -182,7 +198,7 @@ function CellDialog({
     <DialogContent>
       <DialogHeader>
         <DialogTitle className="font-display">
-          {cell ? "Edit cell" : "New cell fellowship"}
+          {cell ? `Edit ${singular.toLowerCase()}` : `New ${singular.toLowerCase()}`}
         </DialogTitle>
       </DialogHeader>
       <div className="space-y-4">
@@ -232,14 +248,14 @@ function CellDialog({
               <SelectItem value="none">Unassigned</SelectItem>
               {users.map((u) => (
                 <SelectItem key={u.id} value={u.id}>
-                  {u.fullName} ({u.role.replace("_", " ")})
+                  {u.fullName} ({u.role === "cell_leader" ? leaderLabel : u.role.replace("_", " ")})
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
           {users.length === 0 && (
             <p className="text-xs text-muted-foreground">
-              Create a user with role "Cell Leader" or "Pastor" in the Users page to assign as
+              Create a user with role "{leaderLabel}" or "Pastor" in the Users page to assign as
               leader.
             </p>
           )}
@@ -253,7 +269,7 @@ function CellDialog({
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button onClick={save}>{cell ? "Save changes" : "Create cell"}</Button>
+        <Button onClick={save}>{cell ? "Save changes" : `Create ${singular.toLowerCase()}`}</Button>
       </DialogFooter>
     </DialogContent>
   );

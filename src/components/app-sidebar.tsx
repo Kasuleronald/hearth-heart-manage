@@ -28,70 +28,75 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useSession } from "@/lib/auth";
+import { useCellTerm } from "@/lib/terminology";
 import { Button } from "@/components/ui/button";
 
-const nav = [
-  {
-    title: "Dashboard",
-    url: "/dashboard",
-    icon: LayoutDashboard,
-    roles: ["admin", "pastor", "cell_leader", "leader", "treasurer"] as const,
-  },
-  {
-    title: "Members",
-    url: "/members",
-    icon: Users,
-    roles: ["admin", "pastor", "cell_leader", "leader", "treasurer"] as const,
-  },
-  {
-    title: "Households",
-    url: "/households",
-    icon: Home,
-    roles: ["admin", "pastor", "treasurer"] as const,
-  },
-  {
-    title: "Cell Fellowships",
-    url: "/cells",
-    icon: Users2,
-    roles: ["admin", "pastor", "cell_leader"] as const,
-  },
-  {
-    title: "Discipleship Classes",
-    url: "/classes",
-    icon: GraduationCap,
-    roles: ["admin", "pastor", "cell_leader"] as const,
-  },
-  {
-    title: "Departments",
-    url: "/departments",
-    icon: Building2,
-    roles: ["admin", "pastor"] as const,
-  },
-  {
-    title: "Events",
-    url: "/events",
-    icon: CalendarDays,
-    roles: ["admin", "pastor", "cell_leader"] as const,
-  },
-  {
-    title: "Givings",
-    url: "/givings",
-    icon: HandCoins,
-    roles: ["admin", "pastor", "treasurer"] as const,
-  },
-  {
-    title: "Reports",
-    url: "/reports",
-    icon: BarChart3,
-    roles: ["admin", "pastor", "treasurer"] as const,
-  },
-  { title: "Users", url: "/users", icon: UserCog, roles: ["admin"] as const },
-  { title: "Settings", url: "/settings", icon: Settings, roles: ["admin", "pastor"] as const },
-];
+function getNav(cellTermPlural: string) {
+  return [
+    {
+      title: "Dashboard",
+      url: "/dashboard",
+      icon: LayoutDashboard,
+      roles: ["admin", "pastor", "cell_leader", "leader", "treasurer"] as const,
+    },
+    {
+      title: "Members",
+      url: "/members",
+      icon: Users,
+      roles: ["admin", "pastor", "cell_leader", "leader", "treasurer"] as const,
+    },
+    {
+      title: "Households",
+      url: "/households",
+      icon: Home,
+      roles: ["admin", "pastor", "cell_leader", "leader", "treasurer"] as const,
+    },
+    {
+      title: cellTermPlural,
+      url: "/cells",
+      icon: Users2,
+      roles: ["admin", "pastor", "cell_leader"] as const,
+    },
+    {
+      title: "Discipleship Classes",
+      url: "/classes",
+      icon: GraduationCap,
+      roles: ["admin", "pastor", "cell_leader"] as const,
+    },
+    {
+      title: "Departments",
+      url: "/departments",
+      icon: Building2,
+      roles: ["admin", "pastor"] as const,
+    },
+    {
+      title: "Events",
+      url: "/events",
+      icon: CalendarDays,
+      roles: ["admin", "pastor", "cell_leader"] as const,
+    },
+    {
+      title: "Givings",
+      url: "/givings",
+      icon: HandCoins,
+      roles: ["admin", "pastor", "treasurer"] as const,
+    },
+    {
+      title: "Reports",
+      url: "/reports",
+      icon: BarChart3,
+      roles: ["admin", "pastor", "treasurer"] as const,
+    },
+    { title: "Users", url: "/users", icon: UserCog, roles: ["admin"] as const },
+    { title: "Settings", url: "/settings", icon: Settings, roles: ["admin", "pastor"] as const },
+  ];
+}
 
 export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { session, signOut } = useSession();
+  const { plural, leaderLabel } = useCellTerm();
+  const nav = getNav(plural);
   if (!session) return null;
   const visible = nav.filter((n) => (n.roles as readonly string[]).includes(session.role));
 
@@ -135,7 +140,7 @@ export function AppSidebar() {
           <div className="min-w-0">
             <div className="truncate text-sm font-medium">{session.fullName}</div>
             <div className="truncate text-xs capitalize text-sidebar-foreground/70">
-              {session.role.replace("_", " ")}
+              {session.role === "cell_leader" ? leaderLabel : session.role.replace("_", " ")}
             </div>
           </div>
           <div className="flex items-center gap-1">
