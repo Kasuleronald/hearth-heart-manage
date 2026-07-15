@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
-import { db, uid, type ChurchEvent, type EventType } from "@/lib/db";
+import { Plus, Pencil } from "lucide-react";
+import { db, deleteEventCascade, uid, type ChurchEvent, type EventType } from "@/lib/db";
+import { formatUGX } from "@/lib/currency";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { DeleteButton } from "@/components/delete-button";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +37,7 @@ export const Route = createFileRoute("/_authenticated/events")({
 const TYPES: { value: EventType; label: string }[] = [
   { value: "sunday_service", label: "Sunday Service" },
   { value: "prayer", label: "Prayer Meeting" },
+  { value: "overnight_prayer", label: "Overnight Prayer" },
   { value: "special", label: "Special Event" },
 ];
 
@@ -49,7 +52,13 @@ function EventsPage() {
         title="Events"
         description="Services, prayer meetings and special gatherings."
         actions={
-          <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setEditing(null); }}>
+          <Dialog
+            open={open}
+            onOpenChange={(o) => {
+              setOpen(o);
+              if (!o) setEditing(null);
+            }}
+          >
             <DialogTrigger asChild>
               <Button onClick={() => setEditing(null)}>
                 <Plus className="mr-2 h-4 w-4" /> New event
@@ -65,29 +74,49 @@ function EventsPage() {
             <CardContent className="p-5">
               <div className="flex items-start justify-between">
                 <Link to="/events/$id" params={{ id: e.id }}>
-                  <h3 className="font-display text-lg font-semibold group-hover:text-primary">{e.title}</h3>
-                  <p className="mt-1 text-xs text-muted-foreground">{format(new Date(e.date), "PPPP")}</p>
+                  <h3 className="font-display text-lg font-semibold group-hover:text-primary">
+                    {e.title}
+                  </h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {format(new Date(e.date), "PPPP")}
+                  </p>
                 </Link>
                 <div className="flex gap-1">
-                  <Button size="icon" variant="ghost" onClick={() => { setEditing(e); setOpen(true); }}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
                   <Button
                     size="icon"
                     variant="ghost"
-                    onClick={async () => {
-                      if (!confirm(`Delete "${e.title}"?`)) return;
-                      await db.eventAttendance.where("eventId").equals(e.id).delete();
-                      await db.events.delete(e.id);
-                      toast.success("Event deleted");
+                    aria-label={`Edit ${e.title}`}
+                    onClick={() => {
+                      setEditing(e);
+                      setOpen(true);
                     }}
                   >
-                    <Trash2 className="h-4 w-4 text-destructive" />
+                    <Pencil className="h-4 w-4" />
                   </Button>
+                  <DeleteButton
+                    label={`Delete ${e.title}`}
+                    title={`Delete "${e.title}"?`}
+                    description="This also removes its attendance records. This can't be undone."
+                    onConfirm={async () => {
+                      try {
+                        await deleteEventCascade(e.id);
+                        toast.success("Event deleted");
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Failed to delete event");
+                      }
+                    }}
+                  />
                 </div>
               </div>
-              <div className="mt-3">
-                <Badge variant="secondary" className="capitalize">{e.type.replace("_", " ")}</Badge>
+              <div className="mt-3 flex items-center gap-2">
+                <Badge variant="secondary" className="capitalize">
+                  {e.type.replace("_", " ")}
+                </Badge>
+                {!!e.offertoryAmount && (
+                  <span className="text-xs text-muted-foreground">
+                    {formatUGX(e.offertoryAmount)}
+                  </span>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -103,42 +132,85 @@ function EventDialog({ event, onClose }: { event: ChurchEvent | null; onClose: (
   const [date, setDate] = useState(event?.date ?? format(new Date(), "yyyy-MM-dd"));
   const [type, setType] = useState<EventType>(event?.type ?? "sunday_service");
   const [notes, setNotes] = useState(event?.notes ?? "");
+  const [offertoryAmount, setOffertoryAmount] = useState(
+    event?.offertoryAmount != null ? String(event.offertoryAmount) : "",
+  );
 
   async function save() {
     if (!title.trim()) return toast.error("Title required");
-    await db.events.put({
-      id: event?.id ?? uid(),
-      title: title.trim(),
-      date,
-      type,
-      notes: notes || undefined,
-      createdAt: event?.createdAt ?? Date.now(),
-    });
-    toast.success(event ? "Event updated" : "Event created");
-    onClose();
+    try {
+      const amount = offertoryAmount ? Number(offertoryAmount) : undefined;
+      if (offertoryAmount && Number.isNaN(amount)) {
+        toast.error("Enter a valid offertory amount");
+        return;
+      }
+      await db.events.put({
+        id: event?.id ?? uid(),
+        title: title.trim(),
+        date,
+        type,
+        notes: notes || undefined,
+        offertoryAmount: amount,
+        createdAt: event?.createdAt ?? Date.now(),
+      });
+      toast.success(event ? "Event updated" : "Event created");
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save event");
+    }
   }
 
   return (
     <DialogContent>
-      <DialogHeader><DialogTitle className="font-display">{event ? "Edit event" : "New event"}</DialogTitle></DialogHeader>
+      <DialogHeader>
+        <DialogTitle className="font-display">{event ? "Edit event" : "New event"}</DialogTitle>
+      </DialogHeader>
       <div className="space-y-4">
-        <div className="space-y-1.5"><Label>Title</Label><Input value={title} onChange={(e) => setTitle(e.target.value)} /></div>
+        <div className="space-y-1.5">
+          <Label>Title</Label>
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+        </div>
         <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5"><Label>Date</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+          <div className="space-y-1.5">
+            <Label>Date</Label>
+            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
           <div className="space-y-1.5">
             <Label>Type</Label>
             <Select value={type} onValueChange={(v) => setType(v as EventType)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
-                {TYPES.map((t) => (<SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>))}
+                {TYPES.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>
+                    {t.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
         </div>
-        <div className="space-y-1.5"><Label>Notes</Label><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} /></div>
+        <div className="space-y-1.5">
+          <Label>Offertory (UGX)</Label>
+          <Input
+            type="number"
+            min="0"
+            placeholder="0"
+            value={offertoryAmount}
+            onChange={(e) => setOffertoryAmount(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">Enter 0 if not applicable.</p>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Notes</Label>
+          <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
+        </div>
       </div>
       <DialogFooter>
-        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button variant="ghost" onClick={onClose}>
+          Cancel
+        </Button>
         <Button onClick={save}>{event ? "Save changes" : "Create event"}</Button>
       </DialogFooter>
     </DialogContent>

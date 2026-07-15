@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
-import { Plus, Pencil, Users2 } from "lucide-react";
-import { db, deleteCellCascade, uid, type Cell } from "@/lib/db";
+import { Plus, Pencil, GraduationCap } from "lucide-react";
+import { db, deleteClassCascade, uid, type DiscipleshipClass } from "@/lib/db";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,33 +28,35 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/_authenticated/cells")({
-  component: CellsPage,
+export const Route = createFileRoute("/_authenticated/classes")({
+  component: ClassesPage,
 });
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-function CellsPage() {
+function ClassesPage() {
   const { session } = useSession();
-  const cells = useLiveQuery(() => db.cells.orderBy("name").toArray(), []) ?? [];
+  const classes = useLiveQuery(() => db.classes.orderBy("name").toArray(), []) ?? [];
   const users =
     useLiveQuery(
       () => db.users.filter((u) => u.role === "cell_leader" || u.role === "pastor").toArray(),
       [],
     ) ?? [];
   const members = useLiveQuery(() => db.members.toArray(), []) ?? [];
-  const [editing, setEditing] = useState<Cell | null>(null);
+  const [editing, setEditing] = useState<DiscipleshipClass | null>(null);
   const [open, setOpen] = useState(false);
 
   const canManage = session ? session.role !== "cell_leader" : false;
-  const visibleCells =
-    session?.role === "cell_leader" ? cells.filter((c) => c.leaderId === session.userId) : cells;
+  const visibleClasses =
+    session?.role === "cell_leader"
+      ? classes.filter((c) => c.facilitatorId === session.userId)
+      : classes;
 
   return (
     <div>
       <PageHeader
-        title="Cell Fellowships"
-        description="Small groups shepherded by cell leaders."
+        title="Discipleship Classes"
+        description="Courses that grow members in faith, with their own roster and sessions."
         actions={
           canManage && (
             <Dialog
@@ -66,23 +68,23 @@ function CellsPage() {
             >
               <DialogTrigger asChild>
                 <Button onClick={() => setEditing(null)}>
-                  <Plus className="mr-2 h-4 w-4" /> New cell
+                  <Plus className="mr-2 h-4 w-4" /> New class
                 </Button>
               </DialogTrigger>
-              <CellDialog cell={editing} users={users} onClose={() => setOpen(false)} />
+              <ClassDialog cls={editing} users={users} onClose={() => setOpen(false)} />
             </Dialog>
           )
         }
       />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {visibleCells.map((c) => {
-          const leader = users.find((u) => u.id === c.leaderId);
-          const count = members.filter((m) => m.cellId === c.id).length;
+        {visibleClasses.map((c) => {
+          const facilitator = users.find((u) => u.id === c.facilitatorId);
+          const count = members.filter((m) => m.classId === c.id).length;
           return (
             <Card key={c.id} className="group overflow-hidden">
               <CardContent className="p-5">
                 <div className="flex items-start justify-between">
-                  <Link to="/cells/$id" params={{ id: c.id }} className="min-w-0">
+                  <Link to="/classes/$id" params={{ id: c.id }} className="min-w-0">
                     <h3 className="font-display text-lg font-semibold group-hover:text-primary">
                       {c.name}
                     </h3>
@@ -107,13 +109,15 @@ function CellsPage() {
                         <DeleteButton
                           label={`Delete ${c.name}`}
                           title={`Delete "${c.name}"?`}
-                          description="This also removes all of its meetings and attendance history. Members are unlinked, not deleted. This can't be undone."
+                          description="This also removes all of its sessions and attendance history. Members are unlinked, not deleted. This can't be undone."
                           onConfirm={async () => {
                             try {
-                              await deleteCellCascade(c.id);
-                              toast.success("Cell deleted");
+                              await deleteClassCascade(c.id);
+                              toast.success("Class deleted");
                             } catch (e) {
-                              toast.error(e instanceof Error ? e.message : "Failed to delete cell");
+                              toast.error(
+                                e instanceof Error ? e.message : "Failed to delete class",
+                              );
                             }
                           }}
                         />
@@ -123,10 +127,11 @@ function CellsPage() {
                 </div>
                 <div className="mt-4 flex items-center justify-between text-sm">
                   <div className="text-muted-foreground">
-                    Leader: <span className="text-foreground">{leader?.fullName ?? "—"}</span>
+                    Facilitator:{" "}
+                    <span className="text-foreground">{facilitator?.fullName ?? "—"}</span>
                   </div>
                   <div className="flex items-center gap-1 text-muted-foreground">
-                    <Users2 className="h-4 w-4" /> {count}
+                    <GraduationCap className="h-4 w-4" /> {count}
                   </div>
                 </div>
                 {c.description && (
@@ -136,45 +141,45 @@ function CellsPage() {
             </Card>
           );
         })}
-        {visibleCells.length === 0 && (
-          <p className="text-sm text-muted-foreground">No cell fellowships yet.</p>
+        {visibleClasses.length === 0 && (
+          <p className="text-sm text-muted-foreground">No discipleship classes yet.</p>
         )}
       </div>
     </div>
   );
 }
 
-function CellDialog({
-  cell,
+function ClassDialog({
+  cls,
   users,
   onClose,
 }: {
-  cell: Cell | null;
+  cls: DiscipleshipClass | null;
   users: { id: string; fullName: string; role: string }[];
   onClose: () => void;
 }) {
-  const [name, setName] = useState(cell?.name ?? "");
-  const [meetingDay, setMeetingDay] = useState(cell?.meetingDay ?? "");
-  const [meetingLocation, setMeetingLocation] = useState(cell?.meetingLocation ?? "");
-  const [leaderId, setLeaderId] = useState(cell?.leaderId ?? "");
-  const [description, setDescription] = useState(cell?.description ?? "");
+  const [name, setName] = useState(cls?.name ?? "");
+  const [meetingDay, setMeetingDay] = useState(cls?.meetingDay ?? "");
+  const [meetingLocation, setMeetingLocation] = useState(cls?.meetingLocation ?? "");
+  const [facilitatorId, setFacilitatorId] = useState(cls?.facilitatorId ?? "");
+  const [description, setDescription] = useState(cls?.description ?? "");
 
   async function save() {
     if (!name.trim()) return toast.error("Name is required");
     try {
-      await db.cells.put({
-        id: cell?.id ?? uid(),
+      await db.classes.put({
+        id: cls?.id ?? uid(),
         name: name.trim(),
         meetingDay: meetingDay || undefined,
         meetingLocation: meetingLocation || undefined,
-        leaderId: leaderId || undefined,
+        facilitatorId: facilitatorId || undefined,
         description: description || undefined,
-        createdAt: cell?.createdAt ?? Date.now(),
+        createdAt: cls?.createdAt ?? Date.now(),
       });
-      toast.success(cell ? "Cell updated" : "Cell created");
+      toast.success(cls ? "Class updated" : "Class created");
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save cell");
+      toast.error(e instanceof Error ? e.message : "Failed to save class");
     }
   }
 
@@ -182,7 +187,7 @@ function CellDialog({
     <DialogContent>
       <DialogHeader>
         <DialogTitle className="font-display">
-          {cell ? "Edit cell" : "New cell fellowship"}
+          {cls ? "Edit class" : "New discipleship class"}
         </DialogTitle>
       </DialogHeader>
       <div className="space-y-4">
@@ -191,7 +196,7 @@ function CellDialog({
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Grace Cell — Zone A"
+            placeholder="New Believers Class"
           />
         </div>
         <div className="grid grid-cols-2 gap-4">
@@ -220,13 +225,13 @@ function CellDialog({
           </div>
         </div>
         <div className="space-y-1.5">
-          <Label>Leader</Label>
+          <Label>Facilitator</Label>
           <Select
-            value={leaderId || "none"}
-            onValueChange={(v) => setLeaderId(v === "none" ? "" : v)}
+            value={facilitatorId || "none"}
+            onValueChange={(v) => setFacilitatorId(v === "none" ? "" : v)}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Assign a leader" />
+              <SelectValue placeholder="Assign a facilitator" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">Unassigned</SelectItem>
@@ -240,7 +245,7 @@ function CellDialog({
           {users.length === 0 && (
             <p className="text-xs text-muted-foreground">
               Create a user with role "Cell Leader" or "Pastor" in the Users page to assign as
-              leader.
+              facilitator.
             </p>
           )}
         </div>
@@ -253,7 +258,7 @@ function CellDialog({
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button onClick={save}>{cell ? "Save changes" : "Create cell"}</Button>
+        <Button onClick={save}>{cls ? "Save changes" : "Create class"}</Button>
       </DialogFooter>
     </DialogContent>
   );

@@ -2,7 +2,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
 import { ArrowLeft, Plus, Pencil } from "lucide-react";
-import { db, uid, type CellMeeting, type Member } from "@/lib/db";
+import { db, uid, type ClassSession, type Member } from "@/lib/db";
 import { formatUGX } from "@/lib/currency";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -21,52 +21,57 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { useSession, canEditCell } from "@/lib/auth";
+import { useSession, canEditClass } from "@/lib/auth";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/_authenticated/cells/$id")({
-  component: CellDetail,
-  notFoundComponent: () => <div className="p-6 text-sm text-muted-foreground">Cell not found.</div>,
+export const Route = createFileRoute("/_authenticated/classes/$id")({
+  component: ClassDetail,
+  notFoundComponent: () => (
+    <div className="p-6 text-sm text-muted-foreground">Class not found.</div>
+  ),
 });
 
-function CellDetail() {
+function ClassDetail() {
   const { id } = Route.useParams();
   const { session } = useSession();
-  const cell = useLiveQuery(() => db.cells.get(id), [id]);
-  const leader = useLiveQuery(
-    () => (cell?.leaderId ? db.users.get(cell.leaderId) : undefined),
-    [cell?.leaderId],
+  const cls = useLiveQuery(() => db.classes.get(id), [id]);
+  const facilitator = useLiveQuery(
+    () => (cls?.facilitatorId ? db.users.get(cls.facilitatorId) : undefined),
+    [cls?.facilitatorId],
   );
-  const members = useLiveQuery(() => db.members.where("cellId").equals(id).toArray(), [id]) ?? [];
+  const members = useLiveQuery(() => db.members.where("classId").equals(id).toArray(), [id]) ?? [];
   const allMembers = useLiveQuery(() => db.members.toArray(), []) ?? [];
-  const meetings =
-    useLiveQuery(() => db.cellMeetings.where("cellId").equals(id).reverse().sortBy("date"), [id]) ??
-    [];
+  const sessions =
+    useLiveQuery(
+      () => db.classSessions.where("classId").equals(id).reverse().sortBy("date"),
+      [id],
+    ) ?? [];
   const [addingMember, setAddingMember] = useState(false);
-  const [meetingDialogOpen, setMeetingDialogOpen] = useState(false);
-  const [editingMeeting, setEditingMeeting] = useState<CellMeeting | null>(null);
-  const [attMeeting, setAttMeeting] = useState<CellMeeting | null>(null);
+  const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
+  const [editingSession, setEditingSession] = useState<ClassSession | null>(null);
+  const [attSession, setAttSession] = useState<ClassSession | null>(null);
 
-  if (cell === undefined) return null;
-  if (!cell) throw notFound();
+  if (cls === undefined) return null;
+  if (!cls) throw notFound();
 
-  const canEdit = session ? canEditCell(session.role, cell.leaderId, session.userId) : false;
-  const unassigned = allMembers.filter((m) => !m.cellId);
+  const canEdit = session ? canEditClass(session.role, cls.facilitatorId, session.userId) : false;
+  const unassigned = allMembers.filter((m) => !m.classId);
 
   return (
     <div>
       <Button asChild variant="ghost" size="sm" className="mb-2">
-        <Link to="/cells">
-          <ArrowLeft className="mr-1 h-4 w-4" /> All cells
+        <Link to="/classes">
+          <ArrowLeft className="mr-1 h-4 w-4" /> All classes
         </Link>
       </Button>
       <PageHeader
-        title={cell.name}
-        description={`${cell.meetingDay ?? "Any day"} • ${cell.meetingLocation ?? "—"}`}
+        title={cls.name}
+        description={`${cls.meetingDay ?? "Any day"} • ${cls.meetingLocation ?? "—"}`}
         actions={
           <div className="text-sm text-muted-foreground">
-            Leader: <span className="text-foreground">{leader?.fullName ?? "Unassigned"}</span>
+            Facilitator:{" "}
+            <span className="text-foreground">{facilitator?.fullName ?? "Unassigned"}</span>
           </div>
         }
       />
@@ -85,12 +90,12 @@ function CellDetail() {
                   </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>
-                      <DialogTitle className="font-display">Add to {cell.name}</DialogTitle>
+                      <DialogTitle className="font-display">Add to {cls.name}</DialogTitle>
                     </DialogHeader>
                     <div className="max-h-80 overflow-y-auto">
                       {unassigned.length === 0 ? (
                         <p className="text-sm text-muted-foreground">
-                          All members already belong to a cell.
+                          All members already belong to a class.
                         </p>
                       ) : (
                         <ul className="space-y-1">
@@ -99,8 +104,8 @@ function CellDetail() {
                               <button
                                 className="w-full rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
                                 onClick={async () => {
-                                  await db.members.update(m.id, { cellId: cell.id });
-                                  toast.success(`Added ${m.firstName} to ${cell.name}`);
+                                  await db.members.update(m.id, { classId: cls.id });
+                                  toast.success(`Added ${m.firstName} to ${cls.name}`);
                                 }}
                               >
                                 {m.firstName} {m.lastName}
@@ -127,7 +132,7 @@ function CellDetail() {
                     <button
                       className="text-xs text-muted-foreground hover:text-destructive"
                       onClick={async () => {
-                        await db.members.update(m.id, { cellId: undefined });
+                        await db.members.update(m.id, { classId: undefined });
                       }}
                     >
                       Remove
@@ -145,39 +150,39 @@ function CellDetail() {
         <Card>
           <CardContent className="p-5">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="font-display text-lg font-semibold">Meetings</h3>
+              <h3 className="font-display text-lg font-semibold">Sessions</h3>
               {canEdit && (
                 <Dialog
-                  open={meetingDialogOpen}
+                  open={sessionDialogOpen}
                   onOpenChange={(o) => {
-                    setMeetingDialogOpen(o);
-                    if (!o) setEditingMeeting(null);
+                    setSessionDialogOpen(o);
+                    if (!o) setEditingSession(null);
                   }}
                 >
                   <DialogTrigger asChild>
-                    <Button size="sm" onClick={() => setEditingMeeting(null)}>
-                      <Plus className="mr-1 h-4 w-4" /> New meeting
+                    <Button size="sm" onClick={() => setEditingSession(null)}>
+                      <Plus className="mr-1 h-4 w-4" /> New session
                     </Button>
                   </DialogTrigger>
-                  <MeetingDialog
-                    cellId={cell.id}
-                    meeting={editingMeeting}
-                    onClose={() => setMeetingDialogOpen(false)}
+                  <SessionDialog
+                    classId={cls.id}
+                    session={editingSession}
+                    onClose={() => setSessionDialogOpen(false)}
                   />
                 </Dialog>
               )}
             </div>
             <ul className="space-y-1 text-sm">
-              {meetings.map((m) => (
+              {sessions.map((s) => (
                 <li
-                  key={m.id}
+                  key={s.id}
                   className="flex items-center justify-between rounded px-2 py-1.5 hover:bg-muted/60"
                 >
-                  <button className="text-left" onClick={() => setAttMeeting(m)}>
-                    <div className="font-medium">{format(new Date(m.date), "PPP")}</div>
+                  <button className="text-left" onClick={() => setAttSession(s)}>
+                    <div className="font-medium">{format(new Date(s.date), "PPP")}</div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      {m.topic && <span>{m.topic}</span>}
-                      {!!m.offertoryAmount && <span>{formatUGX(m.offertoryAmount)}</span>}
+                      {s.topic && <span>{s.topic}</span>}
+                      {!!s.offertoryAmount && <span>{formatUGX(s.offertoryAmount)}</span>}
                     </div>
                   </button>
                   {canEdit && (
@@ -185,25 +190,25 @@ function CellDetail() {
                       <Button
                         size="icon"
                         variant="ghost"
-                        aria-label={`Edit meeting on ${format(new Date(m.date), "PPP")}`}
+                        aria-label={`Edit session on ${format(new Date(s.date), "PPP")}`}
                         onClick={() => {
-                          setEditingMeeting(m);
-                          setMeetingDialogOpen(true);
+                          setEditingSession(s);
+                          setSessionDialogOpen(true);
                         }}
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
                       <DeleteButton
-                        label={`Delete meeting on ${format(new Date(m.date), "PPP")}`}
-                        title="Delete this meeting?"
+                        label={`Delete session on ${format(new Date(s.date), "PPP")}`}
+                        title="Delete this session?"
                         description="This also removes its attendance records. This can't be undone."
                         onConfirm={async () => {
                           try {
-                            await db.cellAttendance.where("meetingId").equals(m.id).delete();
-                            await db.cellMeetings.delete(m.id);
+                            await db.classAttendance.where("sessionId").equals(s.id).delete();
+                            await db.classSessions.delete(s.id);
                           } catch (e) {
                             toast.error(
-                              e instanceof Error ? e.message : "Failed to delete meeting",
+                              e instanceof Error ? e.message : "Failed to delete session",
                             );
                           }
                         }}
@@ -212,47 +217,47 @@ function CellDetail() {
                   )}
                 </li>
               ))}
-              {meetings.length === 0 && (
-                <li className="text-xs text-muted-foreground">No meetings recorded.</li>
+              {sessions.length === 0 && (
+                <li className="text-xs text-muted-foreground">No sessions recorded.</li>
               )}
             </ul>
           </CardContent>
         </Card>
       </div>
 
-      {attMeeting && (
+      {attSession && (
         <AttendanceDialog
-          meeting={attMeeting}
+          session={attSession}
           roster={members}
           allMembers={allMembers}
           canEdit={canEdit}
-          onClose={() => setAttMeeting(null)}
+          onClose={() => setAttSession(null)}
         />
       )}
     </div>
   );
 }
 
-function MeetingDialog({
-  cellId,
-  meeting,
+function SessionDialog({
+  classId,
+  session,
   onClose,
 }: {
-  cellId: string;
-  meeting: CellMeeting | null;
+  classId: string;
+  session: ClassSession | null;
   onClose: () => void;
 }) {
-  const [date, setDate] = useState(meeting?.date ?? format(new Date(), "yyyy-MM-dd"));
-  const [topic, setTopic] = useState(meeting?.topic ?? "");
-  const [notes, setNotes] = useState(meeting?.notes ?? "");
+  const [date, setDate] = useState(session?.date ?? format(new Date(), "yyyy-MM-dd"));
+  const [topic, setTopic] = useState(session?.topic ?? "");
+  const [notes, setNotes] = useState(session?.notes ?? "");
   const [offertoryAmount, setOffertoryAmount] = useState(
-    meeting?.offertoryAmount != null ? String(meeting.offertoryAmount) : "",
+    session?.offertoryAmount != null ? String(session.offertoryAmount) : "",
   );
   return (
     <DialogContent>
       <DialogHeader>
         <DialogTitle className="font-display">
-          {meeting ? "Edit cell meeting" : "New cell meeting"}
+          {session ? "Edit class session" : "New class session"}
         </DialogTitle>
       </DialogHeader>
       <div className="space-y-4">
@@ -265,7 +270,7 @@ function MeetingDialog({
           <Input
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
-            placeholder="What was discussed?"
+            placeholder="What was taught?"
           />
         </div>
         <div className="space-y-1.5">
@@ -296,25 +301,25 @@ function MeetingDialog({
                 toast.error("Enter a valid offertory amount");
                 return;
               }
-              await db.cellMeetings.put({
-                id: meeting?.id ?? uid(),
-                cellId,
+              await db.classSessions.put({
+                id: session?.id ?? uid(),
+                classId,
                 date,
                 topic: topic || undefined,
                 notes: notes || undefined,
                 offertoryAmount: amount,
-                createdAt: meeting?.createdAt ?? Date.now(),
+                createdAt: session?.createdAt ?? Date.now(),
               });
               toast.success(
-                meeting ? "Meeting updated" : "Meeting created — mark attendance next.",
+                session ? "Session updated" : "Session created — mark attendance next.",
               );
               onClose();
             } catch (e) {
-              toast.error(e instanceof Error ? e.message : "Failed to save meeting");
+              toast.error(e instanceof Error ? e.message : "Failed to save session");
             }
           }}
         >
-          {meeting ? "Save changes" : "Create"}
+          {session ? "Save changes" : "Create"}
         </Button>
       </DialogFooter>
     </DialogContent>
@@ -322,13 +327,13 @@ function MeetingDialog({
 }
 
 function AttendanceDialog({
-  meeting,
+  session,
   roster,
   allMembers,
   canEdit,
   onClose,
 }: {
-  meeting: CellMeeting;
+  session: ClassSession;
   roster: Member[];
   allMembers: Member[];
   canEdit: boolean;
@@ -336,8 +341,8 @@ function AttendanceDialog({
 }) {
   const records =
     useLiveQuery(
-      () => db.cellAttendance.where("meetingId").equals(meeting.id).toArray(),
-      [meeting.id],
+      () => db.classAttendance.where("sessionId").equals(session.id).toArray(),
+      [session.id],
     ) ?? [];
   const map = new Map(records.map((r) => [r.memberId, r]));
   const presentIds = new Set(records.filter((r) => r.present).map((r) => r.memberId));
@@ -348,9 +353,9 @@ function AttendanceDialog({
   async function toggle(memberId: string, present: boolean) {
     const existing = map.get(memberId);
     if (existing) {
-      await db.cellAttendance.update(existing.id, { present });
+      await db.classAttendance.update(existing.id, { present });
     } else {
-      await db.cellAttendance.add({ id: uid(), meetingId: meeting.id, memberId, present });
+      await db.classAttendance.add({ id: uid(), sessionId: session.id, memberId, present });
     }
   }
 
@@ -359,10 +364,10 @@ function AttendanceDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="font-display">
-            Attendance — {format(new Date(meeting.date), "PPP")}
+            Attendance — {format(new Date(session.date), "PPP")}
           </DialogTitle>
         </DialogHeader>
-        {meeting.topic && <p className="text-sm text-muted-foreground">{meeting.topic}</p>}
+        {session.topic && <p className="text-sm text-muted-foreground">{session.topic}</p>}
         <AttendanceBreakdown roster={displayed} presentIds={presentIds} />
         {canEdit && (
           <MemberCombobox
@@ -391,7 +396,7 @@ function AttendanceDialog({
             );
           })}
           {displayed.length === 0 && (
-            <p className="text-sm text-muted-foreground">No members in this cell yet.</p>
+            <p className="text-sm text-muted-foreground">No members in this class yet.</p>
           )}
         </div>
         <DialogFooter>

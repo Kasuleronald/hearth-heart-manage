@@ -1,8 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
-import { Plus, Search, Pencil, Trash2 } from "lucide-react";
-import { db, uid, type Member, type MemberStatus } from "@/lib/db";
+import { Plus, Search, Pencil, Download } from "lucide-react";
+import {
+  db,
+  deleteMemberCascade,
+  uid,
+  type Member,
+  type MemberCategory,
+  type MemberStatus,
+} from "@/lib/db";
+import { downloadCsv } from "@/lib/download";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +26,7 @@ import {
 } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { DeleteButton } from "@/components/delete-button";
 import {
   Dialog,
   DialogContent,
@@ -40,11 +49,19 @@ export const Route = createFileRoute("/_authenticated/members")({
 });
 
 const STATUSES: MemberStatus[] = ["visitor", "member", "baptized", "inactive"];
+const CATEGORIES: { value: MemberCategory; label: string }[] = [
+  { value: "pastor", label: "Pastor" },
+  { value: "leader", label: "Leader" },
+  { value: "member", label: "Member" },
+  { value: "new_member", label: "New Member" },
+  { value: "convert", label: "Convert" },
+];
 
 function MembersPage() {
   const members = useLiveQuery(() => db.members.orderBy("lastName").toArray(), []) ?? [];
   const households = useLiveQuery(() => db.households.toArray(), []) ?? [];
   const cells = useLiveQuery(() => db.cells.toArray(), []) ?? [];
+  const classes = useLiveQuery(() => db.classes.toArray(), []) ?? [];
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [editing, setEditing] = useState<Member | null>(null);
@@ -63,19 +80,52 @@ function MembersPage() {
         title="Members"
         description="Everyone in your church directory."
         actions={
-          <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setEditing(null); }}>
-            <DialogTrigger asChild>
-              <Button onClick={() => setEditing(null)}>
-                <Plus className="mr-2 h-4 w-4" /> New member
-              </Button>
-            </DialogTrigger>
-            <MemberDialog
-              member={editing}
-              households={households}
-              cells={cells}
-              onClose={() => setOpen(false)}
-            />
-          </Dialog>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                const rows = [
+                  ["First name", "Last name", "Status", "Phone", "Email", "Household", "Cell"],
+                  ...filtered.map((m) => {
+                    const hh = households.find((h) => h.id === m.householdId);
+                    const cell = cells.find((c) => c.id === m.cellId);
+                    return [
+                      m.firstName,
+                      m.lastName,
+                      m.status,
+                      m.phone ?? "",
+                      m.email ?? "",
+                      hh?.name ?? "",
+                      cell?.name ?? "",
+                    ];
+                  }),
+                ];
+                downloadCsv("members.csv", rows);
+              }}
+            >
+              <Download className="mr-2 h-4 w-4" /> Export CSV
+            </Button>
+            <Dialog
+              open={open}
+              onOpenChange={(o) => {
+                setOpen(o);
+                if (!o) setEditing(null);
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button onClick={() => setEditing(null)}>
+                  <Plus className="mr-2 h-4 w-4" /> New member
+                </Button>
+              </DialogTrigger>
+              <MemberDialog
+                member={editing}
+                households={households}
+                cells={cells}
+                classes={classes}
+                onClose={() => setOpen(false)}
+              />
+            </Dialog>
+          </div>
         }
       />
 
@@ -83,7 +133,12 @@ function MembersPage() {
         <div className="mb-4 flex flex-wrap gap-2">
           <div className="relative flex-1 min-w-[220px]">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, phone, email…" className="pl-9" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search name, phone, email…"
+              className="pl-9"
+            />
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-44">
@@ -92,7 +147,9 @@ function MembersPage() {
             <SelectContent>
               <SelectItem value="all">All statuses</SelectItem>
               {STATUSES.map((s) => (
-                <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
+                <SelectItem key={s} value={s} className="capitalize">
+                  {s}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -129,20 +186,32 @@ function MembersPage() {
                     <TableCell className="text-muted-foreground">{cell?.name ?? "—"}</TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">
-                        <Button size="icon" variant="ghost" onClick={() => { setEditing(m); setOpen(true); }}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={async () => {
-                            if (!confirm(`Delete ${m.firstName} ${m.lastName}?`)) return;
-                            await db.members.delete(m.id);
-                            toast.success("Member deleted");
+                          aria-label={`Edit ${m.firstName} ${m.lastName}`}
+                          onClick={() => {
+                            setEditing(m);
+                            setOpen(true);
                           }}
                         >
-                          <Trash2 className="h-4 w-4 text-destructive" />
+                          <Pencil className="h-4 w-4" />
                         </Button>
+                        <DeleteButton
+                          label={`Delete ${m.firstName} ${m.lastName}`}
+                          title={`Delete ${m.firstName} ${m.lastName}?`}
+                          description="This also removes their cell and event attendance history. This can't be undone."
+                          onConfirm={async () => {
+                            try {
+                              await deleteMemberCascade(m.id);
+                              toast.success("Member deleted");
+                            } catch (e) {
+                              toast.error(
+                                e instanceof Error ? e.message : "Failed to delete member",
+                              );
+                            }
+                          }}
+                        />
                       </div>
                     </TableCell>
                   </TableRow>
@@ -150,7 +219,10 @@ function MembersPage() {
               })}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell
+                    colSpan={6}
+                    className="py-10 text-center text-sm text-muted-foreground"
+                  >
                     No members yet. Add your first member to get started.
                   </TableCell>
                 </TableRow>
@@ -177,11 +249,13 @@ function MemberDialog({
   member,
   households,
   cells,
+  classes,
   onClose,
 }: {
   member: Member | null;
   households: { id: string; name: string }[];
   cells: { id: string; name: string }[];
+  classes: { id: string; name: string }[];
   onClose: () => void;
 }) {
   const [firstName, setFirstName] = useState(member?.firstName ?? "");
@@ -192,9 +266,11 @@ function MemberDialog({
   const [dob, setDob] = useState(member?.dob ?? "");
   const [address, setAddress] = useState(member?.address ?? "");
   const [status, setStatus] = useState<MemberStatus>(member?.status ?? "visitor");
+  const [category, setCategory] = useState<MemberCategory | undefined>(member?.category);
   const [joinDate, setJoinDate] = useState(member?.joinDate ?? "");
   const [householdId, setHouseholdId] = useState(member?.householdId ?? "");
   const [cellId, setCellId] = useState(member?.cellId ?? "");
+  const [classId, setClassId] = useState(member?.classId ?? "");
   const [notes, setNotes] = useState(member?.notes ?? "");
 
   async function save() {
@@ -212,15 +288,21 @@ function MemberDialog({
       dob: dob || undefined,
       address: address || undefined,
       status,
+      category,
       joinDate: joinDate || undefined,
       householdId: householdId || undefined,
       cellId: cellId || undefined,
+      classId: classId || undefined,
       notes: notes || undefined,
       createdAt: member?.createdAt ?? Date.now(),
     };
-    await db.members.put(data);
-    toast.success(member ? "Member updated" : "Member added");
-    onClose();
+    try {
+      await db.members.put(data);
+      toast.success(member ? "Member updated" : "Member added");
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save member");
+    }
   }
 
   return (
@@ -229,13 +311,26 @@ function MemberDialog({
         <DialogTitle className="font-display">{member ? "Edit member" : "New member"}</DialogTitle>
       </DialogHeader>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="First name"><Input value={firstName} onChange={(e) => setFirstName(e.target.value)} /></Field>
-        <Field label="Last name"><Input value={lastName} onChange={(e) => setLastName(e.target.value)} /></Field>
-        <Field label="Phone"><Input value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
-        <Field label="Email"><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+        <Field label="First name">
+          <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+        </Field>
+        <Field label="Last name">
+          <Input value={lastName} onChange={(e) => setLastName(e.target.value)} />
+        </Field>
+        <Field label="Phone">
+          <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+        </Field>
+        <Field label="Email">
+          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        </Field>
         <Field label="Gender">
-          <Select value={gender ?? ""} onValueChange={(v) => setGender((v || undefined) as Member["gender"])}>
-            <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+          <Select
+            value={gender ?? ""}
+            onValueChange={(v) => setGender((v || undefined) as Member["gender"])}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="—" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="male">Male</SelectItem>
               <SelectItem value="female">Female</SelectItem>
@@ -243,43 +338,110 @@ function MemberDialog({
             </SelectContent>
           </Select>
         </Field>
-        <Field label="Date of birth"><Input type="date" value={dob} onChange={(e) => setDob(e.target.value)} /></Field>
+        <Field label="Date of birth">
+          <Input type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
+        </Field>
         <Field label="Status">
           <Select value={status} onValueChange={(v) => setStatus(v as MemberStatus)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
-              {STATUSES.map((s) => (<SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>))}
+              {STATUSES.map((s) => (
+                <SelectItem key={s} value={s} className="capitalize">
+                  {s}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </Field>
-        <Field label="Join date"><Input type="date" value={joinDate} onChange={(e) => setJoinDate(e.target.value)} /></Field>
-        <Field label="Household">
-          <Select value={householdId || "none"} onValueChange={(v) => setHouseholdId(v === "none" ? "" : v)}>
-            <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+        <Field label="Category">
+          <Select
+            value={category ?? "none"}
+            onValueChange={(v) => setCategory(v === "none" ? undefined : (v as MemberCategory))}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="—" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">None</SelectItem>
-              {households.map((h) => (<SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>))}
+              {CATEGORIES.map((c) => (
+                <SelectItem key={c.value} value={c.value}>
+                  {c.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="Join date">
+          <Input type="date" value={joinDate} onChange={(e) => setJoinDate(e.target.value)} />
+        </Field>
+        <Field label="Household">
+          <Select
+            value={householdId || "none"}
+            onValueChange={(v) => setHouseholdId(v === "none" ? "" : v)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="—" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None</SelectItem>
+              {households.map((h) => (
+                <SelectItem key={h.id} value={h.id}>
+                  {h.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </Field>
         <Field label="Cell fellowship">
           <Select value={cellId || "none"} onValueChange={(v) => setCellId(v === "none" ? "" : v)}>
-            <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue placeholder="—" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">None</SelectItem>
-              {cells.map((c) => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
+              {cells.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="Discipleship class">
+          <Select
+            value={classId || "none"}
+            onValueChange={(v) => setClassId(v === "none" ? "" : v)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="—" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None</SelectItem>
+              {classes.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </Field>
         <div className="sm:col-span-2">
-          <Field label="Address"><Input value={address} onChange={(e) => setAddress(e.target.value)} /></Field>
+          <Field label="Address">
+            <Input value={address} onChange={(e) => setAddress(e.target.value)} />
+          </Field>
         </div>
         <div className="sm:col-span-2">
-          <Field label="Notes"><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} /></Field>
+          <Field label="Notes">
+            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
+          </Field>
         </div>
       </div>
       <DialogFooter>
-        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button variant="ghost" onClick={onClose}>
+          Cancel
+        </Button>
         <Button onClick={save}>{member ? "Save changes" : "Create member"}</Button>
       </DialogFooter>
     </DialogContent>

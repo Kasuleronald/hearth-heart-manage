@@ -1,19 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { useSession } from "@/lib/auth";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Users2, CalendarDays, TrendingUp } from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  ResponsiveContainer,
-  Tooltip,
-  CartesianGrid,
-} from "recharts";
+import { Users, Users2, CalendarDays, TrendingUp, Cake } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
 import { format, subDays } from "date-fns";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -59,6 +51,22 @@ function Dashboard() {
   });
   void presentIds;
 
+  // birthdays in the next 30 days, ignoring year, soonest first
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const upcomingBirthdays = members
+    .filter((m) => m.dob)
+    .map((m) => {
+      const [, mm, dd] = m.dob!.split("-").map(Number);
+      let next = new Date(today.getFullYear(), mm - 1, dd);
+      if (next < today) next = new Date(today.getFullYear() + 1, mm - 1, dd);
+      const daysUntil = Math.round((next.getTime() - today.getTime()) / 86_400_000);
+      return { member: m, next, daysUntil };
+    })
+    .filter((b) => b.daysUntil <= 30)
+    .sort((a, b) => a.daysUntil - b.daysUntil)
+    .slice(0, 8);
+
   return (
     <div>
       <PageHeader
@@ -66,10 +74,30 @@ function Dashboard() {
         description="Your church at a glance."
       />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={<Users className="h-5 w-5" />} label="Active members" value={activeMembers} sub={`${members.length} total`} />
-        <StatCard icon={<Users2 className="h-5 w-5" />} label="Cell fellowships" value={cells.length} sub="active groups" />
-        <StatCard icon={<TrendingUp className="h-5 w-5" />} label="Cell attendance" value={`${avgAtt}%`} sub="last 4 meetings" />
-        <StatCard icon={<CalendarDays className="h-5 w-5" />} label="Upcoming events" value={upcoming} sub={`${newMembers} new members / 30d`} />
+        <StatCard
+          icon={<Users className="h-5 w-5" />}
+          label="Active members"
+          value={activeMembers}
+          sub={`${members.length} total`}
+        />
+        <StatCard
+          icon={<Users2 className="h-5 w-5" />}
+          label="Cell fellowships"
+          value={cells.length}
+          sub="active groups"
+        />
+        <StatCard
+          icon={<TrendingUp className="h-5 w-5" />}
+          label="Cell attendance"
+          value={`${avgAtt}%`}
+          sub="last 4 meetings"
+        />
+        <StatCard
+          icon={<CalendarDays className="h-5 w-5" />}
+          label="Upcoming events"
+          value={upcoming}
+          sub={`${newMembers} new members / 30d`}
+        />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -86,7 +114,14 @@ function Dashboard() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="name" fontSize={11} interval={0} angle={-20} height={60} textAnchor="end" />
+                  <XAxis
+                    dataKey="name"
+                    fontSize={11}
+                    interval={0}
+                    angle={-20}
+                    height={60}
+                    textAnchor="end"
+                  />
                   <YAxis allowDecimals={false} fontSize={11} />
                   <Tooltip
                     contentStyle={{
@@ -107,21 +142,60 @@ function Dashboard() {
             <CardTitle className="font-display">Upcoming events</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {events.filter((e) => e.date >= format(new Date(), "yyyy-MM-dd")).slice(0, 5).map((e) => (
-              <div key={e.id} className="flex items-start justify-between gap-3 border-l-2 border-primary/60 pl-3">
-                <div>
-                  <div className="font-medium">{e.title}</div>
-                  <div className="text-xs text-muted-foreground capitalize">
-                    {e.type.replace("_", " ")}
+            {events
+              .filter((e) => e.date >= format(new Date(), "yyyy-MM-dd"))
+              .slice(0, 5)
+              .map((e) => (
+                <div
+                  key={e.id}
+                  className="flex items-start justify-between gap-3 border-l-2 border-primary/60 pl-3"
+                >
+                  <div>
+                    <div className="font-medium">{e.title}</div>
+                    <div className="text-xs text-muted-foreground capitalize">
+                      {e.type.replace("_", " ")}
+                    </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground whitespace-nowrap">
+                    {format(new Date(e.date), "MMM d")}
                   </div>
                 </div>
+              ))}
+            {events.filter((e) => e.date >= format(new Date(), "yyyy-MM-dd")).length === 0 && (
+              <p className="text-sm text-muted-foreground">No upcoming events.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-display flex items-center gap-2">
+              <Cake className="h-4 w-4" /> Upcoming birthdays
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {upcomingBirthdays.map(({ member, next, daysUntil }) => (
+              <div
+                key={member.id}
+                className="flex items-start justify-between gap-3 border-l-2 border-primary/60 pl-3"
+              >
+                <Link
+                  to="/members/$id"
+                  params={{ id: member.id }}
+                  className="min-w-0 hover:underline"
+                >
+                  <div className="truncate font-medium">
+                    {member.firstName} {member.lastName}
+                  </div>
+                  <div className="text-xs text-muted-foreground">{format(next, "MMM d")}</div>
+                </Link>
                 <div className="text-xs text-muted-foreground whitespace-nowrap">
-                  {format(new Date(e.date), "MMM d")}
+                  {daysUntil === 0 ? "Today" : daysUntil === 1 ? "Tomorrow" : `${daysUntil}d`}
                 </div>
               </div>
             ))}
-            {events.filter((e) => e.date >= format(new Date(), "yyyy-MM-dd")).length === 0 && (
-              <p className="text-sm text-muted-foreground">No upcoming events.</p>
+            {upcomingBirthdays.length === 0 && (
+              <p className="text-sm text-muted-foreground">No birthdays in the next 30 days.</p>
             )}
           </CardContent>
         </Card>

@@ -24,6 +24,13 @@ dist-ssr
 .vscode/*
 !.vscode/extensions.json
 .idea
+
+# Local Claude Code session state (not project config)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
+# This project uses bun (see bun.lock); package-lock.json is an npm fallback artifact
+package-lock.json
 .DS_Store
 *.suo
 *.ntvs*

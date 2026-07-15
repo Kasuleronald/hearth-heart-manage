@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { createUser, getSession, hasAnyUser, login } from "@/lib/auth";
+import { createUser, getLoginLockoutMs, getSession, hasAnyUser, login } from "@/lib/auth";
 import { toast } from "sonner";
+
+const MIN_PASSWORD_LENGTH = 8;
 
 export const Route = createFileRoute("/login")({
   ssr: false,
@@ -18,8 +20,10 @@ function LoginPage() {
   const [firstRun, setFirstRun] = useState<boolean | null>(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [lockoutMs, setLockoutMs] = useState(0);
 
   useEffect(() => {
     if (getSession()) {
@@ -29,12 +33,25 @@ function LoginPage() {
     hasAnyUser().then((exists) => setFirstRun(!exists));
   }, [navigate]);
 
+  // Live-update the lockout countdown so the button re-enables on its own.
+  useEffect(() => {
+    if (lockoutMs <= 0) return;
+    const t = window.setInterval(() => {
+      const remaining = getLoginLockoutMs(username);
+      setLockoutMs(remaining);
+    }, 1000);
+    return () => window.clearInterval(t);
+  }, [lockoutMs, username]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     try {
       if (firstRun) {
-        if (password.length < 6) throw new Error("Password must be at least 6 characters");
+        if (password.length < MIN_PASSWORD_LENGTH) {
+          throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+        }
+        if (password !== confirmPassword) throw new Error("Passwords don't match");
         await createUser({ username, password, fullName, role: "admin" });
         await login(username, password);
         toast.success("Welcome to My Church");
@@ -44,6 +61,7 @@ function LoginPage() {
       navigate({ to: "/dashboard", replace: true });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Something went wrong");
+      setLockoutMs(getLoginLockoutMs(username));
     } finally {
       setBusy(false);
     }
@@ -71,8 +89,8 @@ function LoginPage() {
             Shepherd your flock with clarity.
           </h2>
           <p className="mt-4 max-w-md text-sidebar-foreground/70">
-            Members, households, cell fellowships, events and attendance — all in one
-            reverent, local-first workspace.
+            Members, households, cell fellowships, events and attendance — all in one reverent,
+            local-first workspace.
           </p>
         </div>
         <p className="text-xs text-sidebar-foreground/50">
@@ -129,10 +147,30 @@ function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete={firstRun ? "new-password" : "current-password"}
+                  minLength={firstRun ? MIN_PASSWORD_LENGTH : undefined}
                   required
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={busy}>
+              {firstRun && (
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword">Confirm password</Label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    autoComplete="new-password"
+                    minLength={MIN_PASSWORD_LENGTH}
+                    required
+                  />
+                </div>
+              )}
+              {lockoutMs > 0 && (
+                <p className="text-sm text-destructive">
+                  Too many attempts. Try again in {Math.ceil(lockoutMs / 1000)}s.
+                </p>
+              )}
+              <Button type="submit" className="w-full" disabled={busy || lockoutMs > 0}>
                 {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {firstRun ? "Create account & sign in" : "Sign in"}
               </Button>

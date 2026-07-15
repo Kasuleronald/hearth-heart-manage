@@ -8,7 +8,12 @@ import {
   UserCog,
   Church,
   LogOut,
+  Settings,
+  GraduationCap,
+  HandCoins,
+  BarChart3,
 } from "lucide-react";
+import { ChangePasswordDialog } from "@/components/change-password-dialog";
 import {
   Sidebar,
   SidebarContent,
@@ -25,12 +30,41 @@ import { useSession } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 
 const nav = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, roles: ["admin", "pastor", "cell_leader"] as const },
-  { title: "Members", url: "/members", icon: Users, roles: ["admin", "pastor", "cell_leader"] as const },
+  {
+    title: "Dashboard",
+    url: "/dashboard",
+    icon: LayoutDashboard,
+    roles: ["admin", "pastor", "cell_leader"] as const,
+  },
+  {
+    title: "Members",
+    url: "/members",
+    icon: Users,
+    roles: ["admin", "pastor", "cell_leader"] as const,
+  },
   { title: "Households", url: "/households", icon: Home, roles: ["admin", "pastor"] as const },
-  { title: "Cell Fellowships", url: "/cells", icon: Users2, roles: ["admin", "pastor", "cell_leader"] as const },
-  { title: "Events", url: "/events", icon: CalendarDays, roles: ["admin", "pastor", "cell_leader"] as const },
+  {
+    title: "Cell Fellowships",
+    url: "/cells",
+    icon: Users2,
+    roles: ["admin", "pastor", "cell_leader"] as const,
+  },
+  {
+    title: "Discipleship Classes",
+    url: "/classes",
+    icon: GraduationCap,
+    roles: ["admin", "pastor", "cell_leader"] as const,
+  },
+  {
+    title: "Events",
+    url: "/events",
+    icon: CalendarDays,
+    roles: ["admin", "pastor", "cell_leader"] as const,
+  },
+  { title: "Givings", url: "/givings", icon: HandCoins, roles: ["admin", "pastor"] as const },
+  { title: "Reports", url: "/reports", icon: BarChart3, roles: ["admin", "pastor"] as const },
   { title: "Users", url: "/users", icon: UserCog, roles: ["admin"] as const },
+  { title: "Settings", url: "/settings", icon: Settings, roles: ["admin", "pastor"] as const },
 ];
 
 export function AppSidebar() {
@@ -82,15 +116,19 @@ export function AppSidebar() {
               {session.role.replace("_", " ")}
             </div>
           </div>
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={signOut}
-            title="Sign out"
-            className="text-sidebar-foreground hover:bg-sidebar-accent"
-          >
-            <LogOut className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <ChangePasswordDialog userId={session.userId} />
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={signOut}
+              title="Sign out"
+              aria-label="Sign out"
+              className="text-sidebar-foreground hover:bg-sidebar-accent"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </SidebarFooter>
     </Sidebar>
