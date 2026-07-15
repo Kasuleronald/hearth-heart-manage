@@ -24,9 +24,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "npm"
       - name: Install dependencies
-        run: npm ci
+        # `npm ci` requires a committed package-lock.json; this project's
+        # canonical lockfile is bun.lock (gitignores package-lock.json).
+        run: npm install --no-audit --no-fund
       - name: Build
         run: npm run build:pages
       - name: Upload artifact
