@@ -1,6 +1,6 @@
 import Dexie, { type EntityTable } from "dexie";
 
-export type Role = "admin" | "pastor" | "cell_leader";
+export type Role = "admin" | "pastor" | "cell_leader" | "leader" | "treasurer";
 
 export interface User {
   id: string;
@@ -127,6 +127,17 @@ export interface Giving {
   createdAt: number;
 }
 
+// A lightweight leadership directory for non-cell ministries (Ushering, Sound,
+// Worship, etc.) — unlike Cells/Classes this has no roster or meeting tracking,
+// just a name and an assigned leader.
+export interface Department {
+  id: string;
+  name: string;
+  description?: string;
+  leaderId?: string; // User.id
+  createdAt: number;
+}
+
 export interface Settings {
   key: string;
   value: string;
@@ -145,6 +156,7 @@ export class MyChurchDB extends Dexie {
   classSessions!: EntityTable<ClassSession, "id">;
   classAttendance!: EntityTable<ClassAttendance, "id">;
   givings!: EntityTable<Giving, "id">;
+  departments!: EntityTable<Department, "id">;
   settings!: EntityTable<Settings, "key">;
 
   constructor() {
@@ -166,6 +178,9 @@ export class MyChurchDB extends Dexie {
       classSessions: "id, classId, date",
       classAttendance: "id, sessionId, memberId, [sessionId+memberId]",
       givings: "id, memberId, category, date",
+    });
+    this.version(3).stores({
+      departments: "id, name, leaderId",
     });
   }
 }
@@ -238,6 +253,58 @@ export async function deleteEventCascade(eventId: string) {
   });
 }
 
+// Clears this user as the leader of whichever department (if any) they head —
+// used when a user is deleted or their role changes away from "leader".
+export async function unassignDepartmentLeader(userId: string) {
+  const led = await db.departments.where("leaderId").equals(userId).toArray();
+  await Promise.all(led.map((d) => db.departments.update(d.id, { leaderId: undefined })));
+}
+
+export async function deleteUserCascade(userId: string) {
+  await db.transaction("rw", [db.users, db.departments], async () => {
+    await unassignDepartmentLeader(userId);
+    await db.users.delete(userId);
+  });
+}
+
+// ---- Department seeding ----
+// A starter set of ministries common to most churches, so the admin doesn't
+// have to type them all in by hand on day one. Only ever run once, guarded by
+// the departments table being empty (see login.tsx first-run setup).
+const DEFAULT_DEPARTMENTS = [
+  "Protocol",
+  "Ushering",
+  "Hospitality",
+  "Missions",
+  "Service",
+  "Sound",
+  "Worship",
+  "Media",
+  "Marriage",
+  "Gender",
+  "Youth",
+  "Campus",
+  "Sunday School",
+  "Welfare",
+  "Prayer & Intercession",
+  "Children's Ministry",
+  "Choir",
+  "Security",
+  "Technical / ICT",
+  "Evangelism & Outreach",
+  "Counseling & Pastoral Care",
+  "Administration",
+  "Transport",
+];
+
+export async function seedDefaultDepartments() {
+  if ((await db.departments.count()) > 0) return;
+  const now = Date.now();
+  await db.departments.bulkAdd(
+    DEFAULT_DEPARTMENTS.map((name) => ({ id: uid(), name, createdAt: now })),
+  );
+}
+
 // ---- Backup & restore ----
 // Every table except `users` (credentials shouldn't leave the device via a backup file).
 const BACKUP_TABLES = [
@@ -252,6 +319,7 @@ const BACKUP_TABLES = [
   "classSessions",
   "classAttendance",
   "givings",
+  "departments",
 ] as const;
 
 export interface DatabaseBackup {

@@ -12,6 +12,7 @@ import {
   GraduationCap,
   HandCoins,
   BarChart3,
+  Building2,
 } from "lucide-react";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
 import {
@@ -34,15 +35,20 @@ const nav = [
     title: "Dashboard",
     url: "/dashboard",
     icon: LayoutDashboard,
-    roles: ["admin", "pastor", "cell_leader"] as const,
+    roles: ["admin", "pastor", "cell_leader", "leader", "treasurer"] as const,
   },
   {
     title: "Members",
     url: "/members",
     icon: Users,
-    roles: ["admin", "pastor", "cell_leader"] as const,
+    roles: ["admin", "pastor", "cell_leader", "leader", "treasurer"] as const,
   },
-  { title: "Households", url: "/households", icon: Home, roles: ["admin", "pastor"] as const },
+  {
+    title: "Households",
+    url: "/households",
+    icon: Home,
+    roles: ["admin", "pastor", "treasurer"] as const,
+  },
   {
     title: "Cell Fellowships",
     url: "/cells",
@@ -56,13 +62,29 @@ const nav = [
     roles: ["admin", "pastor", "cell_leader"] as const,
   },
   {
+    title: "Departments",
+    url: "/departments",
+    icon: Building2,
+    roles: ["admin", "pastor"] as const,
+  },
+  {
     title: "Events",
     url: "/events",
     icon: CalendarDays,
     roles: ["admin", "pastor", "cell_leader"] as const,
   },
-  { title: "Givings", url: "/givings", icon: HandCoins, roles: ["admin", "pastor"] as const },
-  { title: "Reports", url: "/reports", icon: BarChart3, roles: ["admin", "pastor"] as const },
+  {
+    title: "Givings",
+    url: "/givings",
+    icon: HandCoins,
+    roles: ["admin", "pastor", "treasurer"] as const,
+  },
+  {
+    title: "Reports",
+    url: "/reports",
+    icon: BarChart3,
+    roles: ["admin", "pastor", "treasurer"] as const,
+  },
   { title: "Users", url: "/users", icon: UserCog, roles: ["admin"] as const },
   { title: "Settings", url: "/settings", icon: Settings, roles: ["admin", "pastor"] as const },
 ];

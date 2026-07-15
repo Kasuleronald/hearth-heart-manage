@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { seedDefaultDepartments } from "@/lib/db";
 import { createUser, getLoginLockoutMs, getSession, hasAnyUser, login } from "@/lib/auth";
 import { toast } from "sonner";
 
@@ -53,6 +54,7 @@ function LoginPage() {
         }
         if (password !== confirmPassword) throw new Error("Passwords don't match");
         await createUser({ username, password, fullName, role: "admin" });
+        await seedDefaultDepartments();
         await login(username, password);
         toast.success("Welcome to My Church");
       } else {

@@ -2,7 +2,15 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useState } from "react";
 import { Plus, Pencil } from "lucide-react";
-import { db, type Role, type User } from "@/lib/db";
+import {
+  db,
+  deleteUserCascade,
+  unassignDepartmentLeader,
+  uid,
+  type Department,
+  type Role,
+  type User,
+} from "@/lib/db";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +38,34 @@ import { toast } from "sonner";
 
 const MIN_PASSWORD_LENGTH = 8;
 
+const ROLES: { value: Role; label: string }[] = [
+  { value: "admin", label: "Admin" },
+  { value: "pastor", label: "Pastor" },
+  { value: "cell_leader", label: "Cell Leader" },
+  { value: "leader", label: "Department Leader" },
+  { value: "treasurer", label: "Treasurer" },
+];
+const ROLE_LABEL = Object.fromEntries(ROLES.map((r) => [r.value, r.label])) as Record<Role, string>;
+
+// Assigns (or clears) this user's department leadership based on their role and
+// the picked department. "Other" creates a brand-new department on the fly.
+async function resolveDepartmentAssignment(
+  userId: string,
+  role: Role,
+  departmentChoice: string, // department id, "other", or "none"
+  otherDeptName: string,
+) {
+  await unassignDepartmentLeader(userId);
+  if (role !== "leader" || departmentChoice === "none") return;
+  if (departmentChoice === "other") {
+    const name = otherDeptName.trim();
+    if (!name) throw new Error("Enter a department name");
+    await db.departments.add({ id: uid(), name, leaderId: userId, createdAt: Date.now() });
+    return;
+  }
+  await db.departments.update(departmentChoice, { leaderId: userId });
+}
+
 export const Route = createFileRoute("/_authenticated/users")({
   component: UsersPage,
 });
@@ -38,6 +74,7 @@ function UsersPage() {
   const navigate = useNavigate();
   const { session } = useSession();
   const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
+  const departments = useLiveQuery(() => db.departments.orderBy("name").toArray(), []) ?? [];
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
 
@@ -51,7 +88,7 @@ function UsersPage() {
     <div>
       <PageHeader
         title="Users"
-        description="Admins, pastors, and cell leaders who can sign in."
+        description="Admins, pastors, cell leaders, department leaders, and treasurers who can sign in."
         actions={
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
@@ -59,66 +96,131 @@ function UsersPage() {
                 <Plus className="mr-2 h-4 w-4" /> New user
               </Button>
             </DialogTrigger>
-            <NewUserDialog onClose={() => setOpen(false)} />
+            <NewUserDialog departments={departments} onClose={() => setOpen(false)} />
           </Dialog>
         }
       />
       <Card>
         <CardContent className="p-0">
           <ul className="divide-y">
-            {users.map((u) => (
-              <li key={u.id} className="flex items-center justify-between px-5 py-4">
-                <div>
-                  <div className="font-medium">{u.fullName}</div>
-                  <div className="text-xs text-muted-foreground">@{u.username}</div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Badge variant="secondary" className="capitalize">
-                    {u.role.replace("_", " ")}
-                  </Badge>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    aria-label={`Edit ${u.fullName}`}
-                    onClick={() => setEditing(u)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  {u.id !== session.userId && (
-                    <DeleteButton
-                      label={`Delete ${u.fullName}`}
-                      title={`Delete user ${u.fullName}?`}
-                      description="They will no longer be able to sign in. This can't be undone."
-                      onConfirm={async () => {
-                        try {
-                          await db.users.delete(u.id);
-                          toast.success("User deleted");
-                        } catch (e) {
-                          toast.error(e instanceof Error ? e.message : "Failed to delete user");
-                        }
-                      }}
-                    />
-                  )}
-                </div>
-              </li>
-            ))}
+            {users.map((u) => {
+              const led = departments.find((d) => d.leaderId === u.id);
+              return (
+                <li key={u.id} className="flex items-center justify-between px-5 py-4">
+                  <div>
+                    <div className="font-medium">{u.fullName}</div>
+                    <div className="text-xs text-muted-foreground">@{u.username}</div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {led && (
+                      <Badge variant="outline" className="text-xs">
+                        {led.name}
+                      </Badge>
+                    )}
+                    <Badge variant="secondary" className="capitalize">
+                      {ROLE_LABEL[u.role] ?? u.role.replace("_", " ")}
+                    </Badge>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`Edit ${u.fullName}`}
+                      onClick={() => setEditing(u)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    {u.id !== session.userId && (
+                      <DeleteButton
+                        label={`Delete ${u.fullName}`}
+                        title={`Delete user ${u.fullName}?`}
+                        description="They will no longer be able to sign in, and any department they lead will show as unassigned. This can't be undone."
+                        onConfirm={async () => {
+                          try {
+                            await deleteUserCascade(u.id);
+                            toast.success("User deleted");
+                          } catch (e) {
+                            toast.error(e instanceof Error ? e.message : "Failed to delete user");
+                          }
+                        }}
+                      />
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </CardContent>
       </Card>
 
       <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
-        {editing && <EditUserDialog user={editing} onClose={() => setEditing(null)} />}
+        {editing && (
+          <EditUserDialog
+            user={editing}
+            departments={departments}
+            onClose={() => setEditing(null)}
+          />
+        )}
       </Dialog>
     </div>
   );
 }
 
-function NewUserDialog({ onClose }: { onClose: () => void }) {
+function DepartmentField({
+  departments,
+  choice,
+  onChoiceChange,
+  otherName,
+  onOtherNameChange,
+}: {
+  departments: Department[];
+  choice: string;
+  onChoiceChange: (v: string) => void;
+  otherName: string;
+  onOtherNameChange: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label>Department</Label>
+      <Select value={choice} onValueChange={onChoiceChange}>
+        <SelectTrigger>
+          <SelectValue placeholder="Select a department" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none">Unassigned</SelectItem>
+          {departments.map((d) => (
+            <SelectItem key={d.id} value={d.id}>
+              {d.name}
+              {d.leaderId ? " (has a leader)" : ""}
+            </SelectItem>
+          ))}
+          <SelectItem value="other">Other…</SelectItem>
+        </SelectContent>
+      </Select>
+      {choice === "other" && (
+        <Input
+          className="mt-1.5"
+          value={otherName}
+          onChange={(e) => onOtherNameChange(e.target.value)}
+          placeholder="Department name"
+        />
+      )}
+    </div>
+  );
+}
+
+function NewUserDialog({
+  departments,
+  onClose,
+}: {
+  departments: Department[];
+  onClose: () => void;
+}) {
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [role, setRole] = useState<Role>("cell_leader");
+  const [departmentChoice, setDepartmentChoice] = useState("none");
+  const [otherDeptName, setOtherDeptName] = useState("");
 
   async function save() {
     try {
@@ -126,7 +228,8 @@ function NewUserDialog({ onClose }: { onClose: () => void }) {
         throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
       }
       if (password !== confirmPassword) throw new Error("Passwords don't match");
-      await createUser({ fullName, username, password, role });
+      const user = await createUser({ fullName, username, password, role });
+      await resolveDepartmentAssignment(user.id, role, departmentChoice, otherDeptName);
       toast.success("User created");
       onClose();
     } catch (e) {
@@ -156,13 +259,24 @@ function NewUserDialog({ onClose }: { onClose: () => void }) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="pastor">Pastor</SelectItem>
-                <SelectItem value="cell_leader">Cell Leader</SelectItem>
+                {ROLES.map((r) => (
+                  <SelectItem key={r.value} value={r.value}>
+                    {r.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
         </div>
+        {role === "leader" && (
+          <DepartmentField
+            departments={departments}
+            choice={departmentChoice}
+            onChoiceChange={setDepartmentChoice}
+            otherName={otherDeptName}
+            onOtherNameChange={setOtherDeptName}
+          />
+        )}
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label>Password</Label>
@@ -194,9 +308,20 @@ function NewUserDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function EditUserDialog({ user, onClose }: { user: User; onClose: () => void }) {
+function EditUserDialog({
+  user,
+  departments,
+  onClose,
+}: {
+  user: User;
+  departments: Department[];
+  onClose: () => void;
+}) {
   const [fullName, setFullName] = useState(user.fullName);
   const [role, setRole] = useState<Role>(user.role);
+  const currentDept = departments.find((d) => d.leaderId === user.id);
+  const [departmentChoice, setDepartmentChoice] = useState(currentDept?.id ?? "none");
+  const [otherDeptName, setOtherDeptName] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
@@ -211,6 +336,7 @@ function EditUserDialog({ user, onClose }: { user: User; onClose: () => void }) 
         await resetPassword(user.id, newPassword);
       }
       await db.users.update(user.id, { fullName: fullName.trim(), role });
+      await resolveDepartmentAssignment(user.id, role, departmentChoice, otherDeptName);
       toast.success("User updated");
       onClose();
     } catch (e) {
@@ -235,12 +361,23 @@ function EditUserDialog({ user, onClose }: { user: User; onClose: () => void }) 
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="admin">Admin</SelectItem>
-              <SelectItem value="pastor">Pastor</SelectItem>
-              <SelectItem value="cell_leader">Cell Leader</SelectItem>
+              {ROLES.map((r) => (
+                <SelectItem key={r.value} value={r.value}>
+                  {r.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
+        {role === "leader" && (
+          <DepartmentField
+            departments={departments}
+            choice={departmentChoice}
+            onChoiceChange={setDepartmentChoice}
+            otherName={otherDeptName}
+            onOtherNameChange={setOtherDeptName}
+          />
+        )}
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label>New password</Label>

@@ -46,7 +46,7 @@ function ClassesPage() {
   const [editing, setEditing] = useState<DiscipleshipClass | null>(null);
   const [open, setOpen] = useState(false);
 
-  const canManage = session ? session.role !== "cell_leader" : false;
+  const canManage = session ? session.role === "admin" || session.role === "pastor" : false;
   const visibleClasses =
     session?.role === "cell_leader"
       ? classes.filter((c) => c.facilitatorId === session.userId)

@@ -46,7 +46,7 @@ function CellsPage() {
   const [editing, setEditing] = useState<Cell | null>(null);
   const [open, setOpen] = useState(false);
 
-  const canManage = session ? session.role !== "cell_leader" : false;
+  const canManage = session ? session.role === "admin" || session.role === "pastor" : false;
   const visibleCells =
     session?.role === "cell_leader" ? cells.filter((c) => c.leaderId === session.userId) : cells;
 

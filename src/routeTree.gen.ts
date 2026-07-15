@@ -19,6 +19,7 @@ import { Route as AuthenticatedMembersRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedHouseholdsRouteImport } from './routes/_authenticated.households'
 import { Route as AuthenticatedGivingsRouteImport } from './routes/_authenticated.givings'
 import { Route as AuthenticatedEventsRouteImport } from './routes/_authenticated.events'
+import { Route as AuthenticatedDepartmentsRouteImport } from './routes/_authenticated.departments'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated.dashboard'
 import { Route as AuthenticatedClassesRouteImport } from './routes/_authenticated.classes'
 import { Route as AuthenticatedCellsRouteImport } from './routes/_authenticated.cells'
@@ -76,6 +77,12 @@ const AuthenticatedEventsRoute = AuthenticatedEventsRouteImport.update({
   path: '/events',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedDepartmentsRoute =
+  AuthenticatedDepartmentsRouteImport.update({
+    id: '/departments',
+    path: '/departments',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -118,6 +125,7 @@ export interface FileRoutesByFullPath {
   '/cells': typeof AuthenticatedCellsRouteWithChildren
   '/classes': typeof AuthenticatedClassesRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/departments': typeof AuthenticatedDepartmentsRoute
   '/events': typeof AuthenticatedEventsRouteWithChildren
   '/givings': typeof AuthenticatedGivingsRoute
   '/households': typeof AuthenticatedHouseholdsRoute
@@ -136,6 +144,7 @@ export interface FileRoutesByTo {
   '/cells': typeof AuthenticatedCellsRouteWithChildren
   '/classes': typeof AuthenticatedClassesRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/departments': typeof AuthenticatedDepartmentsRoute
   '/events': typeof AuthenticatedEventsRouteWithChildren
   '/givings': typeof AuthenticatedGivingsRoute
   '/households': typeof AuthenticatedHouseholdsRoute
@@ -156,6 +165,7 @@ export interface FileRoutesById {
   '/_authenticated/cells': typeof AuthenticatedCellsRouteWithChildren
   '/_authenticated/classes': typeof AuthenticatedClassesRouteWithChildren
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/departments': typeof AuthenticatedDepartmentsRoute
   '/_authenticated/events': typeof AuthenticatedEventsRouteWithChildren
   '/_authenticated/givings': typeof AuthenticatedGivingsRoute
   '/_authenticated/households': typeof AuthenticatedHouseholdsRoute
@@ -176,6 +186,7 @@ export interface FileRouteTypes {
     | '/cells'
     | '/classes'
     | '/dashboard'
+    | '/departments'
     | '/events'
     | '/givings'
     | '/households'
@@ -194,6 +205,7 @@ export interface FileRouteTypes {
     | '/cells'
     | '/classes'
     | '/dashboard'
+    | '/departments'
     | '/events'
     | '/givings'
     | '/households'
@@ -213,6 +225,7 @@ export interface FileRouteTypes {
     | '/_authenticated/cells'
     | '/_authenticated/classes'
     | '/_authenticated/dashboard'
+    | '/_authenticated/departments'
     | '/_authenticated/events'
     | '/_authenticated/givings'
     | '/_authenticated/households'
@@ -302,6 +315,13 @@ declare module '@tanstack/react-router' {
       path: '/events'
       fullPath: '/events'
       preLoaderRoute: typeof AuthenticatedEventsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/departments': {
+      id: '/_authenticated/departments'
+      path: '/departments'
+      fullPath: '/departments'
+      preLoaderRoute: typeof AuthenticatedDepartmentsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/dashboard': {
@@ -404,6 +424,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedCellsRoute: typeof AuthenticatedCellsRouteWithChildren
   AuthenticatedClassesRoute: typeof AuthenticatedClassesRouteWithChildren
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedDepartmentsRoute: typeof AuthenticatedDepartmentsRoute
   AuthenticatedEventsRoute: typeof AuthenticatedEventsRouteWithChildren
   AuthenticatedGivingsRoute: typeof AuthenticatedGivingsRoute
   AuthenticatedHouseholdsRoute: typeof AuthenticatedHouseholdsRoute
@@ -417,6 +438,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedCellsRoute: AuthenticatedCellsRouteWithChildren,
   AuthenticatedClassesRoute: AuthenticatedClassesRouteWithChildren,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedDepartmentsRoute: AuthenticatedDepartmentsRoute,
   AuthenticatedEventsRoute: AuthenticatedEventsRouteWithChildren,
   AuthenticatedGivingsRoute: AuthenticatedGivingsRoute,
   AuthenticatedHouseholdsRoute: AuthenticatedHouseholdsRoute,

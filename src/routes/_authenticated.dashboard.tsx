@@ -70,7 +70,7 @@ function Dashboard() {
   return (
     <div>
       <PageHeader
-        title={`Peace, ${session?.fullName.split(" ")[0] ?? ""}.`}
+        title={`Peace to you, ${session?.fullName.split(" ")[0] ?? ""}.`}
         description="Your church at a glance."
       />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">

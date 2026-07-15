@@ -275,5 +275,8 @@ export function canEditClass(role: Role, facilitatorId: string | undefined, user
   return role === "cell_leader" && facilitatorId === userId;
 }
 export function canAccessGivings(role: Role) {
+  return role === "admin" || role === "pastor" || role === "treasurer";
+}
+export function canAccessDepartments(role: Role) {
   return role === "admin" || role === "pastor";
 }
