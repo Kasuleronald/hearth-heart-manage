@@ -12,10 +12,15 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated.users'
 import { Route as AuthenticatedMembersRouteImport } from './routes/_authenticated.members'
 import { Route as AuthenticatedHouseholdsRouteImport } from './routes/_authenticated.households'
+import { Route as AuthenticatedEventsRouteImport } from './routes/_authenticated.events'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated.dashboard'
+import { Route as AuthenticatedCellsRouteImport } from './routes/_authenticated.cells'
 import { Route as AuthenticatedMembersIdRouteImport } from './routes/_authenticated.members.$id'
+import { Route as AuthenticatedEventsIdRouteImport } from './routes/_authenticated.events.$id'
+import { Route as AuthenticatedCellsIdRouteImport } from './routes/_authenticated.cells.$id'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -31,6 +36,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedUsersRoute = AuthenticatedUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedMembersRoute = AuthenticatedMembersRouteImport.update({
   id: '/members',
   path: '/members',
@@ -41,9 +51,19 @@ const AuthenticatedHouseholdsRoute = AuthenticatedHouseholdsRouteImport.update({
   path: '/households',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedEventsRoute = AuthenticatedEventsRouteImport.update({
+  id: '/events',
+  path: '/events',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedCellsRoute = AuthenticatedCellsRouteImport.update({
+  id: '/cells',
+  path: '/cells',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedMembersIdRoute = AuthenticatedMembersIdRouteImport.update({
@@ -51,21 +71,41 @@ const AuthenticatedMembersIdRoute = AuthenticatedMembersIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => AuthenticatedMembersRoute,
 } as any)
+const AuthenticatedEventsIdRoute = AuthenticatedEventsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AuthenticatedEventsRoute,
+} as any)
+const AuthenticatedCellsIdRoute = AuthenticatedCellsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AuthenticatedCellsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/cells': typeof AuthenticatedCellsRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/events': typeof AuthenticatedEventsRouteWithChildren
   '/households': typeof AuthenticatedHouseholdsRoute
   '/members': typeof AuthenticatedMembersRouteWithChildren
+  '/users': typeof AuthenticatedUsersRoute
+  '/cells/$id': typeof AuthenticatedCellsIdRoute
+  '/events/$id': typeof AuthenticatedEventsIdRoute
   '/members/$id': typeof AuthenticatedMembersIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/cells': typeof AuthenticatedCellsRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/events': typeof AuthenticatedEventsRouteWithChildren
   '/households': typeof AuthenticatedHouseholdsRoute
   '/members': typeof AuthenticatedMembersRouteWithChildren
+  '/users': typeof AuthenticatedUsersRoute
+  '/cells/$id': typeof AuthenticatedCellsIdRoute
+  '/events/$id': typeof AuthenticatedEventsIdRoute
   '/members/$id': typeof AuthenticatedMembersIdRoute
 }
 export interface FileRoutesById {
@@ -73,9 +113,14 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
+  '/_authenticated/cells': typeof AuthenticatedCellsRouteWithChildren
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/events': typeof AuthenticatedEventsRouteWithChildren
   '/_authenticated/households': typeof AuthenticatedHouseholdsRoute
   '/_authenticated/members': typeof AuthenticatedMembersRouteWithChildren
+  '/_authenticated/users': typeof AuthenticatedUsersRoute
+  '/_authenticated/cells/$id': typeof AuthenticatedCellsIdRoute
+  '/_authenticated/events/$id': typeof AuthenticatedEventsIdRoute
   '/_authenticated/members/$id': typeof AuthenticatedMembersIdRoute
 }
 export interface FileRouteTypes {
@@ -83,26 +128,41 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/cells'
     | '/dashboard'
+    | '/events'
     | '/households'
     | '/members'
+    | '/users'
+    | '/cells/$id'
+    | '/events/$id'
     | '/members/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
+    | '/cells'
     | '/dashboard'
+    | '/events'
     | '/households'
     | '/members'
+    | '/users'
+    | '/cells/$id'
+    | '/events/$id'
     | '/members/$id'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/login'
+    | '/_authenticated/cells'
     | '/_authenticated/dashboard'
+    | '/_authenticated/events'
     | '/_authenticated/households'
     | '/_authenticated/members'
+    | '/_authenticated/users'
+    | '/_authenticated/cells/$id'
+    | '/_authenticated/events/$id'
     | '/_authenticated/members/$id'
   fileRoutesById: FileRoutesById
 }
@@ -135,6 +195,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/users': {
+      id: '/_authenticated/users'
+      path: '/users'
+      fullPath: '/users'
+      preLoaderRoute: typeof AuthenticatedUsersRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/members': {
       id: '/_authenticated/members'
       path: '/members'
@@ -149,11 +216,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedHouseholdsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/events': {
+      id: '/_authenticated/events'
+      path: '/events'
+      fullPath: '/events'
+      preLoaderRoute: typeof AuthenticatedEventsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/cells': {
+      id: '/_authenticated/cells'
+      path: '/cells'
+      fullPath: '/cells'
+      preLoaderRoute: typeof AuthenticatedCellsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/members/$id': {
@@ -163,8 +244,44 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedMembersIdRouteImport
       parentRoute: typeof AuthenticatedMembersRoute
     }
+    '/_authenticated/events/$id': {
+      id: '/_authenticated/events/$id'
+      path: '/$id'
+      fullPath: '/events/$id'
+      preLoaderRoute: typeof AuthenticatedEventsIdRouteImport
+      parentRoute: typeof AuthenticatedEventsRoute
+    }
+    '/_authenticated/cells/$id': {
+      id: '/_authenticated/cells/$id'
+      path: '/$id'
+      fullPath: '/cells/$id'
+      preLoaderRoute: typeof AuthenticatedCellsIdRouteImport
+      parentRoute: typeof AuthenticatedCellsRoute
+    }
   }
 }
+
+interface AuthenticatedCellsRouteChildren {
+  AuthenticatedCellsIdRoute: typeof AuthenticatedCellsIdRoute
+}
+
+const AuthenticatedCellsRouteChildren: AuthenticatedCellsRouteChildren = {
+  AuthenticatedCellsIdRoute: AuthenticatedCellsIdRoute,
+}
+
+const AuthenticatedCellsRouteWithChildren =
+  AuthenticatedCellsRoute._addFileChildren(AuthenticatedCellsRouteChildren)
+
+interface AuthenticatedEventsRouteChildren {
+  AuthenticatedEventsIdRoute: typeof AuthenticatedEventsIdRoute
+}
+
+const AuthenticatedEventsRouteChildren: AuthenticatedEventsRouteChildren = {
+  AuthenticatedEventsIdRoute: AuthenticatedEventsIdRoute,
+}
+
+const AuthenticatedEventsRouteWithChildren =
+  AuthenticatedEventsRoute._addFileChildren(AuthenticatedEventsRouteChildren)
 
 interface AuthenticatedMembersRouteChildren {
   AuthenticatedMembersIdRoute: typeof AuthenticatedMembersIdRoute
@@ -178,15 +295,21 @@ const AuthenticatedMembersRouteWithChildren =
   AuthenticatedMembersRoute._addFileChildren(AuthenticatedMembersRouteChildren)
 
 interface AuthenticatedRouteChildren {
+  AuthenticatedCellsRoute: typeof AuthenticatedCellsRouteWithChildren
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedEventsRoute: typeof AuthenticatedEventsRouteWithChildren
   AuthenticatedHouseholdsRoute: typeof AuthenticatedHouseholdsRoute
   AuthenticatedMembersRoute: typeof AuthenticatedMembersRouteWithChildren
+  AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedCellsRoute: AuthenticatedCellsRouteWithChildren,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedEventsRoute: AuthenticatedEventsRouteWithChildren,
   AuthenticatedHouseholdsRoute: AuthenticatedHouseholdsRoute,
   AuthenticatedMembersRoute: AuthenticatedMembersRouteWithChildren,
+  AuthenticatedUsersRoute: AuthenticatedUsersRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
