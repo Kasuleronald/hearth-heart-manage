@@ -44,7 +44,11 @@ function RequisitionsPage() {
   const navigate = useNavigate();
   const { session } = useSession();
   const requisitions =
-    useLiveQuery(() => db.requisitions.orderBy("createdAt").reverse().toArray(), []) ?? [];
+    useLiveQuery(
+      () =>
+        db.requisitions.toArray().then((rows) => rows.sort((a, b) => b.createdAt - a.createdAt)),
+      [],
+    ) ?? [];
   const departments = useLiveQuery(() => db.departments.orderBy("name").toArray(), []) ?? [];
   const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
   const [open, setOpen] = useState(false);

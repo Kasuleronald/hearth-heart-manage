@@ -37,6 +37,7 @@ function LoginPage() {
   const navigate = useNavigate();
   const { plural: cellTermPlural } = useCellTerm();
   const [firstRun, setFirstRun] = useState<boolean | null>(null);
+  const [bootError, setBootError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -49,7 +50,11 @@ function LoginPage() {
       navigate({ to: "/dashboard", replace: true });
       return;
     }
-    hasAnyUser().then((exists) => setFirstRun(!exists));
+    hasAnyUser()
+      .then((exists) => setFirstRun(!exists))
+      .catch((err) => {
+        setBootError(err instanceof Error ? err.message : "Failed to open the local database");
+      });
   }, [navigate]);
 
   // Live-update the lockout countdown so the button re-enables on its own.
@@ -85,6 +90,29 @@ function LoginPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  if (bootError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-6">
+        <Card className="w-full max-w-md border-destructive/40">
+          <CardContent className="p-8 text-center">
+            <h1 className="font-display text-lg font-semibold text-destructive">
+              Couldn't open the local database
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">{bootError}</p>
+            <p className="mt-4 text-xs text-muted-foreground">
+              Try reloading the page. If this keeps happening, clearing this site's storage
+              (Settings → Privacy → Site data) will fix it, but will erase locally stored data
+              unless you have a backup.
+            </p>
+            <Button className="mt-4" onClick={() => window.location.reload()}>
+              Reload
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   if (firstRun === null) {

@@ -393,21 +393,24 @@ export class MyChurchDB extends Dexie {
         // free-form offertoryAmount becomes the leader's offertoryReported
         // claim, offertoryReceived starts at 0 (not yet reconciled), and
         // each gets a reportRef in submission order per calendar date.
+        // createdAt isn't an indexed field, so sort in memory rather than
+        // via .orderBy() (which requires an index and would throw here).
         const seqByDate = new Map<string, number>();
-        await tx
-          .table("cellMeetings")
-          .orderBy("createdAt")
-          .modify((m: Record<string, unknown>) => {
-            const [y, mo, d] = String(m.date).split("-");
-            const prefix = `${d}${mo}${y}`;
-            const seq = (seqByDate.get(prefix) ?? 0) + 1;
-            seqByDate.set(prefix, seq);
-            m.reportRef = `${prefix}${String(seq).padStart(2, "0")}`;
-            m.offertoryReported = typeof m.offertoryAmount === "number" ? m.offertoryAmount : 0;
-            m.offertoryReceived = 0;
-            m.editRequestStatus = "none";
-            delete m.offertoryAmount;
-          });
+        const table = tx.table("cellMeetings");
+        const meetings = (await table.toArray()) as Record<string, unknown>[];
+        meetings.sort((a, b) => Number(a.createdAt ?? 0) - Number(b.createdAt ?? 0));
+        for (const m of meetings) {
+          const [y, mo, d] = String(m.date).split("-");
+          const prefix = `${d}${mo}${y}`;
+          const seq = (seqByDate.get(prefix) ?? 0) + 1;
+          seqByDate.set(prefix, seq);
+          m.reportRef = `${prefix}${String(seq).padStart(2, "0")}`;
+          m.offertoryReported = typeof m.offertoryAmount === "number" ? m.offertoryAmount : 0;
+          m.offertoryReceived = 0;
+          m.editRequestStatus = "none";
+          delete m.offertoryAmount;
+          await table.put(m);
+        }
       });
   }
 }

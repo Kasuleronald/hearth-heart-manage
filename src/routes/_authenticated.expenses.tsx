@@ -51,7 +51,10 @@ function ExpensesPage() {
   const navigate = useNavigate();
   const { session } = useSession();
   const expenses =
-    useLiveQuery(() => db.expenses.orderBy("createdAt").reverse().toArray(), []) ?? [];
+    useLiveQuery(
+      () => db.expenses.toArray().then((rows) => rows.sort((a, b) => b.createdAt - a.createdAt)),
+      [],
+    ) ?? [];
   const departments = useLiveQuery(() => db.departments.orderBy("name").toArray(), []) ?? [];
   const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
   const [editing, setEditing] = useState<Expense | null>(null);
