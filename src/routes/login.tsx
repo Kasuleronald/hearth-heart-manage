@@ -3,10 +3,26 @@ import { useEffect, useState } from "react";
 import { Church, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/password-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { seedDefaultDepartments } from "@/lib/db";
-import { createUser, getLoginLockoutMs, getSession, hasAnyUser, login } from "@/lib/auth";
+import {
+  createUser,
+  consumePasswordResetToken,
+  getLoginLockoutMs,
+  getSession,
+  hasAnyUser,
+  login,
+} from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { toast } from "sonner";
 
@@ -21,7 +37,7 @@ function LoginPage() {
   const navigate = useNavigate();
   const { plural: cellTermPlural } = useCellTerm();
   const [firstRun, setFirstRun] = useState<boolean | null>(null);
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -40,11 +56,11 @@ function LoginPage() {
   useEffect(() => {
     if (lockoutMs <= 0) return;
     const t = window.setInterval(() => {
-      const remaining = getLoginLockoutMs(username);
+      const remaining = getLoginLockoutMs(email);
       setLockoutMs(remaining);
     }, 1000);
     return () => window.clearInterval(t);
-  }, [lockoutMs, username]);
+  }, [lockoutMs, email]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -55,17 +71,17 @@ function LoginPage() {
           throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
         }
         if (password !== confirmPassword) throw new Error("Passwords don't match");
-        await createUser({ username, password, fullName, role: "admin" });
+        await createUser({ email, password, fullName, role: "admin" });
         await seedDefaultDepartments();
-        await login(username, password);
+        await login(email, password);
         toast.success("Welcome to My Church");
       } else {
-        await login(username, password);
+        await login(email, password);
       }
       navigate({ to: "/dashboard", replace: true });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Something went wrong");
-      setLockoutMs(getLoginLockoutMs(username));
+      setLockoutMs(getLoginLockoutMs(email));
     } finally {
       setBusy(false);
     }
@@ -134,20 +150,21 @@ function LoginPage() {
                 </div>
               )}
               <div className="space-y-2">
-                <Label htmlFor="username">Username</Label>
+                <Label htmlFor="email">Email</Label>
                 <Input
-                  id="username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  autoComplete="username"
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  placeholder="you@church.org"
                   required
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
-                <Input
+                <PasswordInput
                   id="password"
-                  type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete={firstRun ? "new-password" : "current-password"}
@@ -158,9 +175,8 @@ function LoginPage() {
               {firstRun && (
                 <div className="space-y-2">
                   <Label htmlFor="confirmPassword">Confirm password</Label>
-                  <Input
+                  <PasswordInput
                     id="confirmPassword"
-                    type="password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     autoComplete="new-password"
@@ -178,10 +194,95 @@ function LoginPage() {
                 {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {firstRun ? "Create account & sign in" : "Sign in"}
               </Button>
+              {!firstRun && (
+                <div className="text-center">
+                  <ForgotPasswordDialog />
+                </div>
+              )}
             </form>
           </CardContent>
         </Card>
       </div>
     </div>
+  );
+}
+
+function ForgotPasswordDialog() {
+  const [open, setOpen] = useState(false);
+  const [token, setToken] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function redeem() {
+    setBusy(true);
+    try {
+      if (newPassword !== confirm) throw new Error("Passwords don't match");
+      await consumePasswordResetToken(token, newPassword);
+      toast.success("Password reset — you can sign in now");
+      setOpen(false);
+      setToken("");
+      setNewPassword("");
+      setConfirm("");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to reset password");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <button type="button" className="text-sm text-muted-foreground hover:text-foreground">
+          Forgot password?
+        </button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="font-display">Reset your password</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            This app stores data only on this device, so password resets have to go through another
+            admin — there's no email delivery to reset it yourself from scratch. Ask an admin to
+            open <span className="font-medium text-foreground">Users</span> and generate a reset
+            code for your account, then enter it below. If you're the only admin and can't sign in,
+            there's no automated recovery — you'll need to restore from a backup or start a fresh
+            account.
+          </p>
+          <div className="space-y-2">
+            <Label htmlFor="resetToken">Reset code</Label>
+            <Input id="resetToken" value={token} onChange={(e) => setToken(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="resetNewPassword">New password</Label>
+            <PasswordInput
+              id="resetNewPassword"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              minLength={MIN_PASSWORD_LENGTH}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="resetConfirm">Confirm new password</Label>
+            <PasswordInput
+              id="resetConfirm"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              minLength={MIN_PASSWORD_LENGTH}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button onClick={redeem} disabled={busy || !token || !newPassword}>
+            Reset password
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

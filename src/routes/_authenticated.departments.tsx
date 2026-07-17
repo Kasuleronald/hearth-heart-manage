@@ -32,7 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useSession, canAccessDepartments } from "@/lib/auth";
+import { useSession, canAccessDepartments, canManageDepartments } from "@/lib/auth";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/departments")({
@@ -42,6 +42,7 @@ export const Route = createFileRoute("/_authenticated/departments")({
 function DepartmentsPage() {
   const navigate = useNavigate();
   const { session } = useSession();
+  const canManage = session ? canManageDepartments(session.role) : false;
   const departments = useLiveQuery(() => db.departments.orderBy("name").toArray(), []) ?? [];
   const users =
     useLiveQuery(
@@ -68,43 +69,46 @@ function DepartmentsPage() {
         title="Departments"
         description="Ministries and teams — Ushering, Sound, Worship, Youth, and the leader assigned to each."
         actions={
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={async () => {
-                try {
-                  await seedDefaultDepartments();
-                  toast.success("Common departments added");
-                } catch (e) {
-                  toast.error(e instanceof Error ? e.message : "Failed to add departments");
-                }
-              }}
-            >
-              <Sparkles className="mr-2 h-4 w-4" /> Add common departments
-            </Button>
-            <Dialog
-              open={open}
-              onOpenChange={(o) => {
-                setOpen(o);
-                if (!o) setEditing(null);
-              }}
-            >
-              <DialogTrigger asChild>
-                <Button onClick={() => setEditing(null)}>
-                  <Plus className="mr-2 h-4 w-4" /> New department
-                </Button>
-              </DialogTrigger>
-              <DepartmentDialog dept={editing} users={users} onClose={() => setOpen(false)} />
-            </Dialog>
-          </div>
+          canManage && (
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    await seedDefaultDepartments();
+                    toast.success("Common departments added");
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : "Failed to add departments");
+                  }
+                }}
+              >
+                <Sparkles className="mr-2 h-4 w-4" /> Add common departments
+              </Button>
+              <Dialog
+                open={open}
+                onOpenChange={(o) => {
+                  setOpen(o);
+                  if (!o) setEditing(null);
+                }}
+              >
+                <DialogTrigger asChild>
+                  <Button onClick={() => setEditing(null)}>
+                    <Plus className="mr-2 h-4 w-4" /> New department
+                  </Button>
+                </DialogTrigger>
+                <DepartmentDialog dept={editing} users={users} onClose={() => setOpen(false)} />
+              </Dialog>
+            </div>
+          )
         }
       />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {departments.map((d) => {
           const leader = users.find((u) => u.id === d.leaderId);
+          const isMine = session?.userId === d.leaderId;
           return (
-            <Card key={d.id}>
+            <Card key={d.id} className={isMine ? "border-primary" : undefined}>
               <CardContent className="p-5">
                 <div className="flex items-start justify-between">
                   <div className="min-w-0">
@@ -115,40 +119,47 @@ function DepartmentsPage() {
                       </p>
                     )}
                   </div>
-                  <div className="flex gap-1">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={`Edit ${d.name}`}
-                      onClick={() => {
-                        setEditing(d);
-                        setOpen(true);
-                      }}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <DeleteButton
-                      label={`Delete ${d.name}`}
-                      title={`Delete department "${d.name}"?`}
-                      description="This can't be undone."
-                      onConfirm={async () => {
-                        try {
-                          await db.departments.delete(d.id);
-                          toast.success("Department deleted");
-                        } catch (e) {
-                          toast.error(
-                            e instanceof Error ? e.message : "Failed to delete department",
-                          );
-                        }
-                      }}
-                    />
-                  </div>
+                  {canManage && (
+                    <div className="flex gap-1">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`Edit ${d.name}`}
+                        onClick={() => {
+                          setEditing(d);
+                          setOpen(true);
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <DeleteButton
+                        label={`Delete ${d.name}`}
+                        title={`Delete department "${d.name}"?`}
+                        description="This can't be undone."
+                        onConfirm={async () => {
+                          try {
+                            await db.departments.delete(d.id);
+                            toast.success("Department deleted");
+                          } catch (e) {
+                            toast.error(
+                              e instanceof Error ? e.message : "Failed to delete department",
+                            );
+                          }
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
-                <div className="mt-4 text-sm">
+                <div className="mt-4 flex items-center gap-2 text-sm">
                   {leader ? (
                     <Badge variant="secondary">{leader.fullName}</Badge>
                   ) : (
                     <span className="text-xs text-muted-foreground">Unassigned</span>
+                  )}
+                  {isMine && (
+                    <Badge className="border-0 bg-primary text-primary-foreground">
+                      You lead this
+                    </Badge>
                   )}
                 </div>
               </CardContent>

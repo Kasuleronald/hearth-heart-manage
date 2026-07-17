@@ -4,10 +4,23 @@ export type Role = "admin" | "pastor" | "cell_leader" | "leader" | "treasurer";
 
 export interface User {
   id: string;
-  username: string;
+  email: string; // lowercase, unique — the sole login identifier
   fullName: string;
   role: Role;
   passwordHash: string; // "salt:hash" hex
+  memberId?: string; // optional link to this user's own Member record
+  financeTier?: "A"; // elevated finance powers for a leader/cell_leader; unset for others
+  createdAt: number;
+}
+
+// Local-mode password reset: a single-use token an admin generates and relays
+// to the user out-of-band (no SMTP). Structured so a real email-delivery layer
+// can be swapped in later without changing the token logic itself.
+export interface PasswordResetToken {
+  token: string;
+  userId: string;
+  expiresAt: number;
+  used: boolean;
   createdAt: number;
 }
 
@@ -193,6 +206,7 @@ export class MyChurchDB extends Dexie {
   departments!: EntityTable<Department, "id">;
   projects!: EntityTable<Project, "id">;
   partners!: EntityTable<Partner, "id">;
+  passwordResetTokens!: EntityTable<PasswordResetToken, "token">;
   settings!: EntityTable<Settings, "key">;
 
   constructor() {
@@ -223,6 +237,28 @@ export class MyChurchDB extends Dexie {
       projects: "id, name",
       partners: "id, name",
     });
+    this.version(5)
+      .stores({
+        users: "id, &email, role",
+        passwordResetTokens: "token, userId",
+      })
+      .upgrade(async (tx) => {
+        // Existing accounts had no email; back-fill a placeholder from their
+        // old username so the new unique index doesn't reject the row. The
+        // username was already unique, so this stays unique too.
+        await tx
+          .table("users")
+          .toCollection()
+          .modify((user: Record<string, unknown>) => {
+            if (!user.email) {
+              const base = String(user.username ?? user.id)
+                .toLowerCase()
+                .replace(/[^a-z0-9.]/g, "");
+              user.email = `${base}@church.local`;
+            }
+            delete user.username;
+          });
+      });
   }
 }
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/password-input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -66,12 +66,11 @@ export function ChangePasswordDialog({ userId }: { userId: string }) {
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label>Current password</Label>
-            <Input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} />
+            <PasswordInput value={current} onChange={(e) => setCurrent(e.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label>New password</Label>
-            <Input
-              type="password"
+            <PasswordInput
               value={next}
               onChange={(e) => setNext(e.target.value)}
               minLength={MIN_PASSWORD_LENGTH}
@@ -79,8 +78,7 @@ export function ChangePasswordDialog({ userId }: { userId: string }) {
           </div>
           <div className="space-y-1.5">
             <Label>Confirm new password</Label>
-            <Input
-              type="password"
+            <PasswordInput
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
               minLength={MIN_PASSWORD_LENGTH}

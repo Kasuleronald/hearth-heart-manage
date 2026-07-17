@@ -4,13 +4,19 @@ import { db, uid, type Role, type User } from "./db";
 const SESSION_KEY = "mychurch.session";
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 const TOUCH_THROTTLE_MS = 60 * 1000; // don't rewrite storage more than once a minute
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 export interface Session {
   userId: string;
-  username: string;
+  email: string;
   fullName: string;
   role: Role;
   expiresAt: number;
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export function isValidEmail(email: string): boolean {
+  return EMAIL_RE.test(email.trim());
 }
 
 // ---- Password hashing (PBKDF2 via WebCrypto) ----
@@ -127,14 +133,14 @@ function writeAttempts(attempts: Record<string, AttemptRecord>) {
   localStorage.setItem(LOGIN_ATTEMPTS_KEY, JSON.stringify(attempts));
 }
 
-export function getLoginLockoutMs(username: string): number {
-  const rec = readAttempts()[username.trim().toLowerCase()];
+export function getLoginLockoutMs(email: string): number {
+  const rec = readAttempts()[email.trim().toLowerCase()];
   if (!rec?.lockedUntil) return 0;
   return Math.max(0, rec.lockedUntil - Date.now());
 }
 
-function recordFailedLogin(username: string) {
-  const key = username.trim().toLowerCase();
+function recordFailedLogin(email: string) {
+  const key = email.trim().toLowerCase();
   const attempts = readAttempts();
   const rec = attempts[key] ?? { count: 0 };
   rec.count += 1;
@@ -146,8 +152,8 @@ function recordFailedLogin(username: string) {
   writeAttempts(attempts);
 }
 
-function clearFailedLogins(username: string) {
-  const key = username.trim().toLowerCase();
+function clearFailedLogins(email: string) {
+  const key = email.trim().toLowerCase();
   const attempts = readAttempts();
   if (attempts[key]) {
     delete attempts[key];
@@ -161,19 +167,22 @@ export async function hasAnyUser(): Promise<boolean> {
 }
 
 export async function createUser(input: {
-  username: string;
+  email: string;
   password: string;
   fullName: string;
   role: Role;
+  memberId?: string;
 }): Promise<User> {
-  const username = input.username.trim().toLowerCase();
-  const existing = await db.users.where("username").equals(username).first();
-  if (existing) throw new Error("Username already exists");
+  const email = input.email.trim().toLowerCase();
+  if (!isValidEmail(email)) throw new Error("Enter a valid email address");
+  const existing = await db.users.where("email").equals(email).first();
+  if (existing) throw new Error("An account with this email already exists");
   const user: User = {
     id: uid(),
-    username,
+    email,
     fullName: input.fullName.trim(),
     role: input.role,
+    memberId: input.memberId,
     passwordHash: await hashPassword(input.password),
     createdAt: Date.now(),
   };
@@ -181,25 +190,25 @@ export async function createUser(input: {
   return user;
 }
 
-export async function login(username: string, password: string): Promise<Session> {
-  const lockoutMs = getLoginLockoutMs(username);
+export async function login(email: string, password: string): Promise<Session> {
+  const lockoutMs = getLoginLockoutMs(email);
   if (lockoutMs > 0) {
     throw new Error(`Too many attempts. Try again in ${Math.ceil(lockoutMs / 1000)}s.`);
   }
-  const u = await db.users.where("username").equals(username.trim().toLowerCase()).first();
+  const u = await db.users.where("email").equals(email.trim().toLowerCase()).first();
   if (!u) {
-    recordFailedLogin(username);
+    recordFailedLogin(email);
     throw new Error("Invalid credentials");
   }
   const ok = await verifyPassword(password, u.passwordHash);
   if (!ok) {
-    recordFailedLogin(username);
+    recordFailedLogin(email);
     throw new Error("Invalid credentials");
   }
-  clearFailedLogins(username);
+  clearFailedLogins(email);
   const s: Session = {
     userId: u.id,
-    username: u.username,
+    email: u.email,
     fullName: u.fullName,
     role: u.role,
     expiresAt: Date.now() + IDLE_TIMEOUT_MS,
@@ -229,6 +238,42 @@ export async function changePassword(
 export async function resetPassword(userId: string, newPassword: string): Promise<void> {
   if (newPassword.length < 8) throw new Error("Password must be at least 8 characters");
   await db.users.update(userId, { passwordHash: await hashPassword(newPassword) });
+}
+
+// ---- Password reset tokens (local-mode: no email delivery) ----
+// An admin generates a token for a user and relays it to them out-of-band
+// (in person, chat, etc.) — see the Users page. Built as a real token/expiry
+// pair now so swapping in real email delivery later only changes how the
+// token is *delivered*, not this logic.
+export async function createPasswordResetToken(
+  email: string,
+): Promise<{ token: string; user: User }> {
+  const u = await db.users.where("email").equals(email.trim().toLowerCase()).first();
+  if (!u) throw new Error("No account with that email");
+  const token = uid();
+  await db.passwordResetTokens.add({
+    token,
+    userId: u.id,
+    expiresAt: Date.now() + RESET_TOKEN_TTL_MS,
+    used: false,
+    createdAt: Date.now(),
+  });
+  return { token, user: u };
+}
+
+export async function consumePasswordResetToken(token: string, newPassword: string): Promise<void> {
+  const rec = await db.passwordResetTokens.get(token.trim());
+  if (!rec || rec.used || rec.expiresAt < Date.now()) {
+    throw new Error("This reset code is invalid or has expired");
+  }
+  if (newPassword.length < 8) throw new Error("Password must be at least 8 characters");
+  // Hash outside the transaction — WebCrypto isn't Dexie-tracked, so awaiting
+  // it mid-transaction risks the transaction auto-committing early.
+  const passwordHash = await hashPassword(newPassword);
+  await db.transaction("rw", [db.users, db.passwordResetTokens], async () => {
+    await db.users.update(rec.userId, { passwordHash });
+    await db.passwordResetTokens.update(token, { used: true });
+  });
 }
 
 // ---- React hook ----
@@ -277,7 +322,12 @@ export function canEditClass(role: Role, facilitatorId: string | undefined, user
 export function canAccessGivings(role: Role) {
   return role === "admin" || role === "pastor" || role === "treasurer";
 }
+// View access: admin/pastor manage every department; a "leader" needs to see
+// this page too, since it's the only place their own assignment shows up.
 export function canAccessDepartments(role: Role) {
+  return role === "admin" || role === "pastor" || role === "leader";
+}
+export function canManageDepartments(role: Role) {
   return role === "admin" || role === "pastor";
 }
 export function canManageEvents(role: Role) {

@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useState } from "react";
-import { Plus, Pencil } from "lucide-react";
+import { Plus, Pencil, KeyRound, Copy } from "lucide-react";
 import {
   db,
   deleteUserCascade,
@@ -14,6 +14,7 @@ import {
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/password-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +34,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createUser, resetPassword, useSession, canManageUsers } from "@/lib/auth";
+import {
+  createUser,
+  resetPassword,
+  createPasswordResetToken,
+  isValidEmail,
+  useSession,
+  canManageUsers,
+} from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { toast } from "sonner";
 
@@ -117,7 +125,7 @@ function UsersPage() {
                 <li key={u.id} className="flex items-center justify-between px-5 py-4">
                   <div>
                     <div className="font-medium">{u.fullName}</div>
-                    <div className="text-xs text-muted-foreground">@{u.username}</div>
+                    <div className="text-xs text-muted-foreground">{u.email}</div>
                   </div>
                   <div className="flex items-center gap-3">
                     {led && (
@@ -128,6 +136,7 @@ function UsersPage() {
                     <Badge variant="secondary" className="capitalize">
                       {roleLabel[u.role] ?? u.role.replace("_", " ")}
                     </Badge>
+                    <ResetCodeButton user={u} />
                     <Button
                       size="icon"
                       variant="ghost"
@@ -170,6 +179,65 @@ function UsersPage() {
         )}
       </Dialog>
     </div>
+  );
+}
+
+function ResetCodeButton({ user }: { user: User }) {
+  const [open, setOpen] = useState(false);
+  const [token, setToken] = useState("");
+
+  async function generate() {
+    try {
+      const { token } = await createPasswordResetToken(user.email);
+      setToken(token);
+      setOpen(true);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to generate reset code");
+    }
+  }
+
+  return (
+    <>
+      <Button
+        size="icon"
+        variant="ghost"
+        aria-label={`Generate password reset code for ${user.fullName}`}
+        title="Generate password reset code"
+        onClick={generate}
+      >
+        <KeyRound className="h-4 w-4" />
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-display">Reset code for {user.fullName}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Share this code with {user.fullName} directly (in person, chat, etc.) — it isn't
+            emailed. It expires in 1 hour and can only be used once, on the login screen's "Forgot
+            password?" link.
+          </p>
+          <div className="flex items-center gap-2">
+            <Input readOnly value={token} className="font-mono" />
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              aria-label="Copy reset code"
+              onClick={() => {
+                navigator.clipboard.writeText(token);
+                toast.success("Copied");
+              }}
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setOpen(false)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -226,7 +294,7 @@ function NewUserDialog({
   onClose: () => void;
 }) {
   const [fullName, setFullName] = useState("");
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [role, setRole] = useState<Role>("cell_leader");
@@ -235,11 +303,12 @@ function NewUserDialog({
 
   async function save() {
     try {
+      if (!isValidEmail(email)) throw new Error("Enter a valid email address");
       if (password.length < MIN_PASSWORD_LENGTH) {
         throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
       }
       if (password !== confirmPassword) throw new Error("Passwords don't match");
-      const user = await createUser({ fullName, username, password, role });
+      const user = await createUser({ fullName, email, password, role });
       await resolveDepartmentAssignment(user.id, role, departmentChoice, otherDeptName);
       toast.success("User created");
       onClose();
@@ -260,8 +329,13 @@ function NewUserDialog({
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label>Username</Label>
-            <Input value={username} onChange={(e) => setUsername(e.target.value)} />
+            <Label>Email</Label>
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@church.org"
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Role</Label>
@@ -291,8 +365,7 @@ function NewUserDialog({
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label>Password</Label>
-            <Input
-              type="password"
+            <PasswordInput
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               minLength={MIN_PASSWORD_LENGTH}
@@ -300,8 +373,7 @@ function NewUserDialog({
           </div>
           <div className="space-y-1.5">
             <Label>Confirm password</Label>
-            <Input
-              type="password"
+            <PasswordInput
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               minLength={MIN_PASSWORD_LENGTH}
@@ -331,6 +403,7 @@ function EditUserDialog({
   onClose: () => void;
 }) {
   const [fullName, setFullName] = useState(user.fullName);
+  const [email, setEmail] = useState(user.email);
   const [role, setRole] = useState<Role>(user.role);
   const currentDept = departments.find((d) => d.leaderId === user.id);
   const [departmentChoice, setDepartmentChoice] = useState(currentDept?.id ?? "none");
@@ -341,6 +414,12 @@ function EditUserDialog({
   async function save() {
     try {
       if (!fullName.trim()) throw new Error("Full name is required");
+      const trimmedEmail = email.trim().toLowerCase();
+      if (!isValidEmail(trimmedEmail)) throw new Error("Enter a valid email address");
+      if (trimmedEmail !== user.email) {
+        const existing = await db.users.where("email").equals(trimmedEmail).first();
+        if (existing) throw new Error("An account with this email already exists");
+      }
       if (newPassword || confirmPassword) {
         if (newPassword.length < MIN_PASSWORD_LENGTH) {
           throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
@@ -348,7 +427,7 @@ function EditUserDialog({
         if (newPassword !== confirmPassword) throw new Error("Passwords don't match");
         await resetPassword(user.id, newPassword);
       }
-      await db.users.update(user.id, { fullName: fullName.trim(), role });
+      await db.users.update(user.id, { fullName: fullName.trim(), email: trimmedEmail, role });
       await resolveDepartmentAssignment(user.id, role, departmentChoice, otherDeptName);
       toast.success("User updated");
       onClose();
@@ -366,6 +445,10 @@ function EditUserDialog({
         <div className="space-y-1.5">
           <Label>Full name</Label>
           <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Email</Label>
+          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <Label>Role</Label>
@@ -394,8 +477,7 @@ function EditUserDialog({
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label>New password</Label>
-            <Input
-              type="password"
+            <PasswordInput
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               minLength={MIN_PASSWORD_LENGTH}
@@ -404,8 +486,7 @@ function EditUserDialog({
           </div>
           <div className="space-y-1.5">
             <Label>Confirm new password</Label>
-            <Input
-              type="password"
+            <PasswordInput
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               minLength={MIN_PASSWORD_LENGTH}

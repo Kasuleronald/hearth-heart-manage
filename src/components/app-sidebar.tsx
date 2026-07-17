@@ -69,7 +69,7 @@ function getNav(cellTermPlural: string) {
       title: "Departments",
       url: "/departments",
       icon: Building2,
-      roles: ["admin", "pastor"] as const,
+      roles: ["admin", "pastor", "leader"] as const,
     },
     {
       title: "Events",
