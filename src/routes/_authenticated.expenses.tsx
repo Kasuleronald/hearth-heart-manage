@@ -117,6 +117,7 @@ function ExpensesPage() {
                 </Button>
               </DialogTrigger>
               <ExpenseDialog
+                key={editing?.id ?? "new"}
                 expense={editing}
                 departments={departments}
                 currentUserId={session.userId}

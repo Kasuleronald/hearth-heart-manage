@@ -64,11 +64,10 @@ function Dashboard() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const upcomingBirthdays = members
-    .filter((m) => m.dob)
+    .filter((m) => m.birthMonth && m.birthDay)
     .map((m) => {
-      const [, mm, dd] = m.dob!.split("-").map(Number);
-      let next = new Date(today.getFullYear(), mm - 1, dd);
-      if (next < today) next = new Date(today.getFullYear() + 1, mm - 1, dd);
+      let next = new Date(today.getFullYear(), m.birthMonth! - 1, m.birthDay!);
+      if (next < today) next = new Date(today.getFullYear() + 1, m.birthMonth! - 1, m.birthDay!);
       const daysUntil = Math.round((next.getTime() - today.getTime()) / 86_400_000);
       return { member: m, next, daysUntil };
     })

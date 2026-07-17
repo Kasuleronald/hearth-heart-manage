@@ -84,6 +84,7 @@ function PartnersPage() {
                 </Button>
               </DialogTrigger>
               <PartnerDialog
+                key={editing?.id ?? "new"}
                 partner={editing}
                 currentUserId={session.userId}
                 onClose={() => setOpen(false)}

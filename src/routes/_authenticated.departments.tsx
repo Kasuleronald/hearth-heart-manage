@@ -106,7 +106,12 @@ function DepartmentsPage() {
                     <Plus className="mr-2 h-4 w-4" /> New department
                   </Button>
                 </DialogTrigger>
-                <DepartmentDialog dept={editing} users={users} onClose={() => setOpen(false)} />
+                <DepartmentDialog
+                  key={editing?.id ?? "new"}
+                  dept={editing}
+                  users={users}
+                  onClose={() => setOpen(false)}
+                />
               </Dialog>
             </div>
           )

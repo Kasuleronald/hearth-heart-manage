@@ -78,6 +78,7 @@ function ClassesPage() {
                 </Button>
               </DialogTrigger>
               <ClassDialog
+                key={editing?.id ?? "new"}
                 cls={editing}
                 users={users}
                 leaderLabel={leaderLabel}

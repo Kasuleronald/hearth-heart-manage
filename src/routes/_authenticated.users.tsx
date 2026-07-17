@@ -46,18 +46,18 @@ import {
   useSession,
   canManageUsers,
 } from "@/lib/auth";
-import { useCellTerm } from "@/lib/terminology";
+import { useCellTerm, useTreasurerTerm } from "@/lib/terminology";
 import { toast } from "sonner";
 
 const MIN_PASSWORD_LENGTH = 8;
 
-function getRoles(leaderLabel: string): { value: Role; label: string }[] {
+function getRoles(leaderLabel: string, treasurerLabel: string): { value: Role; label: string }[] {
   return [
     { value: "admin", label: "Admin" },
     { value: "pastor", label: "Pastor" },
     { value: "cell_leader", label: leaderLabel },
     { value: "leader", label: "Department Leader" },
-    { value: "treasurer", label: "Treasurer" },
+    { value: "treasurer", label: treasurerLabel },
   ];
 }
 
@@ -88,7 +88,8 @@ function UsersPage() {
   const navigate = useNavigate();
   const { session } = useSession();
   const { leaderLabel } = useCellTerm();
-  const roles = getRoles(leaderLabel);
+  const { singular: treasurerLabel } = useTreasurerTerm();
+  const roles = getRoles(leaderLabel, treasurerLabel);
   const roleLabel = Object.fromEntries(roles.map((r) => [r.value, r.label])) as Record<
     Role,
     string
@@ -109,7 +110,7 @@ function UsersPage() {
     <div>
       <PageHeader
         title="Users"
-        description={`Admins, pastors, ${leaderLabel.toLowerCase()}s, department leaders, and treasurers who can sign in.`}
+        description={`Admins, pastors, ${leaderLabel.toLowerCase()}s, department leaders, and ${treasurerLabel.toLowerCase()}s who can sign in.`}
         actions={
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>

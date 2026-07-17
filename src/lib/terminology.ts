@@ -13,6 +13,8 @@ export const TERM_DEFINITIONS = [
   { key: "class", defaultSingular: "Class", defaultPlural: "Classes" },
   { key: "requisition", defaultSingular: "Requisition", defaultPlural: "Requisitions" },
   { key: "branch", defaultSingular: "Branch", defaultPlural: "Branches" },
+  { key: "treasurer", defaultSingular: "Treasurer", defaultPlural: "Treasurers" },
+  { key: "givings", defaultSingular: "Giving", defaultPlural: "Givings" },
 ] as const;
 
 export type TermKey = (typeof TERM_DEFINITIONS)[number]["key"];
@@ -49,4 +51,10 @@ export function useCellTerm() {
 }
 export async function setCellTerm(singular: string, plural: string) {
   await setTerm("cell", singular, plural);
+}
+export function useTreasurerTerm() {
+  return useTerm("treasurer");
+}
+export function useGivingsTerm() {
+  return useTerm("givings");
 }

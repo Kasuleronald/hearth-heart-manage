@@ -76,6 +76,7 @@ function CellsPage() {
                 </Button>
               </DialogTrigger>
               <CellDialog
+                key={editing?.id ?? "new"}
                 cell={editing}
                 users={users}
                 singular={singular}

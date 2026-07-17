@@ -171,6 +171,7 @@ function ClassDetail() {
                     </Button>
                   </DialogTrigger>
                   <SessionDialog
+                    key={editingSession?.id ?? "new"}
                     classId={cls.id}
                     classBranchId={cls.branchId}
                     session={editingSession}

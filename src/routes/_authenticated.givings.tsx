@@ -42,6 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useSession, canAccessGivings, canToggleCurrency } from "@/lib/auth";
+import { useGivingsTerm } from "@/lib/terminology";
 import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -76,6 +77,7 @@ function GivingsPage() {
   const effectiveBranch = useEffectiveBranch(session?.branchId);
   const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
   const { format: formatAmount, convert, displayCode, base } = useDisplayCurrency(canToggle);
+  const { singular: givingsSingular, plural: givingsPlural } = useGivingsTerm();
 
   useEffect(() => {
     if (session && !canAccessGivings(session.role)) navigate({ to: "/dashboard", replace: true });
@@ -116,14 +118,14 @@ function GivingsPage() {
   return (
     <div>
       <PageHeader
-        title="Givings"
+        title={givingsPlural}
         description="Love offerings, tithes, first fruits, seeds and project giving."
         actions={
           <div className="flex gap-2">
             {canToggle && <CurrencyToggle baseCode={base.code} />}
             <ExportMenu
               filename="givings"
-              title="Givings"
+              title={givingsPlural}
               headers={[
                 "Date",
                 "Category",
@@ -155,10 +157,11 @@ function GivingsPage() {
             >
               <DialogTrigger asChild>
                 <Button onClick={() => setEditing(null)}>
-                  <Plus className="mr-2 h-4 w-4" /> Record giving
+                  <Plus className="mr-2 h-4 w-4" /> Record {givingsSingular.toLowerCase()}
                 </Button>
               </DialogTrigger>
               <GivingDialog
+                key={editing?.id ?? "new"}
                 giving={editing}
                 members={members}
                 partners={partners}
@@ -300,6 +303,7 @@ function GivingDialog({
   currentUserId: string;
   onClose: () => void;
 }) {
+  const { singular: givingsSingular } = useGivingsTerm();
   const [amount, setAmount] = useState(giving ? String(giving.amount) : "");
   const [category, setCategory] = useState<GivingCategory>(giving?.category ?? "tithe");
   const [giverChoice, setGiverChoice] = useState(
@@ -351,7 +355,9 @@ function GivingDialog({
     <DialogContent>
       <DialogHeader>
         <DialogTitle className="font-display">
-          {giving ? "Edit giving" : "Record a giving"}
+          {giving
+            ? `Edit ${givingsSingular.toLowerCase()}`
+            : `Record a ${givingsSingular.toLowerCase()}`}
         </DialogTitle>
       </DialogHeader>
       <div className="space-y-4">
@@ -458,7 +464,9 @@ function GivingDialog({
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button onClick={save}>{giving ? "Save changes" : "Record giving"}</Button>
+        <Button onClick={save}>
+          {giving ? "Save changes" : `Record ${givingsSingular.toLowerCase()}`}
+        </Button>
       </DialogFooter>
     </DialogContent>
   );

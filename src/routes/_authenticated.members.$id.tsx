@@ -2,7 +2,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
 import { ArrowLeft, Hash } from "lucide-react";
-import { db, getNextMemberNumber } from "@/lib/db";
+import { db, getNextMemberNumber, formatBirthday } from "@/lib/db";
 import { useSession, canEditDeleteMembers, canAccessRecordBranch } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { PageHeader } from "@/components/page-header";
@@ -84,10 +84,7 @@ function MemberDetail() {
           <CardContent className="space-y-3 p-6">
             <h3 className="font-display text-lg font-semibold">Personal</h3>
             <Row label="Gender" value={member.gender} className="capitalize" />
-            <Row
-              label="Date of birth"
-              value={member.dob ? format(new Date(member.dob), "PPP") : undefined}
-            />
+            <Row label="Date of birth" value={formatBirthday(member)} />
             <Row
               label="Joined"
               value={member.joinDate ? format(new Date(member.joinDate), "PPP") : undefined}

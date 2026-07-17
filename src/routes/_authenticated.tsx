@@ -8,6 +8,7 @@ import { NotificationBell } from "@/components/notification-bell";
 import { BranchSwitcher } from "@/components/branch-switcher";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth";
+import { useTreasurerTerm } from "@/lib/terminology";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -18,6 +19,7 @@ function AuthenticatedLayout() {
   const navigate = useNavigate();
   const { session, ready } = useSession();
   const [searchOpen, setSearchOpen] = useState(false);
+  const { singular: treasurerLabel } = useTreasurerTerm();
 
   useEffect(() => {
     if (ready && !session) navigate({ to: "/login", replace: true });
@@ -67,7 +69,7 @@ function AuthenticatedLayout() {
                   <span className="font-medium text-foreground">{session.fullName}</span>
                 </span>
                 <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium capitalize text-secondary-foreground">
-                  {session.role.replace("_", " ")}
+                  {session.role === "treasurer" ? treasurerLabel : session.role.replace("_", " ")}
                 </span>
               </div>
             </div>

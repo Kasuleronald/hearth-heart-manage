@@ -80,6 +80,7 @@ function EventsPage() {
                   </Button>
                 </DialogTrigger>
                 <EventDialog
+                  key={editing?.id ?? "new"}
                   event={editing}
                   currentUserId={session?.userId}
                   onClose={() => setOpen(false)}

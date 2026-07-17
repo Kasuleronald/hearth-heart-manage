@@ -1,11 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
-import { Plus, Search, Pencil, Trash2, Columns3 } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Columns3, Hash } from "lucide-react";
 import {
   db,
   deleteMemberCascade,
   uid,
+  formatBirthday,
+  MONTH_NAMES,
   type Member,
   type MemberCategory,
   type MemberStatus,
@@ -66,6 +68,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { format } from "date-fns";
 
 export const Route = createFileRoute("/_authenticated/members")({
   component: MembersPage,
@@ -150,8 +153,8 @@ const OPTIONAL_COLUMNS: {
     key: "dob",
     label: () => "Date of birth",
     defaultVisible: false,
-    render: (m) => m.dob ?? "—",
-    csv: (m) => m.dob ?? "",
+    render: (m) => formatBirthday(m) ?? "—",
+    csv: (m) => formatBirthday(m) ?? "",
   },
   {
     key: "category",
@@ -200,6 +203,7 @@ function MembersPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [editing, setEditing] = useState<Member | null>(null);
   const [open, setOpen] = useState(false);
+  const [viewing, setViewing] = useState<Member | null>(null);
   const [visibleCols, setVisibleCols] = useState<Set<string>>(
     () => new Set(OPTIONAL_COLUMNS.filter((c) => c.defaultVisible).map((c) => c.key)),
   );
@@ -281,6 +285,7 @@ function MembersPage() {
                 </Button>
               </DialogTrigger>
               <MemberDialog
+                key={editing?.id ?? "new"}
                 member={editing}
                 households={households}
                 cells={cells}
@@ -336,9 +341,13 @@ function MembersPage() {
               {filtered.map((m) => (
                 <TableRow key={m.id}>
                   <TableCell className="font-medium">
-                    <Link to="/members/$id" params={{ id: m.id }} className="hover:underline">
+                    <button
+                      type="button"
+                      className="text-left hover:underline"
+                      onClick={() => setViewing(m)}
+                    >
                       {m.firstName} {m.lastName}
-                    </Link>
+                    </button>
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={m.status} />
@@ -396,6 +405,14 @@ function MembersPage() {
           </Table>
         </div>
       </Card>
+      {viewing && (
+        <MemberDetailsDialog
+          key={viewing.id}
+          member={viewing}
+          ctx={ctx}
+          onClose={() => setViewing(null)}
+        />
+      )}
     </div>
   );
 }
@@ -408,6 +425,96 @@ export function StatusBadge({ status }: { status: MemberStatus }) {
     inactive: "bg-muted text-muted-foreground",
   };
   return <Badge className={`${map[status]} capitalize border-0`}>{status}</Badge>;
+}
+
+function DetailRow({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value?: string;
+  className?: string;
+}) {
+  if (!value) return null;
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-border/50 py-1.5 last:border-0">
+      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className={`text-sm text-right ${className ?? ""}`}>{value}</span>
+    </div>
+  );
+}
+
+function MemberDetailsDialog({
+  member,
+  ctx,
+  onClose,
+}: {
+  member: Member;
+  ctx: ColumnCtx;
+  onClose: () => void;
+}) {
+  const household = ctx.households.find((h) => h.id === member.householdId);
+  const cell = ctx.cells.find((c) => c.id === member.cellId);
+  const addedBy = ctx.users.find((u) => u.id === member.createdBy);
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="font-display">
+            {member.firstName} {member.lastName}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="flex items-center gap-2">
+          <StatusBadge status={member.status} />
+          {member.number && (
+            <Badge variant="outline">
+              <Hash className="mr-1 h-3 w-3" />
+              {member.number}
+            </Badge>
+          )}
+        </div>
+        <div>
+          <DetailRow
+            label="Category"
+            value={
+              member.category
+                ? (CATEGORY_LABEL[member.category] ?? member.category) +
+                  (member.categoryOther ? ` — ${member.categoryOther}` : "")
+                : undefined
+            }
+          />
+          <DetailRow label="Phone" value={member.phone} />
+          <DetailRow label="Email" value={member.email} />
+          <DetailRow label="Address" value={member.address} />
+          <DetailRow label="Date of birth" value={formatBirthday(member)} />
+          <DetailRow label="Gender" value={member.gender} className="capitalize" />
+          <DetailRow label="Household" value={household?.name} />
+          <DetailRow label={ctx.cellSingular} value={cell?.name} />
+          <DetailRow
+            label="Joined"
+            value={member.joinDate ? format(new Date(member.joinDate), "PPP") : undefined}
+          />
+          <DetailRow label="Added by" value={addedBy?.fullName} />
+        </div>
+        {member.notes && (
+          <div>
+            <div className="text-xs text-muted-foreground">Notes</div>
+            <p className="mt-1 whitespace-pre-wrap text-sm">{member.notes}</p>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="ghost" asChild>
+            <Link to="/members/$id" params={{ id: member.id }}>
+              View full profile
+            </Link>
+          </Button>
+          <Button onClick={onClose}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function MemberDeleteDialog({
@@ -510,7 +617,9 @@ function MemberDialog({
   const [phone, setPhone] = useState(member?.phone ?? "");
   const [email, setEmail] = useState(member?.email ?? "");
   const [gender, setGender] = useState<Member["gender"]>(member?.gender);
-  const [dob, setDob] = useState(member?.dob ?? "");
+  const [birthMonth, setBirthMonth] = useState(member?.birthMonth ? String(member.birthMonth) : "");
+  const [birthDay, setBirthDay] = useState(member?.birthDay ? String(member.birthDay) : "");
+  const [birthYear, setBirthYear] = useState(member?.birthYear ? String(member.birthYear) : "");
   const [address, setAddress] = useState(member?.address ?? "");
   const [status, setStatus] = useState<MemberStatus>(member?.status ?? "visitor");
   const [category, setCategory] = useState<MemberCategory | undefined>(member?.category);
@@ -529,6 +638,10 @@ function MemberDialog({
       toast.error("Name is required");
       return;
     }
+    if (Boolean(birthMonth) !== Boolean(birthDay)) {
+      toast.error("Enter both a birth month and day, or leave both blank");
+      return;
+    }
     const data: Member = {
       id: member?.id ?? uid(),
       firstName: firstName.trim(),
@@ -536,7 +649,9 @@ function MemberDialog({
       phone: phone || undefined,
       email: email || undefined,
       gender,
-      dob: dob || undefined,
+      birthMonth: birthMonth ? Number(birthMonth) : undefined,
+      birthDay: birthDay ? Number(birthDay) : undefined,
+      birthYear: birthYear ? Number(birthYear) : undefined,
       address: address || undefined,
       status,
       category,
@@ -599,7 +714,52 @@ function MemberDialog({
           </Select>
         </Field>
         <Field label="Date of birth">
-          <Input type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
+          <div className="grid grid-cols-2 gap-2">
+            <Select
+              value={birthMonth || "none"}
+              onValueChange={(v) => setBirthMonth(v === "none" ? "" : v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Month" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">—</SelectItem>
+                {MONTH_NAMES.map((name, i) => (
+                  <SelectItem key={name} value={String(i + 1)}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={birthDay || "none"}
+              onValueChange={(v) => setBirthDay(v === "none" ? "" : v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Day" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">—</SelectItem>
+                {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                  <SelectItem key={d} value={String(d)}>
+                    {d}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Input
+            className="mt-2"
+            type="number"
+            min="1900"
+            max={new Date().getFullYear()}
+            placeholder="Year (optional)"
+            value={birthYear}
+            onChange={(e) => setBirthYear(e.target.value)}
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Year is optional — leave blank if they'd rather not share it.
+          </p>
         </Field>
         <Field label="Status">
           <Select value={status} onValueChange={(v) => setStatus(v as MemberStatus)}>

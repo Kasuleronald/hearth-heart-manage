@@ -52,6 +52,7 @@ function HouseholdsPage() {
               </Button>
             </DialogTrigger>
             <HouseholdDialog
+              key={editing?.id ?? "new"}
               hh={editing}
               currentUserId={session?.userId}
               onClose={() => setOpen(false)}

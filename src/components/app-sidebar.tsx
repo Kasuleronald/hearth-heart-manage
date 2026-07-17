@@ -34,10 +34,10 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useSession, isTierAFinanceLeader } from "@/lib/auth";
-import { useCellTerm } from "@/lib/terminology";
+import { useCellTerm, useTreasurerTerm, useGivingsTerm } from "@/lib/terminology";
 import { Button } from "@/components/ui/button";
 
-function getNav(cellTermPlural: string) {
+function getNav(cellTermPlural: string, givingsPlural: string) {
   return [
     {
       title: "Dashboard",
@@ -89,7 +89,7 @@ function getNav(cellTermPlural: string) {
       roles: ["admin", "pastor", "cell_leader", "leader", "treasurer"] as const,
     },
     {
-      title: "Givings",
+      title: givingsPlural,
       url: "/givings",
       icon: HandCoins,
       roles: ["admin", "pastor", "treasurer"] as const,
@@ -137,7 +137,9 @@ export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { session, signOut } = useSession();
   const { plural, leaderLabel } = useCellTerm();
-  const nav = getNav(plural);
+  const { singular: treasurerLabel } = useTreasurerTerm();
+  const { plural: givingsPlural } = useGivingsTerm();
+  const nav = getNav(plural, givingsPlural);
   if (!session) return null;
   const visible = nav.filter((n) => {
     if ((n.roles as readonly string[]).includes(session.role)) return true;
@@ -187,7 +189,11 @@ export function AppSidebar() {
           <div className="min-w-0">
             <div className="truncate text-sm font-medium">{session.fullName}</div>
             <div className="truncate text-xs capitalize text-sidebar-foreground/70">
-              {session.role === "cell_leader" ? leaderLabel : session.role.replace("_", " ")}
+              {session.role === "cell_leader"
+                ? leaderLabel
+                : session.role === "treasurer"
+                  ? treasurerLabel
+                  : session.role.replace("_", " ")}
             </div>
           </div>
           <div className="flex items-center gap-1">

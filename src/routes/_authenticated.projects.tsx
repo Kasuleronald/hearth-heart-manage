@@ -69,6 +69,7 @@ function ProjectsPage() {
                   </Button>
                 </DialogTrigger>
                 <ProjectDialog
+                  key={editing?.id ?? "new"}
                   project={editing}
                   currentUserId={session?.userId}
                   onClose={() => setOpen(false)}

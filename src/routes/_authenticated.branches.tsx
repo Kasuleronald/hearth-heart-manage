@@ -56,7 +56,11 @@ function BranchesPage() {
                 <Plus className="mr-2 h-4 w-4" /> New branch
               </Button>
             </DialogTrigger>
-            <BranchDialog branch={editing} onClose={() => setOpen(false)} />
+            <BranchDialog
+              key={editing?.id ?? "new"}
+              branch={editing}
+              onClose={() => setOpen(false)}
+            />
           </Dialog>
         }
       />

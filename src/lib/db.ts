@@ -69,7 +69,12 @@ export interface Member {
   gender?: "male" | "female" | "other";
   phone?: string;
   email?: string;
-  dob?: string; // YYYY-MM-DD
+  // Month + day only by default — many people prefer not to share their
+  // birth year, so it's a separate, optional field rather than baked into
+  // one full date.
+  birthMonth?: number; // 1-12
+  birthDay?: number; // 1-31
+  birthYear?: number; // optional
   address?: string;
   status: MemberStatus;
   category?: MemberCategory;
@@ -447,6 +452,26 @@ export class MyChurchDB extends Dexie {
           await table.put(user);
         }
       });
+    this.version(13)
+      .stores({})
+      .upgrade(async (tx) => {
+        // Split the old single `dob: "YYYY-MM-DD"` string into separate
+        // month/day/year fields — year becomes optional going forward.
+        const table = tx.table("members");
+        const members = (await table.toArray()) as Record<string, unknown>[];
+        for (const m of members) {
+          if (typeof m.dob === "string" && m.dob) {
+            const [y, mo, d] = m.dob.split("-").map(Number);
+            if (!Number.isNaN(mo) && !Number.isNaN(d)) {
+              m.birthMonth = mo;
+              m.birthDay = d;
+              if (!Number.isNaN(y) && y > 1900) m.birthYear = y;
+            }
+          }
+          delete m.dob;
+          await table.put(m);
+        }
+      });
   }
 }
 
@@ -456,6 +481,30 @@ export const uid = () =>
   typeof crypto !== "undefined" && crypto.randomUUID
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+export const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+// "March 14" — or "March 14, 1990" only if a birth year was shared.
+export function formatBirthday(
+  m: Pick<Member, "birthMonth" | "birthDay" | "birthYear">,
+): string | undefined {
+  if (!m.birthMonth || !m.birthDay) return undefined;
+  const monthName = MONTH_NAMES[m.birthMonth - 1];
+  return m.birthYear ? `${monthName} ${m.birthDay}, ${m.birthYear}` : `${monthName} ${m.birthDay}`;
+}
 
 // Suggests the next member number: highest existing numeric value + 1,
 // zero-padded to at least 3 digits. Admin can accept or override on the

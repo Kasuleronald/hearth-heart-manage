@@ -202,6 +202,7 @@ function CellDetail() {
                     </Button>
                   </DialogTrigger>
                   <MeetingDialog
+                    key={editingMeeting?.id ?? "new"}
                     cellId={cell.id}
                     cellName={cell.name}
                     cellBranchId={cell.branchId}
