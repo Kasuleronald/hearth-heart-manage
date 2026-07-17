@@ -3,7 +3,9 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Handshake } from "lucide-react";
 import { db, deletePartnerCascade, uid, type Partner } from "@/lib/db";
-import { formatUGX } from "@/lib/currency";
+import { useBaseCurrency } from "@/lib/currency";
+import { useDisplayCurrency } from "@/lib/currency-toggle";
+import { CurrencyToggle } from "@/components/currency-toggle";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useSession, canAccessPartners } from "@/lib/auth";
+import { useSession, canAccessPartners, canToggleCurrency } from "@/lib/auth";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/partners")({
@@ -50,6 +52,8 @@ function PartnersPage() {
   const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
   const [editing, setEditing] = useState<Partner | null>(null);
   const [open, setOpen] = useState(false);
+  const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
+  const { format: formatAmount, base } = useDisplayCurrency(canToggle);
 
   useEffect(() => {
     if (session && !canAccessPartners(session.role, session.financeTier)) {
@@ -65,24 +69,27 @@ function PartnersPage() {
         title="Partners"
         description="External individuals, organizations and churches that partner with you financially."
         actions={
-          <Dialog
-            open={open}
-            onOpenChange={(o) => {
-              setOpen(o);
-              if (!o) setEditing(null);
-            }}
-          >
-            <DialogTrigger asChild>
-              <Button onClick={() => setEditing(null)}>
-                <Plus className="mr-2 h-4 w-4" /> New partner
-              </Button>
-            </DialogTrigger>
-            <PartnerDialog
-              partner={editing}
-              currentUserId={session.userId}
-              onClose={() => setOpen(false)}
-            />
-          </Dialog>
+          <div className="flex items-center gap-2">
+            {canToggle && <CurrencyToggle baseCode={base.code} />}
+            <Dialog
+              open={open}
+              onOpenChange={(o) => {
+                setOpen(o);
+                if (!o) setEditing(null);
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button onClick={() => setEditing(null)}>
+                  <Plus className="mr-2 h-4 w-4" /> New partner
+                </Button>
+              </DialogTrigger>
+              <PartnerDialog
+                partner={editing}
+                currentUserId={session.userId}
+                onClose={() => setOpen(false)}
+              />
+            </Dialog>
+          </div>
         }
       />
 
@@ -140,12 +147,12 @@ function PartnersPage() {
 
                 <div className="mt-4 space-y-1 text-sm">
                   <div>
-                    <span className="font-medium">{formatUGX(totalGiven)}</span>{" "}
+                    <span className="font-medium">{formatAmount(totalGiven)}</span>{" "}
                     <span className="text-xs text-muted-foreground">given to date</span>
                   </div>
                   {!!p.pledgeAmount && (
                     <div className="text-xs text-muted-foreground">
-                      Pledged: {formatUGX(p.pledgeAmount)}
+                      Pledged: {formatAmount(p.pledgeAmount)}
                     </div>
                   )}
                 </div>
@@ -191,6 +198,7 @@ function PartnerDialog({
   );
   const [notes, setNotes] = useState(partner?.notes ?? "");
   const [branchId, setBranchId] = useState(partner?.branchId ?? "");
+  const baseCurrency = useBaseCurrency();
 
   async function save() {
     if (!name.trim()) return toast.error("Name is required");
@@ -259,7 +267,7 @@ function PartnerDialog({
           </div>
         </div>
         <div className="space-y-1.5">
-          <Label>Pledged amount (UGX)</Label>
+          <Label>Pledged amount ({baseCurrency.code})</Label>
           <Input
             type="number"
             min="0"

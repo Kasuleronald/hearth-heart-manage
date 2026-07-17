@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { Plus, Pencil, HandCoins } from "lucide-react";
 import { db, uid, type Giving, type GivingCategory, type Partner, type Project } from "@/lib/db";
 import { ExportMenu } from "@/components/export-menu";
-import { formatUGX } from "@/lib/currency";
+import { useBaseCurrency } from "@/lib/currency";
+import { useDisplayCurrency } from "@/lib/currency-toggle";
+import { CurrencyToggle } from "@/components/currency-toggle";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,7 +41,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useSession, canAccessGivings } from "@/lib/auth";
+import { useSession, canAccessGivings, canToggleCurrency } from "@/lib/auth";
 import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -72,6 +74,8 @@ function GivingsPage() {
   const [editing, setEditing] = useState<Giving | null>(null);
   const [open, setOpen] = useState(false);
   const effectiveBranch = useEffectiveBranch(session?.branchId);
+  const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
+  const { format: formatAmount, convert, displayCode, base } = useDisplayCurrency(canToggle);
 
   useEffect(() => {
     if (session && !canAccessGivings(session.role)) navigate({ to: "/dashboard", replace: true });
@@ -116,13 +120,14 @@ function GivingsPage() {
         description="Love offerings, tithes, first fruits, seeds and project giving."
         actions={
           <div className="flex gap-2">
+            {canToggle && <CurrencyToggle baseCode={base.code} />}
             <ExportMenu
               filename="givings"
               title="Givings"
               headers={[
                 "Date",
                 "Category",
-                "Amount (UGX)",
+                `Amount (${displayCode})`,
                 "Giver",
                 "Project",
                 "Notes",
@@ -133,7 +138,7 @@ function GivingsPage() {
                 return [
                   g.date,
                   CATEGORY_LABEL[g.category],
-                  String(g.amount),
+                  String(convert(g.amount)),
                   giverName(g),
                   projectName(g),
                   g.notes ?? "",
@@ -171,7 +176,7 @@ function GivingsPage() {
           <Card key={c.value}>
             <CardContent className="p-4">
               <div className="text-xs text-muted-foreground">{c.label}</div>
-              <div className="mt-1 font-display text-lg font-semibold">{formatUGX(c.total)}</div>
+              <div className="mt-1 font-display text-lg font-semibold">{formatAmount(c.total)}</div>
               <div className="text-[10px] text-muted-foreground">this month</div>
             </CardContent>
           </Card>
@@ -223,7 +228,7 @@ function GivingsPage() {
                           : CATEGORY_LABEL[g.category]}
                       </Badge>
                     </TableCell>
-                    <TableCell className="font-medium">{formatUGX(g.amount)}</TableCell>
+                    <TableCell className="font-medium">{formatAmount(g.amount)}</TableCell>
                     <TableCell className="text-muted-foreground">{giverName(g)}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {addedBy?.fullName ?? "—"}
@@ -308,6 +313,7 @@ function GivingDialog({
   const [date, setDate] = useState(giving?.date ?? format(new Date(), "yyyy-MM-dd"));
   const [notes, setNotes] = useState(giving?.notes ?? "");
   const [branchId, setBranchId] = useState(giving?.branchId ?? "");
+  const baseCurrency = useBaseCurrency();
 
   async function save() {
     const numericAmount = Number(amount);
@@ -351,7 +357,7 @@ function GivingDialog({
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label>Amount (UGX)</Label>
+            <Label>Amount ({baseCurrency.code})</Label>
             <Input
               type="number"
               min="0"

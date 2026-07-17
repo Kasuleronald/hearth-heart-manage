@@ -3,10 +3,12 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
 import { ArrowLeft, Plus, Pencil, Wallet, Check } from "lucide-react";
 import { db, uid, type CellMeeting, type Member } from "@/lib/db";
-import { formatUGX } from "@/lib/currency";
+import { useBaseCurrency, formatCurrency } from "@/lib/currency";
+import { useDisplayCurrency } from "@/lib/currency-toggle";
 import { generateReportRef, getCellBalance } from "@/lib/finance";
 import { notifyCellReportSubmitted } from "@/lib/notifications";
 import { PageHeader } from "@/components/page-header";
+import { CurrencyToggle } from "@/components/currency-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,6 +32,7 @@ import {
   canAccessRecordBranch,
   canRecordOffertoryReceived,
   canApproveEditRequest,
+  canToggleCurrency,
 } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { format } from "date-fns";
@@ -59,6 +62,8 @@ function CellDetail() {
   const [editingMeeting, setEditingMeeting] = useState<CellMeeting | null>(null);
   const [attMeeting, setAttMeeting] = useState<CellMeeting | null>(null);
   const [recordingMeeting, setRecordingMeeting] = useState<CellMeeting | null>(null);
+  const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
+  const { format: formatAmount, base } = useDisplayCurrency(canToggle);
 
   if (cell === undefined) return null;
   if (!cell) throw notFound();
@@ -98,10 +103,11 @@ function CellDetail() {
                         : "font-medium text-foreground"
                   }
                 >
-                  {formatUGX(balance)}
+                  {formatAmount(balance)}
                 </span>
               </span>
             )}
+            {canToggle && <CurrencyToggle baseCode={base.code} />}
             Leader: <span className="text-foreground">{leader?.fullName ?? "Unassigned"}</span>
           </div>
         }
@@ -225,8 +231,8 @@ function CellDetail() {
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           {m.topic && <span>{m.topic}</span>}
                           <span>
-                            Reported {formatUGX(m.offertoryReported)} • Received{" "}
-                            {formatUGX(m.offertoryReceived)}
+                            Reported {formatAmount(m.offertoryReported)} • Received{" "}
+                            {formatAmount(m.offertoryReceived)}
                           </span>
                         </div>
                       </button>
@@ -362,6 +368,7 @@ function MeetingDialog({
   const [offertoryReported, setOffertoryReported] = useState(
     meeting ? String(meeting.offertoryReported) : "",
   );
+  const baseCurrency = useBaseCurrency();
   return (
     <DialogContent>
       <DialogHeader>
@@ -389,7 +396,7 @@ function MeetingDialog({
           <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
         <div className="space-y-1.5">
-          <Label>Offertory reported (UGX)</Label>
+          <Label>Offertory reported ({baseCurrency.code})</Label>
           <Input
             type="number"
             min="0"
@@ -456,6 +463,7 @@ function MeetingDialog({
 
 function RecordReceivedDialog({ meeting, onClose }: { meeting: CellMeeting; onClose: () => void }) {
   const [amount, setAmount] = useState(String(meeting.offertoryReceived));
+  const baseCurrency = useBaseCurrency();
 
   async function save() {
     const numericAmount = Number(amount);
@@ -482,12 +490,14 @@ function RecordReceivedDialog({ meeting, onClose }: { meeting: CellMeeting; onCl
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
           The cell leader reported{" "}
-          <span className="text-foreground">{formatUGX(meeting.offertoryReported)}</span> (ref{" "}
-          {meeting.reportRef}). Enter what was actually received — it can be less than, equal to, or
-          more than the reported amount.
+          <span className="text-foreground">
+            {formatCurrency(meeting.offertoryReported, baseCurrency.code)}
+          </span>{" "}
+          (ref {meeting.reportRef}). Enter what was actually received — it can be less than, equal
+          to, or more than the reported amount.
         </p>
         <div className="space-y-1.5">
-          <Label>Amount received (UGX)</Label>
+          <Label>Amount received ({baseCurrency.code})</Label>
           <Input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </div>
         <DialogFooter>

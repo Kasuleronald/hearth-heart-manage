@@ -3,8 +3,10 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
 import { ArrowLeft, Plus, Pencil } from "lucide-react";
 import { db, uid, type ClassSession, type Member } from "@/lib/db";
-import { formatUGX } from "@/lib/currency";
+import { useBaseCurrency } from "@/lib/currency";
+import { useDisplayCurrency } from "@/lib/currency-toggle";
 import { PageHeader } from "@/components/page-header";
+import { CurrencyToggle } from "@/components/currency-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,7 +23,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { useSession, canEditClass, canAccessRecordBranch } from "@/lib/auth";
+import { useSession, canEditClass, canAccessRecordBranch, canToggleCurrency } from "@/lib/auth";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -51,6 +53,8 @@ function ClassDetail() {
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
   const [editingSession, setEditingSession] = useState<ClassSession | null>(null);
   const [attSession, setAttSession] = useState<ClassSession | null>(null);
+  const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
+  const { format: formatAmount, base } = useDisplayCurrency(canToggle);
 
   if (cls === undefined) return null;
   if (!cls) throw notFound();
@@ -70,7 +74,8 @@ function ClassDetail() {
         title={cls.name}
         description={`${cls.meetingDay ?? "Any day"} • ${cls.meetingLocation ?? "—"}`}
         actions={
-          <div className="text-sm text-muted-foreground">
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            {canToggle && <CurrencyToggle baseCode={base.code} />}
             Facilitator:{" "}
             <span className="text-foreground">{facilitator?.fullName ?? "Unassigned"}</span>
           </div>
@@ -184,7 +189,7 @@ function ClassDetail() {
                     <div className="font-medium">{format(new Date(s.date), "PPP")}</div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       {s.topic && <span>{s.topic}</span>}
-                      {!!s.offertoryAmount && <span>{formatUGX(s.offertoryAmount)}</span>}
+                      {!!s.offertoryAmount && <span>{formatAmount(s.offertoryAmount)}</span>}
                     </div>
                   </button>
                   {canEdit && (
@@ -257,6 +262,7 @@ function SessionDialog({
   const [offertoryAmount, setOffertoryAmount] = useState(
     session?.offertoryAmount != null ? String(session.offertoryAmount) : "",
   );
+  const baseCurrency = useBaseCurrency();
   return (
     <DialogContent>
       <DialogHeader>
@@ -282,7 +288,7 @@ function SessionDialog({
           <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
         <div className="space-y-1.5">
-          <Label>Offertory (UGX)</Label>
+          <Label>Offertory ({baseCurrency.code})</Label>
           <Input
             type="number"
             min="0"

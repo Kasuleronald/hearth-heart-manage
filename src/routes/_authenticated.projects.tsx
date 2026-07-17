@@ -3,7 +3,9 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
 import { Plus, Pencil, Target } from "lucide-react";
 import { db, deleteProjectCascade, uid, type Project } from "@/lib/db";
-import { formatUGX } from "@/lib/currency";
+import { useBaseCurrency } from "@/lib/currency";
+import { useDisplayCurrency } from "@/lib/currency-toggle";
+import { CurrencyToggle } from "@/components/currency-toggle";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +24,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { useSession, canManageProjects } from "@/lib/auth";
+import { useSession, canManageProjects, canToggleCurrency } from "@/lib/auth";
 import { toast } from "sonner";
 import { startOfWeek, startOfMonth, format } from "date-fns";
 
@@ -39,6 +41,8 @@ function ProjectsPage() {
   const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
   const [editing, setEditing] = useState<Project | null>(null);
   const [open, setOpen] = useState(false);
+  const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
+  const { format: formatAmount, base } = useDisplayCurrency(canToggle);
 
   const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd");
   const monthStart = format(startOfMonth(new Date()), "yyyy-MM-dd");
@@ -49,26 +53,29 @@ function ProjectsPage() {
         title="Projects"
         description="Building funds, Bible distribution, and other church-wide initiatives."
         actions={
-          canManage && (
-            <Dialog
-              open={open}
-              onOpenChange={(o) => {
-                setOpen(o);
-                if (!o) setEditing(null);
-              }}
-            >
-              <DialogTrigger asChild>
-                <Button onClick={() => setEditing(null)}>
-                  <Plus className="mr-2 h-4 w-4" /> New project
-                </Button>
-              </DialogTrigger>
-              <ProjectDialog
-                project={editing}
-                currentUserId={session?.userId}
-                onClose={() => setOpen(false)}
-              />
-            </Dialog>
-          )
+          <div className="flex items-center gap-2">
+            {canToggle && <CurrencyToggle baseCode={base.code} />}
+            {canManage && (
+              <Dialog
+                open={open}
+                onOpenChange={(o) => {
+                  setOpen(o);
+                  if (!o) setEditing(null);
+                }}
+              >
+                <DialogTrigger asChild>
+                  <Button onClick={() => setEditing(null)}>
+                    <Plus className="mr-2 h-4 w-4" /> New project
+                  </Button>
+                </DialogTrigger>
+                <ProjectDialog
+                  project={editing}
+                  currentUserId={session?.userId}
+                  onClose={() => setOpen(false)}
+                />
+              </Dialog>
+            )}
+          </div>
         }
       />
 
@@ -128,18 +135,33 @@ function ProjectsPage() {
 
                 <div className="mt-4 space-y-3">
                   {p.financialTarget ? (
-                    <TargetRow label="Overall" raised={totalRaised} target={p.financialTarget} />
+                    <TargetRow
+                      label="Overall"
+                      raised={totalRaised}
+                      target={p.financialTarget}
+                      format={formatAmount}
+                    />
                   ) : (
                     <div className="text-sm">
-                      <span className="font-medium">{formatUGX(totalRaised)}</span>{" "}
+                      <span className="font-medium">{formatAmount(totalRaised)}</span>{" "}
                       <span className="text-xs text-muted-foreground">raised so far</span>
                     </div>
                   )}
                   {!!p.monthlyTarget && (
-                    <TargetRow label="This month" raised={thisMonth} target={p.monthlyTarget} />
+                    <TargetRow
+                      label="This month"
+                      raised={thisMonth}
+                      target={p.monthlyTarget}
+                      format={formatAmount}
+                    />
                   )}
                   {!!p.weeklyTarget && (
-                    <TargetRow label="This week" raised={thisWeek} target={p.weeklyTarget} />
+                    <TargetRow
+                      label="This week"
+                      raised={thisWeek}
+                      target={p.weeklyTarget}
+                      format={formatAmount}
+                    />
                   )}
                 </div>
 
@@ -172,14 +194,24 @@ function ProjectsPage() {
   );
 }
 
-function TargetRow({ label, raised, target }: { label: string; raised: number; target: number }) {
+function TargetRow({
+  label,
+  raised,
+  target,
+  format,
+}: {
+  label: string;
+  raised: number;
+  target: number;
+  format: (amount: number) => string;
+}) {
   const pct = target > 0 ? Math.min(100, Math.round((raised / target) * 100)) : 0;
   return (
     <div>
       <div className="flex items-center justify-between text-xs">
         <span className="text-muted-foreground">{label}</span>
         <span className="text-muted-foreground">
-          {formatUGX(raised)} / {formatUGX(target)}
+          {format(raised)} / {format(target)}
         </span>
       </div>
       <Progress value={pct} className="mt-1" />
@@ -208,6 +240,7 @@ function ProjectDialog({
     project?.monthlyTarget != null ? String(project.monthlyTarget) : "",
   );
   const [branchId, setBranchId] = useState(project?.branchId ?? "");
+  const baseCurrency = useBaseCurrency();
 
   function parseAmount(v: string): number | undefined {
     if (!v) return undefined;
@@ -262,7 +295,7 @@ function ProjectDialog({
           />
         </div>
         <div className="space-y-1.5">
-          <Label>Overall financial target (UGX)</Label>
+          <Label>Overall financial target ({baseCurrency.code})</Label>
           <Input
             type="number"
             min="0"
@@ -272,7 +305,7 @@ function ProjectDialog({
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label>Weekly target (UGX)</Label>
+            <Label>Weekly target ({baseCurrency.code})</Label>
             <Input
               type="number"
               min="0"
@@ -281,7 +314,7 @@ function ProjectDialog({
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Monthly target (UGX)</Label>
+            <Label>Monthly target ({baseCurrency.code})</Label>
             <Input
               type="number"
               min="0"

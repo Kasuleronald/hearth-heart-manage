@@ -3,8 +3,9 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useState } from "react";
 import { Plus, Check, X, ClipboardList } from "lucide-react";
 import { db, type Requisition } from "@/lib/db";
-import { formatUGX } from "@/lib/currency";
+import { useDisplayCurrency } from "@/lib/currency-toggle";
 import { RequisitionDialog } from "@/components/requisition-dialog";
+import { CurrencyToggle } from "@/components/currency-toggle";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +24,7 @@ import {
   canSubmitRequisitions,
   canViewRequisitions,
   canDecideRequisitions,
+  canToggleCurrency,
 } from "@/lib/auth";
 import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
 import { toast } from "sonner";
@@ -47,6 +49,8 @@ function RequisitionsPage() {
   const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
   const [open, setOpen] = useState(false);
   const effectiveBranch = useEffectiveBranch(session?.branchId);
+  const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
+  const { format: formatAmount, base } = useDisplayCurrency(canToggle);
 
   useEffect(() => {
     if (session && !canViewRequisitions(session.role, session.financeTier)) {
@@ -88,22 +92,25 @@ function RequisitionsPage() {
         title="Requisitions"
         description="Departmental funding requests, submitted for Admin, Treasurer, or Pastor approval."
         actions={
-          canSubmit && (
-            <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" /> Submit requisition
-                </Button>
-              </DialogTrigger>
-              {open && (
-                <RequisitionDialog
-                  departments={departments}
-                  currentUserId={session.userId}
-                  onClose={() => setOpen(false)}
-                />
-              )}
-            </Dialog>
-          )
+          <div className="flex items-center gap-2">
+            {canToggle && <CurrencyToggle baseCode={base.code} />}
+            {canSubmit && (
+              <Dialog open={open} onOpenChange={setOpen}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="mr-2 h-4 w-4" /> Submit requisition
+                  </Button>
+                </DialogTrigger>
+                {open && (
+                  <RequisitionDialog
+                    departments={departments}
+                    currentUserId={session.userId}
+                    onClose={() => setOpen(false)}
+                  />
+                )}
+              </Dialog>
+            )}
+          </div>
         }
       />
 
@@ -129,7 +136,7 @@ function RequisitionsPage() {
                     {format(new Date(r.createdAt), "MMM d, yyyy")}
                   </TableCell>
                   <TableCell>{departmentName(r.departmentId)}</TableCell>
-                  <TableCell className="font-medium">{formatUGX(r.amount)}</TableCell>
+                  <TableCell className="font-medium">{formatAmount(r.amount)}</TableCell>
                   <TableCell className="text-muted-foreground">{r.reason}</TableCell>
                   <TableCell className="text-muted-foreground">{userName(r.requestedBy)}</TableCell>
                   <TableCell>

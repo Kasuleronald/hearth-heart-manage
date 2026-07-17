@@ -4,9 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { format, subDays } from "date-fns";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
 import { db } from "@/lib/db";
-import { useSession, canAccessGivings } from "@/lib/auth";
+import { useSession, canAccessGivings, canToggleCurrency } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
+import { useDisplayCurrency } from "@/lib/currency-toggle";
+import { CurrencyToggle } from "@/components/currency-toggle";
 import {
   buildAttendanceReport,
   buildGivingsReport,
@@ -76,6 +78,8 @@ function ReportsPage() {
   const projects = useLiveQuery(() => db.projects.toArray(), []) ?? [];
   const branches = useLiveQuery(() => db.branches.orderBy("name").toArray(), []) ?? [];
   const effectiveBranch = useEffectiveBranch(session?.branchId);
+  const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
+  const { convert, displayCode, base } = useDisplayCurrency(canToggle);
 
   // Scope every input to the current branch filter before handing it to the
   // (branch-agnostic) report builders — church-wide records still show
@@ -122,7 +126,7 @@ function ReportsPage() {
           events: scopedEvents,
           projects: scopedProjects,
         });
-        return buildGivingsReport(entries, from, to);
+        return buildGivingsReport(entries, from, to, displayCode, convert);
       }
       case "membership":
         return buildMembershipReport(scopedMembers, users, from, to);
@@ -140,6 +144,8 @@ function ReportsPage() {
           from,
           to,
           cellSingular,
+          displayCode,
+          convert,
         );
     }
   }, [
@@ -159,6 +165,8 @@ function ReportsPage() {
     users,
     cellSingular,
     scopedProjects,
+    displayCode,
+    convert,
   ]);
 
   // "Compare totals per branch" dimension: only meaningful in the church-wide
@@ -216,7 +224,7 @@ function ReportsPage() {
             events: bEvents,
             projects: bProjects,
           });
-          r = buildGivingsReport(entries, from, to);
+          r = buildGivingsReport(entries, from, to, displayCode, convert);
           break;
         }
         case "membership":
@@ -236,6 +244,8 @@ function ReportsPage() {
             from,
             to,
             cellSingular,
+            displayCode,
+            convert,
           );
           break;
       }
@@ -260,6 +270,8 @@ function ReportsPage() {
     projects,
     users,
     cellSingular,
+    displayCode,
+    convert,
   ]);
 
   if (!session || !canAccessGivings(session.role)) return null;
@@ -302,7 +314,8 @@ function ReportsPage() {
             <Label>To</Label>
             <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            {canToggle && <CurrencyToggle baseCode={base.code} />}
             <ExportMenu
               filename={`${reportType}-report`}
               title={reportLabel}

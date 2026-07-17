@@ -4,8 +4,10 @@ import { useState } from "react";
 import { Plus, Pencil } from "lucide-react";
 import { db, deleteEventCascade, uid, type ChurchEvent, type EventType } from "@/lib/db";
 import { notifyEventCreated } from "@/lib/notifications";
-import { formatUGX } from "@/lib/currency";
+import { useBaseCurrency } from "@/lib/currency";
+import { useDisplayCurrency } from "@/lib/currency-toggle";
 import { PageHeader } from "@/components/page-header";
+import { CurrencyToggle } from "@/components/currency-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useSession, canManageEvents } from "@/lib/auth";
+import { useSession, canManageEvents, canToggleCurrency } from "@/lib/auth";
 import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -53,6 +55,8 @@ function EventsPage() {
   const events = allEvents.filter((e) => matchesBranchFilter(effectiveBranch, e.branchId));
   const [editing, setEditing] = useState<ChurchEvent | null>(null);
   const [open, setOpen] = useState(false);
+  const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
+  const { format: formatAmount, base } = useDisplayCurrency(canToggle);
 
   return (
     <div>
@@ -60,26 +64,29 @@ function EventsPage() {
         title="Events"
         description="Services, prayer meetings and special gatherings."
         actions={
-          canManage && (
-            <Dialog
-              open={open}
-              onOpenChange={(o) => {
-                setOpen(o);
-                if (!o) setEditing(null);
-              }}
-            >
-              <DialogTrigger asChild>
-                <Button onClick={() => setEditing(null)}>
-                  <Plus className="mr-2 h-4 w-4" /> New event
-                </Button>
-              </DialogTrigger>
-              <EventDialog
-                event={editing}
-                currentUserId={session?.userId}
-                onClose={() => setOpen(false)}
-              />
-            </Dialog>
-          )
+          <div className="flex items-center gap-2">
+            {canToggle && <CurrencyToggle baseCode={base.code} />}
+            {canManage && (
+              <Dialog
+                open={open}
+                onOpenChange={(o) => {
+                  setOpen(o);
+                  if (!o) setEditing(null);
+                }}
+              >
+                <DialogTrigger asChild>
+                  <Button onClick={() => setEditing(null)}>
+                    <Plus className="mr-2 h-4 w-4" /> New event
+                  </Button>
+                </DialogTrigger>
+                <EventDialog
+                  event={editing}
+                  currentUserId={session?.userId}
+                  onClose={() => setOpen(false)}
+                />
+              </Dialog>
+            )}
+          </div>
         }
       />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -132,7 +139,7 @@ function EventsPage() {
                 </Badge>
                 {!!e.offertoryAmount && (
                   <span className="text-xs text-muted-foreground">
-                    {formatUGX(e.offertoryAmount)}
+                    {formatAmount(e.offertoryAmount)}
                   </span>
                 )}
               </div>
@@ -163,6 +170,7 @@ function EventDialog({
     event?.offertoryAmount != null ? String(event.offertoryAmount) : "",
   );
   const [branchId, setBranchId] = useState(event?.branchId ?? "");
+  const baseCurrency = useBaseCurrency();
 
   async function save() {
     if (!title.trim()) return toast.error("Title required");
@@ -243,7 +251,7 @@ function EventDialog({
           </p>
         </div>
         <div className="space-y-1.5">
-          <Label>Offertory (UGX)</Label>
+          <Label>Offertory ({baseCurrency.code})</Label>
           <Input
             type="number"
             min="0"

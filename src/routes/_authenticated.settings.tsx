@@ -1,9 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Download, Upload, Database, Tag } from "lucide-react";
+import { Download, Upload, Database, Tag, Coins } from "lucide-react";
 import { exportDatabase, importDatabase, type DatabaseBackup } from "@/lib/db";
 import { downloadJson } from "@/lib/download";
 import { TERM_DEFINITIONS, useTerm, setTerm } from "@/lib/terminology";
+import { useBaseCurrency, setBaseCurrency, DEFAULT_BASE_RATE } from "@/lib/currency";
+import { CurrencyCombobox } from "@/components/currency-combobox";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,7 +37,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { useSession } from "@/lib/auth";
+import { useSession, canManageCurrencySettings } from "@/lib/auth";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -62,6 +64,7 @@ function SettingsPage() {
       <PageHeader title="Settings" description="Back up and restore your church's data." />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <TerminologyCard />
+        {canManageCurrencySettings(session.role) && <CurrencyCard />}
         <ExportCard />
         <ImportCard />
       </div>
@@ -144,6 +147,73 @@ function TermRow({ def }: { def: (typeof TERM_DEFINITIONS)[number] }) {
         />
       </TableCell>
     </TableRow>
+  );
+}
+
+function CurrencyCard() {
+  const { code, rate, updatedAt } = useBaseCurrency();
+  const [editCode, setEditCode] = useState(code);
+  const [editRate, setEditRate] = useState(String(rate));
+
+  useEffect(() => {
+    setEditCode(code);
+    setEditRate(String(rate));
+  }, [code, rate]);
+
+  async function save() {
+    const numericRate = Number(editRate);
+    if (!editCode) {
+      toast.error("Select a currency");
+      return;
+    }
+    if (!editRate || Number.isNaN(numericRate) || numericRate <= 0) {
+      toast.error("Enter a valid exchange rate");
+      return;
+    }
+    try {
+      await setBaseCurrency(editCode, numericRate);
+      toast.success("Currency settings updated");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save");
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="font-display flex items-center gap-2">
+          <Coins className="h-5 w-5" /> Currency
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          The currency every amount is entered and stored in. Treasurer, Admin, and Tier-A finance
+          leaders can toggle a USD view using the rate below — everyone else only ever sees this
+          base currency.
+        </p>
+        <div className="space-y-1.5">
+          <Label>Base currency</Label>
+          <CurrencyCombobox value={editCode} onChange={setEditCode} />
+        </div>
+        <div className="space-y-1.5">
+          <Label>{editCode || "Base"} per 1 USD</Label>
+          <Input
+            type="number"
+            min="0"
+            step="any"
+            value={editRate}
+            onChange={(e) => setEditRate(e.target.value)}
+            placeholder={String(DEFAULT_BASE_RATE)}
+          />
+          <p className="text-xs text-muted-foreground">
+            {updatedAt
+              ? `Last updated ${new Date(updatedAt).toLocaleString()}`
+              : "Not set yet — using a default rate."}
+          </p>
+        </div>
+        <Button onClick={save}>Save currency settings</Button>
+      </CardContent>
+    </Card>
   );
 }
 

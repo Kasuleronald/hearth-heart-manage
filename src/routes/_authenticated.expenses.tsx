@@ -3,9 +3,11 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Receipt } from "lucide-react";
 import { db, uid, type Department, type Expense } from "@/lib/db";
-import { formatUGX } from "@/lib/currency";
+import { useBaseCurrency } from "@/lib/currency";
+import { useDisplayCurrency } from "@/lib/currency-toggle";
 import { ExportMenu } from "@/components/export-menu";
 import { BranchField } from "@/components/branch-field";
+import { CurrencyToggle } from "@/components/currency-toggle";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,7 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useSession, canEnterExpenses } from "@/lib/auth";
+import { useSession, canEnterExpenses, canToggleCurrency } from "@/lib/auth";
 import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -55,6 +57,8 @@ function ExpensesPage() {
   const [editing, setEditing] = useState<Expense | null>(null);
   const [open, setOpen] = useState(false);
   const effectiveBranch = useEffectiveBranch(session?.branchId);
+  const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
+  const { format: formatAmount, convert, displayCode, base } = useDisplayCurrency(canToggle);
 
   useEffect(() => {
     if (session && !canEnterExpenses(session.role)) navigate({ to: "/dashboard", replace: true });
@@ -75,16 +79,23 @@ function ExpensesPage() {
         description="Money spent by each department — always tied to one, so departmental totals stay complete."
         actions={
           <div className="flex gap-2">
+            {canToggle && <CurrencyToggle baseCode={base.code} />}
             <ExportMenu
               filename="expenses"
               title="Expenses"
-              headers={["Date", "Department", "Amount (UGX)", "Description", "Entered by"]}
+              headers={[
+                "Date",
+                "Department",
+                `Amount (${displayCode})`,
+                "Description",
+                "Entered by",
+              ]}
               rows={filtered.map((e) => {
                 const enteredBy = users.find((u) => u.id === e.enteredBy);
                 return [
                   format(new Date(e.createdAt), "MMM d, yyyy"),
                   departmentName(e.departmentId),
-                  String(e.amount),
+                  String(convert(e.amount)),
                   e.description,
                   enteredBy?.fullName ?? "",
                 ];
@@ -135,7 +146,7 @@ function ExpensesPage() {
                       {format(new Date(e.createdAt), "MMM d, yyyy")}
                     </TableCell>
                     <TableCell>{departmentName(e.departmentId)}</TableCell>
-                    <TableCell className="font-medium">{formatUGX(e.amount)}</TableCell>
+                    <TableCell className="font-medium">{formatAmount(e.amount)}</TableCell>
                     <TableCell className="text-muted-foreground">{e.description}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {enteredBy?.fullName ?? "—"}
@@ -207,6 +218,7 @@ function ExpenseDialog({
   const [amount, setAmount] = useState(expense ? String(expense.amount) : "");
   const [description, setDescription] = useState(expense?.description ?? "");
   const [branchId, setBranchId] = useState(expense?.branchId ?? "");
+  const baseCurrency = useBaseCurrency();
 
   async function save() {
     if (!departmentId) {
@@ -268,7 +280,7 @@ function ExpenseDialog({
           )}
         </div>
         <div className="space-y-1.5">
-          <Label>Amount (UGX)</Label>
+          <Label>Amount ({baseCurrency.code})</Label>
           <Input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </div>
         <div className="space-y-1.5">

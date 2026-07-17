@@ -2,8 +2,8 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { ArrowLeft } from "lucide-react";
 import { db, uid } from "@/lib/db";
-import { useSession, canAccessRecordBranch } from "@/lib/auth";
-import { formatUGX } from "@/lib/currency";
+import { useSession, canAccessRecordBranch, canToggleCurrency } from "@/lib/auth";
+import { useDisplayCurrency } from "@/lib/currency-toggle";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { AttendanceBreakdown } from "@/components/attendance-breakdown";
 import { MemberCombobox } from "@/components/member-combobox";
+import { CurrencyToggle } from "@/components/currency-toggle";
 import { format } from "date-fns";
 
 export const Route = createFileRoute("/_authenticated/events/$id")({
@@ -27,6 +28,8 @@ function EventDetail() {
   const members = useLiveQuery(() => db.members.orderBy("lastName").toArray(), []) ?? [];
   const attendance =
     useLiveQuery(() => db.eventAttendance.where("eventId").equals(id).toArray(), [id]) ?? [];
+  const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
+  const { format: formatAmount, base } = useDisplayCurrency(canToggle);
 
   if (event === undefined) return null;
   if (!event) throw notFound();
@@ -70,8 +73,9 @@ function EventDetail() {
               {presentCount} present
             </Badge>
             {!!event.offertoryAmount && (
-              <Badge variant="secondary">{formatUGX(event.offertoryAmount)}</Badge>
+              <Badge variant="secondary">{formatAmount(event.offertoryAmount)}</Badge>
             )}
+            {canToggle && <CurrencyToggle baseCode={base.code} />}
           </div>
         }
       />

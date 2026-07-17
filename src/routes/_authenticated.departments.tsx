@@ -10,7 +10,7 @@ import {
   seedDefaultDepartments,
   type Department,
 } from "@/lib/db";
-import { formatUGX } from "@/lib/currency";
+import { useBaseCurrency, formatCurrency } from "@/lib/currency";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +47,7 @@ function DepartmentsPage() {
   const navigate = useNavigate();
   const { session } = useSession();
   const canManage = session ? canManageDepartments(session.role) : false;
+  const baseCurrency = useBaseCurrency();
   const effectiveBranch = useEffectiveBranch(session?.branchId);
   const allDepartments = useLiveQuery(() => db.departments.orderBy("name").toArray(), []) ?? [];
   const departments = allDepartments.filter((d) =>
@@ -176,7 +177,10 @@ function DepartmentsPage() {
                 </div>
                 {expenseTotal > 0 && (
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Expenses: <span className="text-foreground">{formatUGX(expenseTotal)}</span>
+                    Expenses:{" "}
+                    <span className="text-foreground">
+                      {formatCurrency(expenseTotal, baseCurrency.code)}
+                    </span>
                   </p>
                 )}
               </CardContent>

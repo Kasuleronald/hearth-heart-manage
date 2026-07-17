@@ -395,6 +395,15 @@ export function canRecordOffertoryReceived(role: Role, financeTier?: "A") {
 export function canApproveEditRequest(role: Role) {
   return role === "admin" || role === "treasurer";
 }
+// Currency toggle (§12): USD conversion is a finance-oversight feature, not
+// a general display preference — everyone else only ever sees the base
+// currency, regardless of the shared toggle state.
+export function canToggleCurrency(role: Role, financeTier?: "A") {
+  return role === "admin" || role === "treasurer" || isTierAFinanceLeader(role, financeTier);
+}
+export function canManageCurrencySettings(role: Role) {
+  return role === "admin";
+}
 // Branch-match check, layered on top of the role checks above: a church-wide
 // user (branchId undefined) can reach every record; a branch-scoped user can
 // only reach records in their own branch or church-wide records (branchId

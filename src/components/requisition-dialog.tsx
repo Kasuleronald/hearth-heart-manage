@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { db, uid, type Department } from "@/lib/db";
+import { useBaseCurrency } from "@/lib/currency";
 import { notifyRequisitionSubmitted } from "@/lib/notifications";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +28,7 @@ export function RequisitionDialog({
   const [departmentId, setDepartmentId] = useState("");
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
+  const baseCurrency = useBaseCurrency();
 
   async function save() {
     if (!departmentId) return toast.error("Select a department");
@@ -87,7 +89,7 @@ export function RequisitionDialog({
           )}
         </div>
         <div className="space-y-1.5">
-          <Label>Amount (UGX)</Label>
+          <Label>Amount ({baseCurrency.code})</Label>
           <Input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </div>
         <div className="space-y-1.5">

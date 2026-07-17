@@ -106,7 +106,13 @@ export function collectGivingEntries(data: {
   return entries;
 }
 
-export function buildGivingsReport(entries: GivingEntry[], from: string, to: string): ReportResult {
+export function buildGivingsReport(
+  entries: GivingEntry[],
+  from: string,
+  to: string,
+  currencyCode = "UGX",
+  convert: (amount: number) => number = (n) => n,
+): ReportResult {
   const filtered = entries.filter((e) => inRange(e.date, from, to));
 
   const totalsByCategory = Object.keys(GIVING_CATEGORY_LABELS)
@@ -118,22 +124,22 @@ export function buildGivingsReport(entries: GivingEntry[], from: string, to: str
 
   const chartData = totalsByCategory.map((c) => ({
     name: GIVING_CATEGORY_LABELS[c.category] ?? c.category,
-    total: c.total,
+    total: convert(c.total),
   }));
 
-  const tableHeaders = ["Date", "Category", "Source", "Amount (UGX)"];
+  const tableHeaders = ["Date", "Category", "Source", `Amount (${currencyCode})`];
   const tableRows = [...filtered]
     .sort((a, b) => (a.date < b.date ? 1 : -1))
     .map((e) => [
       e.date,
       GIVING_CATEGORY_LABELS[e.category] ?? e.category,
       e.source,
-      String(e.amount),
+      String(convert(e.amount)),
     ]);
 
   return {
     chartData,
-    chartSeries: [{ key: "total", label: "Total (UGX)" }],
+    chartSeries: [{ key: "total", label: `Total (${currencyCode})` }],
     tableHeaders,
     tableRows,
   };
@@ -322,6 +328,8 @@ export function buildGroupPerformanceReport(
   from: string,
   to: string,
   cellSingular: string = "Cell",
+  currencyCode = "UGX",
+  convert: (amount: number) => number = (n) => n,
 ): ReportResult {
   interface GroupRow {
     name: string;
@@ -380,7 +388,7 @@ export function buildGroupPerformanceReport(
     "Members",
     "Meetings/Sessions",
     "Avg attendance",
-    "Offertory total (UGX)",
+    `Offertory total (${currencyCode})`,
   ];
   const tableRows = rows.map((r) => [
     r.name,
@@ -388,7 +396,7 @@ export function buildGroupPerformanceReport(
     String(r.memberCount),
     String(r.occurrenceCount),
     String(r.avgAttendance),
-    String(r.offertoryTotal),
+    String(convert(r.offertoryTotal)),
   ]);
 
   return {
