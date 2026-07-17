@@ -295,6 +295,28 @@ function DepartmentField({
   );
 }
 
+// Only meaningful for leader/cell_leader roles — grants elevated finance
+// powers (viewing requisitions, managing Partners) without a new Role value.
+function FinanceTierField({
+  checked,
+  onCheckedChange,
+}: {
+  checked: boolean;
+  onCheckedChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-md border px-3 py-2">
+      <div>
+        <Label>Tier-A finance leader</Label>
+        <p className="text-xs text-muted-foreground">
+          Grants access to requisitions and Partners, alongside their normal role.
+        </p>
+      </div>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+    </div>
+  );
+}
+
 function MemberLinkField({
   members,
   isMember,
@@ -368,6 +390,7 @@ function NewUserDialog({
   const [isMember, setIsMember] = useState(false);
   const [memberId, setMemberId] = useState("");
   const [branchId, setBranchId] = useState("");
+  const [financeTierA, setFinanceTierA] = useState(false);
 
   async function save() {
     try {
@@ -383,6 +406,8 @@ function NewUserDialog({
         role,
         memberId: isMember ? memberId || undefined : undefined,
         branchId: branchId || undefined,
+        financeTier:
+          financeTierA && (role === "leader" || role === "cell_leader") ? "A" : undefined,
       });
       await resolveDepartmentAssignment(user.id, role, departmentChoice, otherDeptName);
       toast.success("User created");
@@ -436,6 +461,9 @@ function NewUserDialog({
             otherName={otherDeptName}
             onOtherNameChange={setOtherDeptName}
           />
+        )}
+        {(role === "leader" || role === "cell_leader") && (
+          <FinanceTierField checked={financeTierA} onCheckedChange={setFinanceTierA} />
         )}
         <MemberLinkField
           members={members}
@@ -498,6 +526,7 @@ function EditUserDialog({
   const [isMember, setIsMember] = useState(!!user.memberId);
   const [memberId, setMemberId] = useState(user.memberId ?? "");
   const [branchId, setBranchId] = useState(user.branchId ?? "");
+  const [financeTierA, setFinanceTierA] = useState(user.financeTier === "A");
 
   async function save() {
     try {
@@ -521,6 +550,8 @@ function EditUserDialog({
         role,
         memberId: isMember ? memberId || undefined : undefined,
         branchId: branchId || undefined,
+        financeTier:
+          financeTierA && (role === "leader" || role === "cell_leader") ? "A" : undefined,
       });
       await resolveDepartmentAssignment(user.id, role, departmentChoice, otherDeptName);
       toast.success("User updated");
@@ -567,6 +598,9 @@ function EditUserDialog({
             otherName={otherDeptName}
             onOtherNameChange={setOtherDeptName}
           />
+        )}
+        {(role === "leader" || role === "cell_leader") && (
+          <FinanceTierField checked={financeTierA} onCheckedChange={setFinanceTierA} />
         )}
         <MemberLinkField
           members={members}

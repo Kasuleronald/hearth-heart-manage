@@ -52,10 +52,12 @@ function PartnersPage() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    if (session && !canAccessPartners(session.role)) navigate({ to: "/dashboard", replace: true });
+    if (session && !canAccessPartners(session.role, session.financeTier)) {
+      navigate({ to: "/dashboard", replace: true });
+    }
   }, [session, navigate]);
 
-  if (!session || !canAccessPartners(session.role)) return null;
+  if (!session || !canAccessPartners(session.role, session.financeTier)) return null;
 
   return (
     <div>

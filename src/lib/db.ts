@@ -236,6 +236,21 @@ export interface Expense {
   createdAt: number;
 }
 
+export type RequisitionStatus = "pending" | "approved" | "rejected";
+
+export interface Requisition {
+  id: string;
+  requestedBy: string; // User.id
+  departmentId: string;
+  amount: number; // UGX
+  reason: string;
+  status: RequisitionStatus;
+  decidedBy?: string; // User.id
+  decidedAt?: number;
+  branchId?: string;
+  createdAt: number;
+}
+
 export interface Settings {
   key: string;
   value: string;
@@ -283,6 +298,7 @@ export class MyChurchDB extends Dexie {
   settings!: EntityTable<Settings, "key">;
   notifications!: EntityTable<Notification, "id">;
   expenses!: EntityTable<Expense, "id">;
+  requisitions!: EntityTable<Requisition, "id">;
 
   constructor() {
     super("my_church");
@@ -356,6 +372,9 @@ export class MyChurchDB extends Dexie {
     });
     this.version(9).stores({
       expenses: "id, departmentId",
+    });
+    this.version(10).stores({
+      requisitions: "id, requestedBy, departmentId, status",
     });
   }
 }
@@ -463,12 +482,13 @@ export async function unassignDepartmentLeader(userId: string) {
   await Promise.all(led.map((d) => db.departments.update(d.id, { leaderId: undefined })));
 }
 
-// Expense.departmentId is required (not optional), so unlike other cascades
-// an expense can't be left dangling with the link cleared — it's deleted
-// along with its department.
+// Expense.departmentId and Requisition.departmentId are both required (not
+// optional), so unlike other cascades those rows can't be left dangling with
+// the link cleared — they're deleted along with their department.
 export async function deleteDepartmentCascade(departmentId: string) {
-  await db.transaction("rw", [db.departments, db.expenses], async () => {
+  await db.transaction("rw", [db.departments, db.expenses, db.requisitions], async () => {
     await db.expenses.where("departmentId").equals(departmentId).delete();
+    await db.requisitions.where("departmentId").equals(departmentId).delete();
     await db.departments.delete(departmentId);
   });
 }
@@ -574,6 +594,7 @@ const BACKUP_TABLES = [
   "projects",
   "partners",
   "expenses",
+  "requisitions",
 ] as const;
 
 export interface DatabaseBackup {

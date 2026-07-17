@@ -1,11 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
+import { useState } from "react";
 import { db } from "@/lib/db";
-import { useSession } from "@/lib/auth";
+import { useSession, canSubmitRequisitions } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Users2, CalendarDays, TrendingUp, Cake } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogTrigger } from "@/components/ui/dialog";
+import { RequisitionDialog } from "@/components/requisition-dialog";
+import { Users, Users2, CalendarDays, TrendingUp, Cake, ClipboardList } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
 import { format, subDays } from "date-fns";
 
@@ -22,6 +26,9 @@ function Dashboard() {
   const cellMeetings =
     useLiveQuery(() => db.cellMeetings.orderBy("date").reverse().limit(20).toArray(), []) ?? [];
   const attendance = useLiveQuery(() => db.cellAttendance.toArray(), []) ?? [];
+  const departments = useLiveQuery(() => db.departments.orderBy("name").toArray(), []) ?? [];
+  const [requisitionOpen, setRequisitionOpen] = useState(false);
+  const canSubmit = session ? canSubmitRequisitions(session.role) : false;
 
   const activeMembers = members.filter((m) => m.status !== "inactive").length;
   const upcoming = events.filter((e) => e.date >= format(new Date(), "yyyy-MM-dd")).length;
@@ -74,6 +81,24 @@ function Dashboard() {
       <PageHeader
         title={`Peace to you, ${session?.fullName.split(" ")[0] ?? ""}.`}
         description="Your church at a glance."
+        actions={
+          canSubmit && (
+            <Dialog open={requisitionOpen} onOpenChange={setRequisitionOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <ClipboardList className="mr-2 h-4 w-4" /> Submit requisition
+                </Button>
+              </DialogTrigger>
+              {requisitionOpen && session && (
+                <RequisitionDialog
+                  departments={departments}
+                  currentUserId={session.userId}
+                  onClose={() => setRequisitionOpen(false)}
+                />
+              )}
+            </Dialog>
+          )
+        }
       />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard

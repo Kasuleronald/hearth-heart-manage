@@ -18,6 +18,7 @@ import {
 const ENTITY_ROUTES: Record<string, string> = {
   member: "/members/$id",
   event: "/events/$id",
+  requisition: "/requisitions",
 };
 
 export function NotificationBell({ userId }: { userId: string }) {

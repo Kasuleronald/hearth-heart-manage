@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated.users'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated.settings'
+import { Route as AuthenticatedRequisitionsRouteImport } from './routes/_authenticated.requisitions'
 import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated.reports'
 import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated.projects'
 import { Route as AuthenticatedPartnersRouteImport } from './routes/_authenticated.partners'
@@ -56,6 +57,12 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedRequisitionsRoute =
+  AuthenticatedRequisitionsRouteImport.update({
+    id: '/requisitions',
+    path: '/requisitions',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedReportsRoute = AuthenticatedReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
@@ -159,6 +166,7 @@ export interface FileRoutesByFullPath {
   '/partners': typeof AuthenticatedPartnersRoute
   '/projects': typeof AuthenticatedProjectsRoute
   '/reports': typeof AuthenticatedReportsRoute
+  '/requisitions': typeof AuthenticatedRequisitionsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/users': typeof AuthenticatedUsersRoute
   '/cells/$id': typeof AuthenticatedCellsIdRoute
@@ -182,6 +190,7 @@ export interface FileRoutesByTo {
   '/partners': typeof AuthenticatedPartnersRoute
   '/projects': typeof AuthenticatedProjectsRoute
   '/reports': typeof AuthenticatedReportsRoute
+  '/requisitions': typeof AuthenticatedRequisitionsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/users': typeof AuthenticatedUsersRoute
   '/cells/$id': typeof AuthenticatedCellsIdRoute
@@ -207,6 +216,7 @@ export interface FileRoutesById {
   '/_authenticated/partners': typeof AuthenticatedPartnersRoute
   '/_authenticated/projects': typeof AuthenticatedProjectsRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
+  '/_authenticated/requisitions': typeof AuthenticatedRequisitionsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
   '/_authenticated/cells/$id': typeof AuthenticatedCellsIdRoute
@@ -232,6 +242,7 @@ export interface FileRouteTypes {
     | '/partners'
     | '/projects'
     | '/reports'
+    | '/requisitions'
     | '/settings'
     | '/users'
     | '/cells/$id'
@@ -255,6 +266,7 @@ export interface FileRouteTypes {
     | '/partners'
     | '/projects'
     | '/reports'
+    | '/requisitions'
     | '/settings'
     | '/users'
     | '/cells/$id'
@@ -279,6 +291,7 @@ export interface FileRouteTypes {
     | '/_authenticated/partners'
     | '/_authenticated/projects'
     | '/_authenticated/reports'
+    | '/_authenticated/requisitions'
     | '/_authenticated/settings'
     | '/_authenticated/users'
     | '/_authenticated/cells/$id'
@@ -328,6 +341,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/requisitions': {
+      id: '/_authenticated/requisitions'
+      path: '/requisitions'
+      fullPath: '/requisitions'
+      preLoaderRoute: typeof AuthenticatedRequisitionsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/reports': {
@@ -510,6 +530,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedPartnersRoute: typeof AuthenticatedPartnersRoute
   AuthenticatedProjectsRoute: typeof AuthenticatedProjectsRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
+  AuthenticatedRequisitionsRoute: typeof AuthenticatedRequisitionsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
 }
@@ -528,6 +549,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedPartnersRoute: AuthenticatedPartnersRoute,
   AuthenticatedProjectsRoute: AuthenticatedProjectsRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
+  AuthenticatedRequisitionsRoute: AuthenticatedRequisitionsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,
 }

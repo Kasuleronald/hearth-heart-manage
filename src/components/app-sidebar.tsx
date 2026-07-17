@@ -17,6 +17,7 @@ import {
   Handshake,
   Building,
   Receipt,
+  ClipboardList,
 } from "lucide-react";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
 import {
@@ -31,7 +32,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useSession } from "@/lib/auth";
+import { useSession, isTierAFinanceLeader } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { Button } from "@/components/ui/button";
 
@@ -96,12 +97,20 @@ function getNav(cellTermPlural: string) {
       url: "/partners",
       icon: Handshake,
       roles: ["admin", "pastor", "treasurer"] as const,
+      financeTierAllowed: true,
     },
     {
       title: "Expenses",
       url: "/expenses",
       icon: Receipt,
       roles: ["admin", "treasurer"] as const,
+    },
+    {
+      title: "Requisitions",
+      url: "/requisitions",
+      icon: ClipboardList,
+      roles: ["admin", "pastor", "treasurer", "leader"] as const,
+      financeTierAllowed: true,
     },
     {
       title: "Reports",
@@ -121,7 +130,13 @@ export function AppSidebar() {
   const { plural, leaderLabel } = useCellTerm();
   const nav = getNav(plural);
   if (!session) return null;
-  const visible = nav.filter((n) => (n.roles as readonly string[]).includes(session.role));
+  const visible = nav.filter((n) => {
+    if ((n.roles as readonly string[]).includes(session.role)) return true;
+    if (n.financeTierAllowed && isTierAFinanceLeader(session.role, session.financeTier)) {
+      return true;
+    }
+    return false;
+  });
 
   return (
     <Sidebar collapsible="icon">

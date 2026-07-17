@@ -12,6 +12,7 @@ export interface Session {
   fullName: string;
   role: Role;
   branchId?: string; // undefined = church-wide access; set = scoped to that branch
+  financeTier?: "A"; // elevated finance powers granted to a leader/cell_leader
   expiresAt: number;
 }
 
@@ -174,6 +175,7 @@ export async function createUser(input: {
   role: Role;
   memberId?: string;
   branchId?: string;
+  financeTier?: "A";
 }): Promise<User> {
   const email = input.email.trim().toLowerCase();
   if (!isValidEmail(email)) throw new Error("Enter a valid email address");
@@ -186,6 +188,7 @@ export async function createUser(input: {
     role: input.role,
     memberId: input.memberId,
     branchId: input.branchId,
+    financeTier: input.financeTier,
     passwordHash: await hashPassword(input.password),
     createdAt: Date.now(),
   };
@@ -215,6 +218,7 @@ export async function login(email: string, password: string): Promise<Session> {
     fullName: u.fullName,
     role: u.role,
     branchId: u.branchId,
+    financeTier: u.financeTier,
     expiresAt: Date.now() + IDLE_TIMEOUT_MS,
   };
   setSession(s);
@@ -340,7 +344,35 @@ export function canManageEvents(role: Role) {
 export function canManageProjects(role: Role) {
   return role === "admin" || role === "pastor";
 }
-export function canAccessPartners(role: Role) {
+// Tier-A finance: an elevated permission tier layered onto the leader /
+// cell_leader roles (not a new Role value), granted per-user via
+// User.financeTier — see §8 of the feature brief.
+export function isTierAFinanceLeader(role: Role, financeTier: "A" | undefined) {
+  return (role === "leader" || role === "cell_leader") && financeTier === "A";
+}
+export function canAccessPartners(role: Role, financeTier?: "A") {
+  return (
+    role === "admin" ||
+    role === "pastor" ||
+    role === "treasurer" ||
+    isTierAFinanceLeader(role, financeTier)
+  );
+}
+// Departmental leaders, Pastors, and Admin can submit a requisition.
+export function canSubmitRequisitions(role: Role) {
+  return role === "leader" || role === "pastor" || role === "admin";
+}
+// Seen by Admin, Treasurer, Pastor, and Tier-A finance leaders — but only
+// the first three can decide (approve/reject) one.
+export function canViewRequisitions(role: Role, financeTier?: "A") {
+  return (
+    role === "admin" ||
+    role === "pastor" ||
+    role === "treasurer" ||
+    isTierAFinanceLeader(role, financeTier)
+  );
+}
+export function canDecideRequisitions(role: Role) {
   return role === "admin" || role === "pastor" || role === "treasurer";
 }
 // Anyone can add a member; editing or deleting an existing record (and

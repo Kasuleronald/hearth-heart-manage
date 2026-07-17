@@ -1,4 +1,12 @@
-import { db, uid, type ChurchEvent, type Member, type NotificationType, type Role } from "./db";
+import {
+  db,
+  uid,
+  type ChurchEvent,
+  type Member,
+  type NotificationType,
+  type Requisition,
+  type Role,
+} from "./db";
 
 async function notify(
   recipientUserIds: string[],
@@ -25,6 +33,13 @@ async function notify(
 
 async function userIdsByRoles(roles: Role[]): Promise<string[]> {
   const users = await db.users.where("role").anyOf(roles).toArray();
+  return users.map((u) => u.id);
+}
+
+async function tierAFinanceLeaderIds(): Promise<string[]> {
+  const users = await db.users
+    .filter((u) => (u.role === "leader" || u.role === "cell_leader") && u.financeTier === "A")
+    .toArray();
   return users.map((u) => u.id);
 }
 
@@ -77,5 +92,23 @@ export async function notifyEventCreated(event: ChurchEvent, createdByUserId: st
     "event_created",
     `New event: ${event.title}`,
     { type: "event", id: event.id },
+  );
+}
+
+export async function notifyRequisitionSubmitted(requisition: Requisition) {
+  const [roleRecipients, tierARecipients, requester, department] = await Promise.all([
+    userIdsByRoles(["admin", "pastor", "treasurer"]),
+    tierAFinanceLeaderIds(),
+    db.users.get(requisition.requestedBy),
+    db.departments.get(requisition.departmentId),
+  ]);
+  const recipients = [...roleRecipients, ...tierARecipients].filter(
+    (id) => id !== requisition.requestedBy,
+  );
+  await notify(
+    recipients,
+    "requisition_submitted",
+    `${requester?.fullName ?? "Someone"} submitted a requisition for ${department?.name ?? "a department"}`,
+    { type: "requisition", id: requisition.id },
   );
 }
