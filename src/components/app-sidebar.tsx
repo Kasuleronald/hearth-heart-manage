@@ -60,7 +60,8 @@ function getNav(cellTermPlural: string) {
       title: cellTermPlural,
       url: "/cells",
       icon: Users2,
-      roles: ["admin", "pastor", "cell_leader"] as const,
+      roles: ["admin", "pastor", "cell_leader", "treasurer"] as const,
+      financeTierAllowed: true,
     },
     {
       title: "Discipleship Classes",

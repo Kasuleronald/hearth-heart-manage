@@ -68,11 +68,13 @@ export function collectGivingEntries(data: {
 
   const cellById = new Map(data.cells.map((c) => [c.id, c]));
   for (const m of data.cellMeetings) {
-    if (m.offertoryAmount) {
+    // Only what finance has actually confirmed counts as real money received —
+    // the leader's reported figure is a claim, not yet part of the ledger.
+    if (m.offertoryReceived) {
       entries.push({
         date: m.date,
         category: "offertory",
-        amount: m.offertoryAmount,
+        amount: m.offertoryReceived,
         source: `Cell: ${cellById.get(m.cellId)?.name ?? "Unknown cell"}`,
       });
     }
@@ -336,7 +338,7 @@ export function buildGroupPerformanceReport(
     const meetings = data.cellMeetings.filter(
       (m) => m.cellId === cell.id && inRange(m.date, from, to),
     );
-    const offertoryTotal = meetings.reduce((sum, m) => sum + (m.offertoryAmount ?? 0), 0);
+    const offertoryTotal = meetings.reduce((sum, m) => sum + (m.offertoryReceived ?? 0), 0);
     const meetingIds = new Set(meetings.map((m) => m.id));
     const presentCount = data.cellAttendance.filter(
       (a) => meetingIds.has(a.meetingId) && a.present,

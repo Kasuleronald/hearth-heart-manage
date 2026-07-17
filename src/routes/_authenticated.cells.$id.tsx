@@ -1,15 +1,18 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
-import { ArrowLeft, Plus, Pencil } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Wallet, Check } from "lucide-react";
 import { db, uid, type CellMeeting, type Member } from "@/lib/db";
 import { formatUGX } from "@/lib/currency";
+import { generateReportRef, getCellBalance } from "@/lib/finance";
+import { notifyCellReportSubmitted } from "@/lib/notifications";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { DeleteButton } from "@/components/delete-button";
 import { AttendanceBreakdown } from "@/components/attendance-breakdown";
 import { MemberCombobox } from "@/components/member-combobox";
@@ -21,7 +24,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { useSession, canEditCell, canAccessRecordBranch } from "@/lib/auth";
+import {
+  useSession,
+  canEditCell,
+  canAccessRecordBranch,
+  canRecordOffertoryReceived,
+  canApproveEditRequest,
+} from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -49,13 +58,20 @@ function CellDetail() {
   const [meetingDialogOpen, setMeetingDialogOpen] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<CellMeeting | null>(null);
   const [attMeeting, setAttMeeting] = useState<CellMeeting | null>(null);
+  const [recordingMeeting, setRecordingMeeting] = useState<CellMeeting | null>(null);
 
   if (cell === undefined) return null;
   if (!cell) throw notFound();
   if (session && !canAccessRecordBranch(session.branchId, cell.branchId)) throw notFound();
 
   const canEdit = session ? canEditCell(session.role, cell.leaderId, session.userId) : false;
+  const canRecordReceived = session
+    ? canRecordOffertoryReceived(session.role, session.financeTier)
+    : false;
+  const canApproveEdit = session ? canApproveEditRequest(session.role) : false;
+  const isPlainCellLeader = session?.role === "cell_leader" && cell.leaderId === session.userId;
   const unassigned = allMembers.filter((m) => !m.cellId);
+  const balance = getCellBalance(meetings);
 
   return (
     <div>
@@ -68,7 +84,24 @@ function CellDetail() {
         title={cell.name}
         description={`${cell.meetingDay ?? "Any day"} • ${cell.meetingLocation ?? "—"}`}
         actions={
-          <div className="text-sm text-muted-foreground">
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            {meetings.length > 0 && (canEdit || canRecordReceived) && (
+              <span className="flex items-center gap-1">
+                <Wallet className="h-4 w-4" />
+                Balance:{" "}
+                <span
+                  className={
+                    balance < 0
+                      ? "font-medium text-destructive"
+                      : balance > 0
+                        ? "font-medium text-primary"
+                        : "font-medium text-foreground"
+                  }
+                >
+                  {formatUGX(balance)}
+                </span>
+              </span>
+            )}
             Leader: <span className="text-foreground">{leader?.fullName ?? "Unassigned"}</span>
           </div>
         }
@@ -164,6 +197,7 @@ function CellDetail() {
                   </DialogTrigger>
                   <MeetingDialog
                     cellId={cell.id}
+                    cellName={cell.name}
                     cellBranchId={cell.branchId}
                     meeting={editingMeeting}
                     singular={singular}
@@ -172,51 +206,112 @@ function CellDetail() {
                 </Dialog>
               )}
             </div>
-            <ul className="space-y-1 text-sm">
-              {meetings.map((m) => (
-                <li
-                  key={m.id}
-                  className="flex items-center justify-between rounded px-2 py-1.5 hover:bg-muted/60"
-                >
-                  <button className="text-left" onClick={() => setAttMeeting(m)}>
-                    <div className="font-medium">{format(new Date(m.date), "PPP")}</div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      {m.topic && <span>{m.topic}</span>}
-                      {!!m.offertoryAmount && <span>{formatUGX(m.offertoryAmount)}</span>}
+            <ul className="space-y-1.5 text-sm">
+              {meetings.map((m) => {
+                const canEditThisMeeting =
+                  canEdit && (!isPlainCellLeader || m.editRequestStatus === "approved");
+                const canRequestEdit = isPlainCellLeader && m.editRequestStatus === "none";
+                const canApproveThisEdit = canApproveEdit && m.editRequestStatus === "requested";
+                return (
+                  <li key={m.id} className="rounded px-2 py-1.5 hover:bg-muted/60">
+                    <div className="flex items-center justify-between">
+                      <button className="text-left" onClick={() => setAttMeeting(m)}>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{format(new Date(m.date), "PPP")}</span>
+                          <span className="font-mono text-[10px] text-muted-foreground">
+                            {m.reportRef}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {m.topic && <span>{m.topic}</span>}
+                          <span>
+                            Reported {formatUGX(m.offertoryReported)} • Received{" "}
+                            {formatUGX(m.offertoryReceived)}
+                          </span>
+                        </div>
+                      </button>
+                      <div className="flex items-center gap-1">
+                        {m.editRequestStatus !== "none" && (
+                          <Badge variant="outline" className="text-[10px] capitalize">
+                            Edit {m.editRequestStatus}
+                          </Badge>
+                        )}
+                        {canRecordReceived && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            aria-label={`Record offertory received for ${format(new Date(m.date), "PPP")}`}
+                            title="Record received"
+                            onClick={() => setRecordingMeeting(m)}
+                          >
+                            <Wallet className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {canRequestEdit && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8"
+                            onClick={async () => {
+                              await db.cellMeetings.update(m.id, {
+                                editRequestStatus: "requested",
+                              });
+                              toast.success(
+                                "Edit requested — an admin or treasurer must approve it.",
+                              );
+                            }}
+                          >
+                            Request edit
+                          </Button>
+                        )}
+                        {canApproveThisEdit && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8"
+                            onClick={async () => {
+                              await db.cellMeetings.update(m.id, { editRequestStatus: "approved" });
+                              toast.success("Edit approved");
+                            }}
+                          >
+                            <Check className="mr-1 h-3.5 w-3.5" /> Approve edit
+                          </Button>
+                        )}
+                        {canEditThisMeeting && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            aria-label={`Edit meeting on ${format(new Date(m.date), "PPP")}`}
+                            onClick={() => {
+                              setEditingMeeting(m);
+                              setMeetingDialogOpen(true);
+                            }}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {canEdit && (
+                          <DeleteButton
+                            label={`Delete meeting on ${format(new Date(m.date), "PPP")}`}
+                            title="Delete this meeting?"
+                            description="This also removes its attendance records. This can't be undone."
+                            onConfirm={async () => {
+                              try {
+                                await db.cellAttendance.where("meetingId").equals(m.id).delete();
+                                await db.cellMeetings.delete(m.id);
+                              } catch (e) {
+                                toast.error(
+                                  e instanceof Error ? e.message : "Failed to delete meeting",
+                                );
+                              }
+                            }}
+                          />
+                        )}
+                      </div>
                     </div>
-                  </button>
-                  {canEdit && (
-                    <div className="flex gap-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        aria-label={`Edit meeting on ${format(new Date(m.date), "PPP")}`}
-                        onClick={() => {
-                          setEditingMeeting(m);
-                          setMeetingDialogOpen(true);
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <DeleteButton
-                        label={`Delete meeting on ${format(new Date(m.date), "PPP")}`}
-                        title="Delete this meeting?"
-                        description="This also removes its attendance records. This can't be undone."
-                        onConfirm={async () => {
-                          try {
-                            await db.cellAttendance.where("meetingId").equals(m.id).delete();
-                            await db.cellMeetings.delete(m.id);
-                          } catch (e) {
-                            toast.error(
-                              e instanceof Error ? e.message : "Failed to delete meeting",
-                            );
-                          }
-                        }}
-                      />
-                    </div>
-                  )}
-                </li>
-              ))}
+                  </li>
+                );
+              })}
               {meetings.length === 0 && (
                 <li className="text-xs text-muted-foreground">No meetings recorded.</li>
               )}
@@ -224,6 +319,13 @@ function CellDetail() {
           </CardContent>
         </Card>
       </div>
+
+      {recordingMeeting && (
+        <RecordReceivedDialog
+          meeting={recordingMeeting}
+          onClose={() => setRecordingMeeting(null)}
+        />
+      )}
 
       {attMeeting && (
         <AttendanceDialog
@@ -241,12 +343,14 @@ function CellDetail() {
 
 function MeetingDialog({
   cellId,
+  cellName,
   cellBranchId,
   meeting,
   singular,
   onClose,
 }: {
   cellId: string;
+  cellName: string;
   cellBranchId: string | undefined;
   meeting: CellMeeting | null;
   singular: string;
@@ -255,8 +359,8 @@ function MeetingDialog({
   const [date, setDate] = useState(meeting?.date ?? format(new Date(), "yyyy-MM-dd"));
   const [topic, setTopic] = useState(meeting?.topic ?? "");
   const [notes, setNotes] = useState(meeting?.notes ?? "");
-  const [offertoryAmount, setOffertoryAmount] = useState(
-    meeting?.offertoryAmount != null ? String(meeting.offertoryAmount) : "",
+  const [offertoryReported, setOffertoryReported] = useState(
+    meeting ? String(meeting.offertoryReported) : "",
   );
   return (
     <DialogContent>
@@ -285,15 +389,18 @@ function MeetingDialog({
           <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
         <div className="space-y-1.5">
-          <Label>Offertory (UGX)</Label>
+          <Label>Offertory reported (UGX)</Label>
           <Input
             type="number"
             min="0"
             placeholder="0"
-            value={offertoryAmount}
-            onChange={(e) => setOffertoryAmount(e.target.value)}
+            value={offertoryReported}
+            onChange={(e) => setOffertoryReported(e.target.value)}
           />
-          <p className="text-xs text-muted-foreground">Enter 0 if not applicable.</p>
+          <p className="text-xs text-muted-foreground">
+            What you collected. Enter 0 if not applicable — finance confirms the actual amount
+            received separately.
+          </p>
         </div>
       </div>
       <DialogFooter>
@@ -303,21 +410,28 @@ function MeetingDialog({
         <Button
           onClick={async () => {
             try {
-              const amount = offertoryAmount ? Number(offertoryAmount) : undefined;
-              if (offertoryAmount && Number.isNaN(amount)) {
+              const amount = offertoryReported ? Number(offertoryReported) : 0;
+              if (offertoryReported && Number.isNaN(amount)) {
                 toast.error("Enter a valid offertory amount");
                 return;
               }
-              await db.cellMeetings.put({
+              const data: CellMeeting = {
                 id: meeting?.id ?? uid(),
                 cellId,
                 date,
                 topic: topic || undefined,
                 notes: notes || undefined,
-                offertoryAmount: amount,
+                offertoryReported: amount,
+                offertoryReceived: meeting?.offertoryReceived ?? 0,
+                reportRef: meeting?.reportRef ?? (await generateReportRef(date)),
+                editRequestStatus: "none",
                 branchId: meeting?.branchId ?? cellBranchId,
                 createdAt: meeting?.createdAt ?? Date.now(),
-              });
+              };
+              await db.cellMeetings.put(data);
+              if (!meeting) {
+                await notifyCellReportSubmitted(data, cellName);
+              }
               toast.success(
                 meeting ? "Meeting updated" : "Meeting created — mark attendance next.",
               );
@@ -331,6 +445,53 @@ function MeetingDialog({
         </Button>
       </DialogFooter>
     </DialogContent>
+  );
+}
+
+function RecordReceivedDialog({ meeting, onClose }: { meeting: CellMeeting; onClose: () => void }) {
+  const [amount, setAmount] = useState(String(meeting.offertoryReceived));
+
+  async function save() {
+    const numericAmount = Number(amount);
+    if (amount === "" || Number.isNaN(numericAmount) || numericAmount < 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    try {
+      await db.cellMeetings.update(meeting.id, { offertoryReceived: numericAmount });
+      toast.success("Received amount recorded");
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to record amount");
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="font-display">
+            Record received — {format(new Date(meeting.date), "PPP")}
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          The cell leader reported{" "}
+          <span className="text-foreground">{formatUGX(meeting.offertoryReported)}</span> (ref{" "}
+          {meeting.reportRef}). Enter what was actually received — it can be less than, equal to, or
+          more than the reported amount.
+        </p>
+        <div className="space-y-1.5">
+          <Label>Amount received (UGX)</Label>
+          <Input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={save}>Save</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

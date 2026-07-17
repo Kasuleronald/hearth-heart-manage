@@ -1,6 +1,7 @@
 import {
   db,
   uid,
+  type CellMeeting,
   type ChurchEvent,
   type Member,
   type NotificationType,
@@ -93,6 +94,18 @@ export async function notifyEventCreated(event: ChurchEvent, createdByUserId: st
     `New event: ${event.title}`,
     { type: "event", id: event.id },
   );
+}
+
+export async function notifyCellReportSubmitted(meeting: CellMeeting, cellName: string) {
+  const [roleRecipients, tierARecipients] = await Promise.all([
+    userIdsByRoles(["admin", "pastor", "treasurer"]),
+    tierAFinanceLeaderIds(),
+  ]);
+  const recipients = [...roleRecipients, ...tierARecipients];
+  await notify(recipients, "cell_report_submitted", `${cellName} entered a report`, {
+    type: "cell",
+    id: meeting.cellId,
+  });
 }
 
 export async function notifyRequisitionSubmitted(requisition: Requisition) {

@@ -96,13 +96,21 @@ export interface Cell {
   createdAt: number;
 }
 
+// A cell report's offertory has two figures that only converge once finance
+// reconciles it: offertoryReported (the leader's claim) vs. offertoryReceived
+// (finance's confirmation) — see §9 of the feature brief / src/lib/finance.ts.
+export type EditRequestStatus = "none" | "requested" | "approved";
+
 export interface CellMeeting {
   id: string;
   cellId: string;
   date: string; // YYYY-MM-DD
   topic?: string;
   notes?: string;
-  offertoryAmount?: number; // UGX
+  offertoryReported: number; // UGX — what the cell leader says they collected
+  offertoryReceived: number; // UGX — what finance has confirmed; 0 until acted on
+  reportRef: string; // DDMMYYYY + 2-digit sequence for that date
+  editRequestStatus: EditRequestStatus;
   branchId?: string; // inherited from the parent cell at creation time
   createdAt: number;
 }
@@ -376,6 +384,31 @@ export class MyChurchDB extends Dexie {
     this.version(10).stores({
       requisitions: "id, requestedBy, departmentId, status",
     });
+    this.version(11)
+      .stores({
+        cellMeetings: "id, cellId, date, reportRef",
+      })
+      .upgrade(async (tx) => {
+        // Backfill the reconciliation fields for existing meetings: the old
+        // free-form offertoryAmount becomes the leader's offertoryReported
+        // claim, offertoryReceived starts at 0 (not yet reconciled), and
+        // each gets a reportRef in submission order per calendar date.
+        const seqByDate = new Map<string, number>();
+        await tx
+          .table("cellMeetings")
+          .orderBy("createdAt")
+          .modify((m: Record<string, unknown>) => {
+            const [y, mo, d] = String(m.date).split("-");
+            const prefix = `${d}${mo}${y}`;
+            const seq = (seqByDate.get(prefix) ?? 0) + 1;
+            seqByDate.set(prefix, seq);
+            m.reportRef = `${prefix}${String(seq).padStart(2, "0")}`;
+            m.offertoryReported = typeof m.offertoryAmount === "number" ? m.offertoryAmount : 0;
+            m.offertoryReceived = 0;
+            m.editRequestStatus = "none";
+            delete m.offertoryAmount;
+          });
+      });
   }
 }
 
