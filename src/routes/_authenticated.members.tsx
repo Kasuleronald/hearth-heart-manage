@@ -11,6 +11,7 @@ import {
   type MemberStatus,
 } from "@/lib/db";
 import { ExportMenu } from "@/components/export-menu";
+import { notifyMemberAdded, notifyMemberDeleted } from "@/lib/notifications";
 import { useSession, canEditDeleteMembers } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { PageHeader } from "@/components/page-header";
@@ -359,8 +360,16 @@ function MembersPage() {
                         </Button>
                         <MemberDeleteDialog
                           member={m}
-                          onConfirm={async () => {
+                          onConfirm={async (reason) => {
                             await deleteMemberCascade(m.id);
+                            if (session) {
+                              await notifyMemberDeleted(
+                                `${m.firstName} ${m.lastName}`,
+                                reason,
+                                session.userId,
+                                m.createdBy,
+                              );
+                            }
                             toast.success("Member deleted");
                           }}
                         />
@@ -402,7 +411,7 @@ function MemberDeleteDialog({
   onConfirm,
 }: {
   member: Member;
-  onConfirm: () => Promise<void>;
+  onConfirm: (reason: string) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
@@ -458,7 +467,7 @@ function MemberDeleteDialog({
               e.preventDefault();
               setBusy(true);
               try {
-                await onConfirm();
+                await onConfirm(reason.trim());
                 setOpen(false);
               } catch (err) {
                 toast.error(err instanceof Error ? err.message : "Failed to delete member");
@@ -538,6 +547,9 @@ function MemberDialog({
     };
     try {
       await db.members.put(data);
+      if (!member && currentUserId) {
+        await notifyMemberAdded(data, currentUserId);
+      }
       toast.success(member ? "Member updated" : "Member added");
       onClose();
     } catch (e) {

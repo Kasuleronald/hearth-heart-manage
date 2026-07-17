@@ -3,6 +3,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
 import { Plus, Pencil } from "lucide-react";
 import { db, deleteEventCascade, uid, type ChurchEvent, type EventType } from "@/lib/db";
+import { notifyEventCreated } from "@/lib/notifications";
 import { formatUGX } from "@/lib/currency";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -68,7 +69,11 @@ function EventsPage() {
                   <Plus className="mr-2 h-4 w-4" /> New event
                 </Button>
               </DialogTrigger>
-              <EventDialog event={editing} onClose={() => setOpen(false)} />
+              <EventDialog
+                event={editing}
+                currentUserId={session?.userId}
+                onClose={() => setOpen(false)}
+              />
             </Dialog>
           )
         }
@@ -136,10 +141,19 @@ function EventsPage() {
   );
 }
 
-function EventDialog({ event, onClose }: { event: ChurchEvent | null; onClose: () => void }) {
+function EventDialog({
+  event,
+  currentUserId,
+  onClose,
+}: {
+  event: ChurchEvent | null;
+  currentUserId: string | undefined;
+  onClose: () => void;
+}) {
   const [title, setTitle] = useState(event?.title ?? "");
   const [date, setDate] = useState(event?.date ?? format(new Date(), "yyyy-MM-dd"));
   const [type, setType] = useState<EventType>(event?.type ?? "sunday_service");
+  const [audience, setAudience] = useState<ChurchEvent["audience"]>(event?.audience ?? "all");
   const [notes, setNotes] = useState(event?.notes ?? "");
   const [offertoryAmount, setOffertoryAmount] = useState(
     event?.offertoryAmount != null ? String(event.offertoryAmount) : "",
@@ -153,15 +167,20 @@ function EventDialog({ event, onClose }: { event: ChurchEvent | null; onClose: (
         toast.error("Enter a valid offertory amount");
         return;
       }
-      await db.events.put({
+      const data: ChurchEvent = {
         id: event?.id ?? uid(),
         title: title.trim(),
         date,
         type,
+        audience,
         notes: notes || undefined,
         offertoryAmount: amount,
         createdAt: event?.createdAt ?? Date.now(),
-      });
+      };
+      await db.events.put(data);
+      if (!event) {
+        await notifyEventCreated(data, currentUserId);
+      }
       toast.success(event ? "Event updated" : "Event created");
       onClose();
     } catch (e) {
@@ -199,6 +218,21 @@ function EventDialog({ event, onClose }: { event: ChurchEvent | null; onClose: (
               </SelectContent>
             </Select>
           </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Notify</Label>
+          <Select value={audience} onValueChange={(v) => setAudience(v as ChurchEvent["audience"])}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Everyone</SelectItem>
+              <SelectItem value="leaders">Leaders only</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Who gets notified when this event is created.
+          </p>
         </div>
         <div className="space-y-1.5">
           <Label>Offertory (UGX)</Label>

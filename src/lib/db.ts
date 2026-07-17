@@ -106,6 +106,7 @@ export interface ChurchEvent {
   title: string;
   date: string; // YYYY-MM-DD
   type: EventType;
+  audience: "all" | "leaders"; // who gets notified when this event is created
   notes?: string;
   offertoryAmount?: number; // UGX
   createdAt: number;
@@ -206,6 +207,27 @@ export interface Settings {
   value: string;
 }
 
+// In-app notifications — local-mode: no email/push, just a bell + this table.
+// If a real server is added later, only the delivery channel changes; the
+// data model and bell UI stay the same.
+export type NotificationType =
+  | "member_added"
+  | "member_deleted"
+  | "event_created"
+  | "requisition_submitted"
+  | "cell_report_submitted";
+
+export interface Notification {
+  id: string;
+  recipientUserId: string; // User.id
+  type: NotificationType;
+  message: string;
+  entityType?: string; // e.g. "member", "event" — for click-through
+  entityId?: string;
+  read: boolean;
+  createdAt: number;
+}
+
 export class MyChurchDB extends Dexie {
   users!: EntityTable<User, "id">;
   households!: EntityTable<Household, "id">;
@@ -224,6 +246,7 @@ export class MyChurchDB extends Dexie {
   partners!: EntityTable<Partner, "id">;
   passwordResetTokens!: EntityTable<PasswordResetToken, "token">;
   settings!: EntityTable<Settings, "key">;
+  notifications!: EntityTable<Notification, "id">;
 
   constructor() {
     super("my_church");
@@ -278,6 +301,20 @@ export class MyChurchDB extends Dexie {
     this.version(6).stores({
       members: "id, lastName, status, category, householdId, cellId, classId, number",
     });
+    this.version(7)
+      .stores({
+        notifications: "id, recipientUserId, read, createdAt",
+      })
+      .upgrade(async (tx) => {
+        // Existing events predate the audience field — default them to "all"
+        // to match their current (unrestricted) notification behavior.
+        await tx
+          .table("events")
+          .toCollection()
+          .modify((event: Record<string, unknown>) => {
+            if (!event.audience) event.audience = "all";
+          });
+      });
   }
 }
 
