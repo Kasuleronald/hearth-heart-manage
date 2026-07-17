@@ -3,7 +3,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
 import { ArrowLeft, Hash } from "lucide-react";
 import { db, getNextMemberNumber } from "@/lib/db";
-import { useSession, canEditDeleteMembers } from "@/lib/auth";
+import { useSession, canEditDeleteMembers, canAccessRecordBranch } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -46,6 +46,7 @@ function MemberDetail() {
 
   if (member === undefined) return null;
   if (!member) throw notFound();
+  if (session && !canAccessRecordBranch(session.branchId, member.branchId)) throw notFound();
 
   const canAssignNumber = session ? canEditDeleteMembers(session.role) : false;
 

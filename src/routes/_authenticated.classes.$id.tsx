@@ -21,7 +21,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { useSession, canEditClass } from "@/lib/auth";
+import { useSession, canEditClass, canAccessRecordBranch } from "@/lib/auth";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -54,6 +54,7 @@ function ClassDetail() {
 
   if (cls === undefined) return null;
   if (!cls) throw notFound();
+  if (session && !canAccessRecordBranch(session.branchId, cls.branchId)) throw notFound();
 
   const canEdit = session ? canEditClass(session.role, cls.facilitatorId, session.userId) : false;
   const unassigned = allMembers.filter((m) => !m.classId);
@@ -166,6 +167,7 @@ function ClassDetail() {
                   </DialogTrigger>
                   <SessionDialog
                     classId={cls.id}
+                    classBranchId={cls.branchId}
                     session={editingSession}
                     onClose={() => setSessionDialogOpen(false)}
                   />
@@ -240,10 +242,12 @@ function ClassDetail() {
 
 function SessionDialog({
   classId,
+  classBranchId,
   session,
   onClose,
 }: {
   classId: string;
+  classBranchId: string | undefined;
   session: ClassSession | null;
   onClose: () => void;
 }) {
@@ -308,6 +312,7 @@ function SessionDialog({
                 topic: topic || undefined,
                 notes: notes || undefined,
                 offertoryAmount: amount,
+                branchId: session?.branchId ?? classBranchId,
                 createdAt: session?.createdAt ?? Date.now(),
               });
               toast.success(

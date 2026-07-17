@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DeleteButton } from "@/components/delete-button";
+import { BranchField } from "@/components/branch-field";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useSession, canAccessDepartments, canManageDepartments } from "@/lib/auth";
+import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/departments")({
@@ -43,7 +45,11 @@ function DepartmentsPage() {
   const navigate = useNavigate();
   const { session } = useSession();
   const canManage = session ? canManageDepartments(session.role) : false;
-  const departments = useLiveQuery(() => db.departments.orderBy("name").toArray(), []) ?? [];
+  const effectiveBranch = useEffectiveBranch(session?.branchId);
+  const allDepartments = useLiveQuery(() => db.departments.orderBy("name").toArray(), []) ?? [];
+  const departments = allDepartments.filter((d) =>
+    matchesBranchFilter(effectiveBranch, d.branchId),
+  );
   const users =
     useLiveQuery(
       () =>
@@ -189,6 +195,7 @@ function DepartmentDialog({
   const [name, setName] = useState(dept?.name ?? "");
   const [description, setDescription] = useState(dept?.description ?? "");
   const [leaderId, setLeaderId] = useState(dept?.leaderId ?? "");
+  const [branchId, setBranchId] = useState(dept?.branchId ?? "");
 
   async function save() {
     if (!name.trim()) return toast.error("Name is required");
@@ -201,6 +208,7 @@ function DepartmentDialog({
         name: name.trim(),
         description: description || undefined,
         leaderId: leaderId || undefined,
+        branchId: branchId || undefined,
         createdAt: dept?.createdAt ?? Date.now(),
       });
       toast.success(dept ? "Department updated" : "Department created");
@@ -250,6 +258,7 @@ function DepartmentDialog({
           <Label>Description</Label>
           <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
         </div>
+        <BranchField value={branchId} onChange={setBranchId} />
       </div>
       <DialogFooter>
         <Button variant="ghost" onClick={onClose}>

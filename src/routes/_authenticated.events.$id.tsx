@@ -2,6 +2,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { ArrowLeft } from "lucide-react";
 import { db, uid } from "@/lib/db";
+import { useSession, canAccessRecordBranch } from "@/lib/auth";
 import { formatUGX } from "@/lib/currency";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ export const Route = createFileRoute("/_authenticated/events/$id")({
 
 function EventDetail() {
   const { id } = Route.useParams();
+  const { session } = useSession();
   const event = useLiveQuery(() => db.events.get(id), [id]);
   const members = useLiveQuery(() => db.members.orderBy("lastName").toArray(), []) ?? [];
   const attendance =
@@ -28,6 +30,7 @@ function EventDetail() {
 
   if (event === undefined) return null;
   if (!event) throw notFound();
+  if (session && !canAccessRecordBranch(session.branchId, event.branchId)) throw notFound();
 
   const map = new Map(attendance.map((a) => [a.memberId, a]));
   const presentCount = attendance.filter((a) => a.present).length;

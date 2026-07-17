@@ -21,7 +21,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { useSession, canEditCell } from "@/lib/auth";
+import { useSession, canEditCell, canAccessRecordBranch } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -52,6 +52,7 @@ function CellDetail() {
 
   if (cell === undefined) return null;
   if (!cell) throw notFound();
+  if (session && !canAccessRecordBranch(session.branchId, cell.branchId)) throw notFound();
 
   const canEdit = session ? canEditCell(session.role, cell.leaderId, session.userId) : false;
   const unassigned = allMembers.filter((m) => !m.cellId);
@@ -163,6 +164,7 @@ function CellDetail() {
                   </DialogTrigger>
                   <MeetingDialog
                     cellId={cell.id}
+                    cellBranchId={cell.branchId}
                     meeting={editingMeeting}
                     singular={singular}
                     onClose={() => setMeetingDialogOpen(false)}
@@ -239,11 +241,13 @@ function CellDetail() {
 
 function MeetingDialog({
   cellId,
+  cellBranchId,
   meeting,
   singular,
   onClose,
 }: {
   cellId: string;
+  cellBranchId: string | undefined;
   meeting: CellMeeting | null;
   singular: string;
   onClose: () => void;
@@ -311,6 +315,7 @@ function MeetingDialog({
                 topic: topic || undefined,
                 notes: notes || undefined,
                 offertoryAmount: amount,
+                branchId: meeting?.branchId ?? cellBranchId,
                 createdAt: meeting?.createdAt ?? Date.now(),
               });
               toast.success(

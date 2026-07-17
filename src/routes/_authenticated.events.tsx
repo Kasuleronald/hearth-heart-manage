@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DeleteButton } from "@/components/delete-button";
+import { BranchField } from "@/components/branch-field";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useSession, canManageEvents } from "@/lib/auth";
+import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -46,7 +48,9 @@ const TYPES: { value: EventType; label: string }[] = [
 function EventsPage() {
   const { session } = useSession();
   const canManage = session ? canManageEvents(session.role) : false;
-  const events = useLiveQuery(() => db.events.orderBy("date").reverse().toArray(), []) ?? [];
+  const allEvents = useLiveQuery(() => db.events.orderBy("date").reverse().toArray(), []) ?? [];
+  const effectiveBranch = useEffectiveBranch(session?.branchId);
+  const events = allEvents.filter((e) => matchesBranchFilter(effectiveBranch, e.branchId));
   const [editing, setEditing] = useState<ChurchEvent | null>(null);
   const [open, setOpen] = useState(false);
 
@@ -158,6 +162,7 @@ function EventDialog({
   const [offertoryAmount, setOffertoryAmount] = useState(
     event?.offertoryAmount != null ? String(event.offertoryAmount) : "",
   );
+  const [branchId, setBranchId] = useState(event?.branchId ?? "");
 
   async function save() {
     if (!title.trim()) return toast.error("Title required");
@@ -175,6 +180,7 @@ function EventDialog({
         audience,
         notes: notes || undefined,
         offertoryAmount: amount,
+        branchId: branchId || undefined,
         createdAt: event?.createdAt ?? Date.now(),
       };
       await db.events.put(data);
@@ -249,6 +255,7 @@ function EventDialog({
           <Label>Notes</Label>
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
         </div>
+        <BranchField value={branchId} onChange={setBranchId} />
       </div>
       <DialogFooter>
         <Button variant="ghost" onClick={onClose}>

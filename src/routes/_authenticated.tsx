@@ -5,6 +5,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { QuickSearch } from "@/components/quick-search";
 import { NotificationBell } from "@/components/notification-bell";
+import { BranchSwitcher } from "@/components/branch-switcher";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth";
 
@@ -59,6 +60,7 @@ function AuthenticatedLayout() {
                 <kbd className="ml-3 rounded border bg-muted px-1.5 py-0.5 text-[10px]">⌘K</kbd>
               </Button>
               <div className="flex items-center gap-3">
+                {!session.branchId && <BranchSwitcher />}
                 <NotificationBell userId={session.userId} />
                 <span className="text-sm text-muted-foreground">
                   Signed in as{" "}

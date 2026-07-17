@@ -15,6 +15,7 @@ import {
   Building2,
   Target,
   Handshake,
+  Building,
 } from "lucide-react";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
 import {
@@ -101,6 +102,7 @@ function getNav(cellTermPlural: string) {
       icon: BarChart3,
       roles: ["admin", "pastor", "treasurer"] as const,
     },
+    { title: "Branches", url: "/branches", icon: Building, roles: ["admin"] as const },
     { title: "Users", url: "/users", icon: UserCog, roles: ["admin"] as const },
     { title: "Settings", url: "/settings", icon: Settings, roles: ["admin", "pastor"] as const },
   ];

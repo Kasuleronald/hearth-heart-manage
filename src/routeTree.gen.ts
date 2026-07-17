@@ -25,6 +25,7 @@ import { Route as AuthenticatedDepartmentsRouteImport } from './routes/_authenti
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated.dashboard'
 import { Route as AuthenticatedClassesRouteImport } from './routes/_authenticated.classes'
 import { Route as AuthenticatedCellsRouteImport } from './routes/_authenticated.cells'
+import { Route as AuthenticatedBranchesRouteImport } from './routes/_authenticated.branches'
 import { Route as AuthenticatedMembersIdRouteImport } from './routes/_authenticated.members.$id'
 import { Route as AuthenticatedEventsIdRouteImport } from './routes/_authenticated.events.$id'
 import { Route as AuthenticatedClassesIdRouteImport } from './routes/_authenticated.classes.$id'
@@ -110,6 +111,11 @@ const AuthenticatedCellsRoute = AuthenticatedCellsRouteImport.update({
   path: '/cells',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedBranchesRoute = AuthenticatedBranchesRouteImport.update({
+  id: '/branches',
+  path: '/branches',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedMembersIdRoute = AuthenticatedMembersIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -134,6 +140,7 @@ const AuthenticatedCellsIdRoute = AuthenticatedCellsIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/branches': typeof AuthenticatedBranchesRoute
   '/cells': typeof AuthenticatedCellsRouteWithChildren
   '/classes': typeof AuthenticatedClassesRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -155,6 +162,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/branches': typeof AuthenticatedBranchesRoute
   '/cells': typeof AuthenticatedCellsRouteWithChildren
   '/classes': typeof AuthenticatedClassesRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -178,6 +186,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
+  '/_authenticated/branches': typeof AuthenticatedBranchesRoute
   '/_authenticated/cells': typeof AuthenticatedCellsRouteWithChildren
   '/_authenticated/classes': typeof AuthenticatedClassesRouteWithChildren
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
@@ -201,6 +210,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/branches'
     | '/cells'
     | '/classes'
     | '/dashboard'
@@ -222,6 +232,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/branches'
     | '/cells'
     | '/classes'
     | '/dashboard'
@@ -244,6 +255,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/login'
+    | '/_authenticated/branches'
     | '/_authenticated/cells'
     | '/_authenticated/classes'
     | '/_authenticated/dashboard'
@@ -383,6 +395,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCellsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/branches': {
+      id: '/_authenticated/branches'
+      path: '/branches'
+      fullPath: '/branches'
+      preLoaderRoute: typeof AuthenticatedBranchesRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/members/$id': {
       id: '/_authenticated/members/$id'
       path: '/$id'
@@ -459,6 +478,7 @@ const AuthenticatedMembersRouteWithChildren =
   AuthenticatedMembersRoute._addFileChildren(AuthenticatedMembersRouteChildren)
 
 interface AuthenticatedRouteChildren {
+  AuthenticatedBranchesRoute: typeof AuthenticatedBranchesRoute
   AuthenticatedCellsRoute: typeof AuthenticatedCellsRouteWithChildren
   AuthenticatedClassesRoute: typeof AuthenticatedClassesRouteWithChildren
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
@@ -475,6 +495,7 @@ interface AuthenticatedRouteChildren {
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedBranchesRoute: AuthenticatedBranchesRoute,
   AuthenticatedCellsRoute: AuthenticatedCellsRouteWithChildren,
   AuthenticatedClassesRoute: AuthenticatedClassesRouteWithChildren,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,

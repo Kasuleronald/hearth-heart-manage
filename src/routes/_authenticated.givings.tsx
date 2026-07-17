@@ -21,6 +21,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DeleteButton } from "@/components/delete-button";
+import { BranchField } from "@/components/branch-field";
 import {
   Dialog,
   DialogContent,
@@ -39,6 +40,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useSession, canAccessGivings } from "@/lib/auth";
+import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -69,6 +71,7 @@ function GivingsPage() {
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [editing, setEditing] = useState<Giving | null>(null);
   const [open, setOpen] = useState(false);
+  const effectiveBranch = useEffectiveBranch(session?.branchId);
 
   useEffect(() => {
     if (session && !canAccessGivings(session.role)) navigate({ to: "/dashboard", replace: true });
@@ -76,7 +79,11 @@ function GivingsPage() {
 
   if (!session || !canAccessGivings(session.role)) return null;
 
-  const filtered = givings.filter((g) => categoryFilter === "all" || g.category === categoryFilter);
+  const filtered = givings.filter((g) => {
+    if (categoryFilter !== "all" && g.category !== categoryFilter) return false;
+    if (!matchesBranchFilter(effectiveBranch, g.branchId)) return false;
+    return true;
+  });
 
   const monthStart = format(new Date(), "yyyy-MM") + "-01";
   const thisMonth = givings.filter((g) => g.date >= monthStart);
@@ -300,6 +307,7 @@ function GivingDialog({
   const [projectId, setProjectId] = useState(giving?.projectId ?? "");
   const [date, setDate] = useState(giving?.date ?? format(new Date(), "yyyy-MM-dd"));
   const [notes, setNotes] = useState(giving?.notes ?? "");
+  const [branchId, setBranchId] = useState(giving?.branchId ?? "");
 
   async function save() {
     const numericAmount = Number(amount);
@@ -322,6 +330,7 @@ function GivingDialog({
         projectId: category === "project" ? projectId || undefined : undefined,
         date,
         notes: notes || undefined,
+        branchId: branchId || undefined,
         createdBy: giving?.createdBy ?? currentUserId,
         createdAt: giving?.createdAt ?? Date.now(),
       });
@@ -437,6 +446,7 @@ function GivingDialog({
           <Label>Notes</Label>
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
         </div>
+        <BranchField value={branchId} onChange={setBranchId} />
       </div>
       <DialogFooter>
         <Button variant="ghost" onClick={onClose}>

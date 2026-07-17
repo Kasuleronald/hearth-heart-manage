@@ -11,6 +11,7 @@ export interface Session {
   email: string;
   fullName: string;
   role: Role;
+  branchId?: string; // undefined = church-wide access; set = scoped to that branch
   expiresAt: number;
 }
 
@@ -172,6 +173,7 @@ export async function createUser(input: {
   fullName: string;
   role: Role;
   memberId?: string;
+  branchId?: string;
 }): Promise<User> {
   const email = input.email.trim().toLowerCase();
   if (!isValidEmail(email)) throw new Error("Enter a valid email address");
@@ -183,6 +185,7 @@ export async function createUser(input: {
     fullName: input.fullName.trim(),
     role: input.role,
     memberId: input.memberId,
+    branchId: input.branchId,
     passwordHash: await hashPassword(input.password),
     createdAt: Date.now(),
   };
@@ -211,6 +214,7 @@ export async function login(email: string, password: string): Promise<Session> {
     email: u.email,
     fullName: u.fullName,
     role: u.role,
+    branchId: u.branchId,
     expiresAt: Date.now() + IDLE_TIMEOUT_MS,
   };
   setSession(s);
@@ -343,4 +347,17 @@ export function canAccessPartners(role: Role) {
 // assigning their member number) is admin-only.
 export function canEditDeleteMembers(role: Role) {
   return role === "admin";
+}
+export function canManageBranches(role: Role) {
+  return role === "admin";
+}
+// Branch-match check, layered on top of the role checks above: a church-wide
+// user (branchId undefined) can reach every record; a branch-scoped user can
+// only reach records in their own branch or church-wide records (branchId
+// undefined on the record itself).
+export function canAccessRecordBranch(
+  userBranchId: string | undefined,
+  recordBranchId: string | undefined,
+) {
+  return !userBranchId || !recordBranchId || userBranchId === recordBranchId;
 }

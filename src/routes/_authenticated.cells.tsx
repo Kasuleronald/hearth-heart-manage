@@ -10,8 +10,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { DeleteButton } from "@/components/delete-button";
+import { BranchField } from "@/components/branch-field";
 import { useSession, canManageUsers } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
+import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
 import {
   Dialog,
   DialogContent,
@@ -49,8 +51,10 @@ function CellsPage() {
   const [open, setOpen] = useState(false);
 
   const canManage = session ? session.role === "admin" || session.role === "pastor" : false;
-  const visibleCells =
-    session?.role === "cell_leader" ? cells.filter((c) => c.leaderId === session.userId) : cells;
+  const effectiveBranch = useEffectiveBranch(session?.branchId);
+  const visibleCells = (
+    session?.role === "cell_leader" ? cells.filter((c) => c.leaderId === session.userId) : cells
+  ).filter((c) => matchesBranchFilter(effectiveBranch, c.branchId));
 
   return (
     <div>
@@ -174,6 +178,7 @@ function CellDialog({
   const [meetingLocation, setMeetingLocation] = useState(cell?.meetingLocation ?? "");
   const [leaderId, setLeaderId] = useState(cell?.leaderId ?? "");
   const [description, setDescription] = useState(cell?.description ?? "");
+  const [branchId, setBranchId] = useState(cell?.branchId ?? "");
 
   async function save() {
     if (!name.trim()) return toast.error("Name is required");
@@ -185,6 +190,7 @@ function CellDialog({
         meetingLocation: meetingLocation || undefined,
         leaderId: leaderId || undefined,
         description: description || undefined,
+        branchId: branchId || undefined,
         createdAt: cell?.createdAt ?? Date.now(),
       });
       toast.success(cell ? `${singular} updated` : `${singular} created`);
@@ -264,6 +270,7 @@ function CellDialog({
           <Label>Description</Label>
           <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
         </div>
+        <BranchField value={branchId} onChange={setBranchId} />
       </div>
       <DialogFooter>
         <Button variant="ghost" onClick={onClose}>

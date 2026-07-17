@@ -6,6 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGri
 import { db } from "@/lib/db";
 import { useSession, canAccessGivings } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
+import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
 import {
   buildAttendanceReport,
   buildGivingsReport,
@@ -73,21 +74,39 @@ function ReportsPage() {
   const givings = useLiveQuery(() => db.givings.toArray(), []) ?? [];
   const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
   const projects = useLiveQuery(() => db.projects.toArray(), []) ?? [];
+  const branches = useLiveQuery(() => db.branches.orderBy("name").toArray(), []) ?? [];
+  const effectiveBranch = useEffectiveBranch(session?.branchId);
+
+  // Scope every input to the current branch filter before handing it to the
+  // (branch-agnostic) report builders — church-wide records still show
+  // everywhere, same rule as every other list page.
+  const scopedMembers = members.filter((m) => matchesBranchFilter(effectiveBranch, m.branchId));
+  const scopedEvents = events.filter((e) => matchesBranchFilter(effectiveBranch, e.branchId));
+  const scopedCells = cells.filter((c) => matchesBranchFilter(effectiveBranch, c.branchId));
+  const scopedCellMeetings = cellMeetings.filter((m) =>
+    matchesBranchFilter(effectiveBranch, m.branchId),
+  );
+  const scopedClasses = classes.filter((c) => matchesBranchFilter(effectiveBranch, c.branchId));
+  const scopedClassSessions = classSessions.filter((s) =>
+    matchesBranchFilter(effectiveBranch, s.branchId),
+  );
+  const scopedGivings = givings.filter((g) => matchesBranchFilter(effectiveBranch, g.branchId));
+  const scopedProjects = projects.filter((p) => matchesBranchFilter(effectiveBranch, p.branchId));
 
   const report: ReportResult = useMemo(() => {
     switch (reportType) {
       case "attendance":
         return buildAttendanceReport(
           {
-            events,
+            events: scopedEvents,
             eventAttendance,
-            cellMeetings,
+            cellMeetings: scopedCellMeetings,
             cellAttendance,
-            cells,
-            classSessions,
+            cells: scopedCells,
+            classSessions: scopedClassSessions,
             classAttendance,
-            classes,
-            members,
+            classes: scopedClasses,
+            members: scopedMembers,
           },
           from,
           to,
@@ -95,21 +114,29 @@ function ReportsPage() {
         );
       case "givings": {
         const entries = collectGivingEntries({
-          givings,
-          cellMeetings,
-          cells,
-          classSessions,
-          classes,
-          events,
-          projects,
+          givings: scopedGivings,
+          cellMeetings: scopedCellMeetings,
+          cells: scopedCells,
+          classSessions: scopedClassSessions,
+          classes: scopedClasses,
+          events: scopedEvents,
+          projects: scopedProjects,
         });
         return buildGivingsReport(entries, from, to);
       }
       case "membership":
-        return buildMembershipReport(members, users, from, to);
+        return buildMembershipReport(scopedMembers, users, from, to);
       case "performance":
         return buildGroupPerformanceReport(
-          { cells, cellMeetings, cellAttendance, classes, classSessions, classAttendance, members },
+          {
+            cells: scopedCells,
+            cellMeetings: scopedCellMeetings,
+            cellAttendance,
+            classes: scopedClasses,
+            classSessions: scopedClassSessions,
+            classAttendance,
+            members: scopedMembers,
+          },
           from,
           to,
           cellSingular,
@@ -119,19 +146,120 @@ function ReportsPage() {
     reportType,
     from,
     to,
+    scopedMembers,
+    scopedEvents,
+    eventAttendance,
+    scopedCellMeetings,
+    cellAttendance,
+    scopedCells,
+    scopedClassSessions,
+    classAttendance,
+    scopedClasses,
+    scopedGivings,
+    users,
+    cellSingular,
+    scopedProjects,
+  ]);
+
+  // "Compare totals per branch" dimension: only meaningful in the church-wide
+  // ("All branches") view — re-runs the same builder once per branch bucket
+  // and reduces each result's chart series to a single headline number.
+  const branchBreakdown = useMemo(() => {
+    if (effectiveBranch !== "all" || branches.length === 0) return null;
+    const buckets = [
+      ...branches.map((b) => ({ id: b.id as string | undefined, name: b.name })),
+      { id: undefined, name: "Church-wide / unassigned" },
+    ];
+    function sumSeries(r: ReportResult): number {
+      const key = r.chartSeries[0]?.key;
+      if (!key) return 0;
+      return r.chartData.reduce((sum, d) => sum + (Number(d[key]) || 0), 0);
+    }
+    return buckets.map(({ id, name }) => {
+      const inBucket = (branchId: string | undefined) => (branchId ?? undefined) === id;
+      const bMembers = members.filter((m) => inBucket(m.branchId));
+      const bEvents = events.filter((e) => inBucket(e.branchId));
+      const bCells = cells.filter((c) => inBucket(c.branchId));
+      const bCellMeetings = cellMeetings.filter((m) => inBucket(m.branchId));
+      const bClasses = classes.filter((c) => inBucket(c.branchId));
+      const bClassSessions = classSessions.filter((s) => inBucket(s.branchId));
+      const bGivings = givings.filter((g) => inBucket(g.branchId));
+      const bProjects = projects.filter((p) => inBucket(p.branchId));
+
+      let r: ReportResult;
+      switch (reportType) {
+        case "attendance":
+          r = buildAttendanceReport(
+            {
+              events: bEvents,
+              eventAttendance,
+              cellMeetings: bCellMeetings,
+              cellAttendance,
+              cells: bCells,
+              classSessions: bClassSessions,
+              classAttendance,
+              classes: bClasses,
+              members: bMembers,
+            },
+            from,
+            to,
+            cellSingular,
+          );
+          break;
+        case "givings": {
+          const entries = collectGivingEntries({
+            givings: bGivings,
+            cellMeetings: bCellMeetings,
+            cells: bCells,
+            classSessions: bClassSessions,
+            classes: bClasses,
+            events: bEvents,
+            projects: bProjects,
+          });
+          r = buildGivingsReport(entries, from, to);
+          break;
+        }
+        case "membership":
+          r = buildMembershipReport(bMembers, users, from, to);
+          break;
+        case "performance":
+          r = buildGroupPerformanceReport(
+            {
+              cells: bCells,
+              cellMeetings: bCellMeetings,
+              cellAttendance,
+              classes: bClasses,
+              classSessions: bClassSessions,
+              classAttendance,
+              members: bMembers,
+            },
+            from,
+            to,
+            cellSingular,
+          );
+          break;
+      }
+      return { name, total: sumSeries(r), label: r.chartSeries[0]?.label ?? "Total" };
+    });
+  }, [
+    effectiveBranch,
+    branches,
+    reportType,
+    from,
+    to,
     members,
     events,
     eventAttendance,
+    cells,
     cellMeetings,
     cellAttendance,
-    cells,
+    classes,
     classSessions,
     classAttendance,
-    classes,
     givings,
+    projects,
     users,
     cellSingular,
-    projects,
   ]);
 
   if (!session || !canAccessGivings(session.role)) return null;
@@ -217,6 +345,24 @@ function ReportsPage() {
           )}
         </div>
       </Card>
+
+      {branchBreakdown && (
+        <Card className="mt-4 p-4">
+          <h3 className="mb-3 font-display text-sm font-semibold text-muted-foreground">
+            By branch — {branchBreakdown[0]?.label ?? "Total"}
+          </h3>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+            {branchBreakdown.map((b) => (
+              <div key={b.name} className="rounded-md border p-3">
+                <div className="text-xs text-muted-foreground">{b.name}</div>
+                <div className="mt-1 font-display text-lg font-semibold">
+                  {b.total.toLocaleString()}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <Card className="mt-4 p-4">
         <div className="rounded-md border">

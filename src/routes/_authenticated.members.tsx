@@ -11,9 +11,11 @@ import {
   type MemberStatus,
 } from "@/lib/db";
 import { ExportMenu } from "@/components/export-menu";
+import { BranchField } from "@/components/branch-field";
 import { notifyMemberAdded, notifyMemberDeleted } from "@/lib/notifications";
 import { useSession, canEditDeleteMembers } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
+import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -201,6 +203,7 @@ function MembersPage() {
   const [visibleCols, setVisibleCols] = useState<Set<string>>(
     () => new Set(OPTIONAL_COLUMNS.filter((c) => c.defaultVisible).map((c) => c.key)),
   );
+  const effectiveBranch = useEffectiveBranch(session?.branchId);
 
   const ctx: ColumnCtx = { households, cells, users, cellSingular };
   const activeColumns = OPTIONAL_COLUMNS.filter((c) => visibleCols.has(c.key));
@@ -209,6 +212,7 @@ function MembersPage() {
     const s = `${m.firstName} ${m.lastName} ${m.phone ?? ""} ${m.email ?? ""}`.toLowerCase();
     if (q && !s.includes(q.toLowerCase())) return false;
     if (statusFilter !== "all" && m.status !== statusFilter) return false;
+    if (!matchesBranchFilter(effectiveBranch, m.branchId)) return false;
     return true;
   });
 
@@ -516,6 +520,7 @@ function MemberDialog({
   const [cellId, setCellId] = useState(member?.cellId ?? "");
   const [classId, setClassId] = useState(member?.classId ?? "");
   const [notes, setNotes] = useState(member?.notes ?? "");
+  const [branchId, setBranchId] = useState(member?.branchId ?? "");
 
   const categoryDescription = CATEGORIES.find((c) => c.value === category)?.description;
 
@@ -542,6 +547,7 @@ function MemberDialog({
       cellId: cellId || undefined,
       classId: classId || undefined,
       notes: notes || undefined,
+      branchId: branchId || undefined,
       createdBy: member?.createdBy ?? currentUserId,
       createdAt: member?.createdAt ?? Date.now(),
     };
@@ -701,6 +707,9 @@ function MemberDialog({
           <Field label="Notes">
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
           </Field>
+        </div>
+        <div className="sm:col-span-2">
+          <BranchField value={branchId} onChange={setBranchId} />
         </div>
       </div>
       <DialogFooter>

@@ -2,6 +2,16 @@ import Dexie, { type EntityTable } from "dexie";
 
 export type Role = "admin" | "pastor" | "cell_leader" | "leader" | "treasurer";
 
+// A physical church location under the same (single, local) installation.
+// branchId: undefined on a record means "applies to the whole church" — not
+// every record has to belong to exactly one branch.
+export interface Branch {
+  id: string;
+  name: string;
+  address?: string;
+  createdAt: number;
+}
+
 export interface User {
   id: string;
   email: string; // lowercase, unique — the sole login identifier
@@ -10,6 +20,7 @@ export interface User {
   passwordHash: string; // "salt:hash" hex
   memberId?: string; // optional link to this user's own Member record
   financeTier?: "A"; // elevated finance powers for a leader/cell_leader; unset for others
+  branchId?: string; // undefined = church-wide access (sees/manages every branch)
   createdAt: number;
 }
 
@@ -45,6 +56,7 @@ export interface Household {
   id: string;
   name: string;
   address?: string;
+  branchId?: string;
   createdBy?: string; // User.id — who added this record
   createdAt: number;
 }
@@ -68,6 +80,7 @@ export interface Member {
   cellId?: string;
   classId?: string;
   notes?: string;
+  branchId?: string;
   createdBy?: string; // User.id — who added this record
   createdAt: number;
 }
@@ -79,6 +92,7 @@ export interface Cell {
   meetingLocation?: string;
   description?: string;
   leaderId?: string; // User.id
+  branchId?: string;
   createdAt: number;
 }
 
@@ -89,6 +103,7 @@ export interface CellMeeting {
   topic?: string;
   notes?: string;
   offertoryAmount?: number; // UGX
+  branchId?: string; // inherited from the parent cell at creation time
   createdAt: number;
 }
 
@@ -109,6 +124,7 @@ export interface ChurchEvent {
   audience: "all" | "leaders"; // who gets notified when this event is created
   notes?: string;
   offertoryAmount?: number; // UGX
+  branchId?: string;
   createdAt: number;
 }
 
@@ -126,6 +142,7 @@ export interface DiscipleshipClass {
   meetingDay?: string;
   meetingLocation?: string;
   description?: string;
+  branchId?: string;
   createdAt: number;
 }
 
@@ -136,6 +153,7 @@ export interface ClassSession {
   topic?: string;
   notes?: string;
   offertoryAmount?: number; // UGX
+  branchId?: string; // inherited from the parent class at creation time
   createdAt: number;
 }
 
@@ -158,6 +176,7 @@ export interface Giving {
   projectName?: string; // legacy free-text project label, kept for old records
   date: string; // YYYY-MM-DD
   notes?: string;
+  branchId?: string;
   createdBy?: string; // User.id — who recorded this entry
   createdAt: number;
 }
@@ -172,6 +191,7 @@ export interface Project {
   financialTarget?: number; // UGX, overall goal
   weeklyTarget?: number; // UGX
   monthlyTarget?: number; // UGX
+  branchId?: string;
   createdBy?: string;
   createdAt: number;
 }
@@ -187,6 +207,7 @@ export interface Partner {
   email?: string;
   pledgeAmount?: number; // UGX, optional recurring commitment
   notes?: string;
+  branchId?: string;
   createdBy?: string;
   createdAt: number;
 }
@@ -199,6 +220,7 @@ export interface Department {
   name: string;
   description?: string;
   leaderId?: string; // User.id
+  branchId?: string;
   createdAt: number;
 }
 
@@ -229,6 +251,7 @@ export interface Notification {
 }
 
 export class MyChurchDB extends Dexie {
+  branches!: EntityTable<Branch, "id">;
   users!: EntityTable<User, "id">;
   households!: EntityTable<Household, "id">;
   members!: EntityTable<Member, "id">;
@@ -315,6 +338,9 @@ export class MyChurchDB extends Dexie {
             if (!event.audience) event.audience = "all";
           });
       });
+    this.version(8).stores({
+      branches: "id, name",
+    });
   }
 }
 
@@ -421,6 +447,38 @@ export async function unassignDepartmentLeader(userId: string) {
   await Promise.all(led.map((d) => db.departments.update(d.id, { leaderId: undefined })));
 }
 
+// Deleting a branch doesn't delete its records — it un-scopes them back to
+// "whole church" (branchId: undefined), same treatment as unlinking a leader.
+// branchId isn't an indexed field (every list page already filters it in
+// memory, same as the rest of the app), so this scans + filters in JS rather
+// than using a Dexie `.where()` index query.
+export async function deleteBranchCascade(branchId: string) {
+  const tables = [
+    db.users,
+    db.households,
+    db.members,
+    db.cells,
+    db.cellMeetings,
+    db.events,
+    db.classes,
+    db.givings,
+    db.departments,
+    db.projects,
+    db.partners,
+  ];
+  await db.transaction("rw", [db.branches, ...tables], async () => {
+    for (const table of tables) {
+      const rows = await table
+        .filter((row) => (row as { branchId?: string }).branchId === branchId)
+        .toArray();
+      await Promise.all(
+        rows.map((row) => table.update((row as { id: string }).id, { branchId: undefined })),
+      );
+    }
+    await db.branches.delete(branchId);
+  });
+}
+
 export async function deleteUserCascade(userId: string) {
   await db.transaction("rw", [db.users, db.departments], async () => {
     await unassignDepartmentLeader(userId);
@@ -474,6 +532,7 @@ export async function seedDefaultDepartments() {
 // ---- Backup & restore ----
 // Every table except `users` (credentials shouldn't leave the device via a backup file).
 const BACKUP_TABLES = [
+  "branches",
   "households",
   "members",
   "cells",

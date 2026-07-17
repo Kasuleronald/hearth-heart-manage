@@ -13,6 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { DeleteButton } from "@/components/delete-button";
+import { BranchField } from "@/components/branch-field";
 import {
   Dialog,
   DialogContent,
@@ -206,6 +207,7 @@ function ProjectDialog({
   const [monthlyTarget, setMonthlyTarget] = useState(
     project?.monthlyTarget != null ? String(project.monthlyTarget) : "",
   );
+  const [branchId, setBranchId] = useState(project?.branchId ?? "");
 
   function parseAmount(v: string): number | undefined {
     if (!v) return undefined;
@@ -223,6 +225,7 @@ function ProjectDialog({
         financialTarget: parseAmount(financialTarget),
         weeklyTarget: parseAmount(weeklyTarget),
         monthlyTarget: parseAmount(monthlyTarget),
+        branchId: branchId || undefined,
         createdBy: project?.createdBy ?? currentUserId,
         createdAt: project?.createdAt ?? Date.now(),
       });
@@ -287,6 +290,7 @@ function ProjectDialog({
             />
           </div>
         </div>
+        <BranchField value={branchId} onChange={setBranchId} />
       </div>
       <DialogFooter>
         <Button variant="ghost" onClick={onClose}>

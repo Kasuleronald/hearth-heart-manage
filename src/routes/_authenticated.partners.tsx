@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DeleteButton } from "@/components/delete-button";
+import { BranchField } from "@/components/branch-field";
 import {
   Dialog,
   DialogContent,
@@ -187,6 +188,7 @@ function PartnerDialog({
     partner?.pledgeAmount != null ? String(partner.pledgeAmount) : "",
   );
   const [notes, setNotes] = useState(partner?.notes ?? "");
+  const [branchId, setBranchId] = useState(partner?.branchId ?? "");
 
   async function save() {
     if (!name.trim()) return toast.error("Name is required");
@@ -200,6 +202,7 @@ function PartnerDialog({
         email: email || undefined,
         pledgeAmount: pledge != null && !Number.isNaN(pledge) ? pledge : undefined,
         notes: notes || undefined,
+        branchId: branchId || undefined,
         createdBy: partner?.createdBy ?? currentUserId,
         createdAt: partner?.createdAt ?? Date.now(),
       });
@@ -267,6 +270,7 @@ function PartnerDialog({
           <Label>Notes</Label>
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
         </div>
+        <BranchField value={branchId} onChange={setBranchId} />
       </div>
       <DialogFooter>
         <Button variant="ghost" onClick={onClose}>

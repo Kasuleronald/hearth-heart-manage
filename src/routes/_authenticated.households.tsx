@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { DeleteButton } from "@/components/delete-button";
+import { BranchField } from "@/components/branch-field";
 import {
   Dialog,
   DialogContent,
@@ -179,6 +180,7 @@ function HouseholdDialog({
 }) {
   const [name, setName] = useState(hh?.name ?? "");
   const [address, setAddress] = useState(hh?.address ?? "");
+  const [branchId, setBranchId] = useState(hh?.branchId ?? "");
 
   async function save() {
     if (!name.trim()) return toast.error("Name is required");
@@ -187,6 +189,7 @@ function HouseholdDialog({
         id: hh?.id ?? uid(),
         name: name.trim(),
         address: address || undefined,
+        branchId: branchId || undefined,
         createdBy: hh?.createdBy ?? currentUserId,
         createdAt: hh?.createdAt ?? Date.now(),
       });
@@ -217,6 +220,7 @@ function HouseholdDialog({
           <Label>Address</Label>
           <Input value={address} onChange={(e) => setAddress(e.target.value)} />
         </div>
+        <BranchField value={branchId} onChange={setBranchId} />
       </div>
       <DialogFooter>
         <Button variant="ghost" onClick={onClose}>

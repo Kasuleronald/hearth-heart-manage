@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { DeleteButton } from "@/components/delete-button";
 import { MemberCombobox } from "@/components/member-combobox";
+import { BranchField } from "@/components/branch-field";
 import {
   Dialog,
   DialogContent,
@@ -366,6 +367,7 @@ function NewUserDialog({
   const [otherDeptName, setOtherDeptName] = useState("");
   const [isMember, setIsMember] = useState(false);
   const [memberId, setMemberId] = useState("");
+  const [branchId, setBranchId] = useState("");
 
   async function save() {
     try {
@@ -380,6 +382,7 @@ function NewUserDialog({
         password,
         role,
         memberId: isMember ? memberId || undefined : undefined,
+        branchId: branchId || undefined,
       });
       await resolveDepartmentAssignment(user.id, role, departmentChoice, otherDeptName);
       toast.success("User created");
@@ -441,6 +444,7 @@ function NewUserDialog({
           memberId={memberId}
           onMemberIdChange={setMemberId}
         />
+        <BranchField value={branchId} onChange={setBranchId} />
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label>Password</Label>
@@ -493,6 +497,7 @@ function EditUserDialog({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isMember, setIsMember] = useState(!!user.memberId);
   const [memberId, setMemberId] = useState(user.memberId ?? "");
+  const [branchId, setBranchId] = useState(user.branchId ?? "");
 
   async function save() {
     try {
@@ -515,6 +520,7 @@ function EditUserDialog({
         email: trimmedEmail,
         role,
         memberId: isMember ? memberId || undefined : undefined,
+        branchId: branchId || undefined,
       });
       await resolveDepartmentAssignment(user.id, role, departmentChoice, otherDeptName);
       toast.success("User updated");
@@ -569,6 +575,7 @@ function EditUserDialog({
           memberId={memberId}
           onMemberIdChange={setMemberId}
         />
+        <BranchField value={branchId} onChange={setBranchId} />
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label>New password</Label>

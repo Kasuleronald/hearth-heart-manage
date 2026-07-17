@@ -10,8 +10,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { DeleteButton } from "@/components/delete-button";
+import { BranchField } from "@/components/branch-field";
 import { useSession, canManageUsers } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
+import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
 import {
   Dialog,
   DialogContent,
@@ -49,10 +51,12 @@ function ClassesPage() {
   const [open, setOpen] = useState(false);
 
   const canManage = session ? session.role === "admin" || session.role === "pastor" : false;
-  const visibleClasses =
+  const effectiveBranch = useEffectiveBranch(session?.branchId);
+  const visibleClasses = (
     session?.role === "cell_leader"
       ? classes.filter((c) => c.facilitatorId === session.userId)
-      : classes;
+      : classes
+  ).filter((c) => matchesBranchFilter(effectiveBranch, c.branchId));
 
   return (
     <div>
@@ -172,6 +176,7 @@ function ClassDialog({
   const [meetingLocation, setMeetingLocation] = useState(cls?.meetingLocation ?? "");
   const [facilitatorId, setFacilitatorId] = useState(cls?.facilitatorId ?? "");
   const [description, setDescription] = useState(cls?.description ?? "");
+  const [branchId, setBranchId] = useState(cls?.branchId ?? "");
 
   async function save() {
     if (!name.trim()) return toast.error("Name is required");
@@ -183,6 +188,7 @@ function ClassDialog({
         meetingLocation: meetingLocation || undefined,
         facilitatorId: facilitatorId || undefined,
         description: description || undefined,
+        branchId: branchId || undefined,
         createdAt: cls?.createdAt ?? Date.now(),
       });
       toast.success(cls ? "Class updated" : "Class created");
@@ -262,6 +268,7 @@ function ClassDialog({
           <Label>Description</Label>
           <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
         </div>
+        <BranchField value={branchId} onChange={setBranchId} />
       </div>
       <DialogFooter>
         <Button variant="ghost" onClick={onClose}>
