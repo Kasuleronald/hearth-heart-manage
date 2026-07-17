@@ -339,3 +339,8 @@ export function canManageProjects(role: Role) {
 export function canAccessPartners(role: Role) {
   return role === "admin" || role === "pastor" || role === "treasurer";
 }
+// Anyone can add a member; editing or deleting an existing record (and
+// assigning their member number) is admin-only.
+export function canEditDeleteMembers(role: Role) {
+  return role === "admin";
+}

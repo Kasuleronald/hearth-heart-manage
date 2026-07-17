@@ -1,14 +1,29 @@
-import type { Member, MemberCategory } from "@/lib/db";
+import type { Member } from "@/lib/db";
 
-const CATEGORY_LABELS: Record<MemberCategory, string> = {
+const CATEGORY_LABELS: Record<string, string> = {
   pastor: "Pastors",
   leader: "Leaders",
   member: "Members",
-  new_member: "New Members",
-  convert: "Converts",
+  committed: "Committed",
+  new_recruit: "New Recruits",
+  new_convert: "New Converts",
+  visitor: "Visitors",
+  uncommitted: "Uncommitted",
+  fellowship_member: "Fellowship Members",
+  other: "Other",
 };
+// Older records used these category values; fold them into their modern
+// equivalent instead of dropping out of every bucket silently.
+const LEGACY_ALIASES: Record<string, string> = {
+  new_member: "new_recruit",
+  convert: "new_convert",
+};
+function normalizeCategory(category?: string): string | undefined {
+  if (!category) return undefined;
+  return LEGACY_ALIASES[category] ?? category;
+}
 
-const CATEGORY_ORDER: MemberCategory[] = ["pastor", "leader", "member", "new_member", "convert"];
+const CATEGORY_ORDER = Object.keys(CATEGORY_LABELS);
 
 export function AttendanceBreakdown({
   roster,
@@ -19,7 +34,8 @@ export function AttendanceBreakdown({
 }) {
   const counts = CATEGORY_ORDER.map((category) => ({
     category,
-    count: roster.filter((m) => m.category === category && presentIds.has(m.id)).length,
+    count: roster.filter((m) => normalizeCategory(m.category) === category && presentIds.has(m.id))
+      .length,
   })).filter((c) => c.count > 0);
 
   const uncategorized = roster.filter((m) => !m.category && presentIds.has(m.id)).length;

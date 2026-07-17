@@ -1,13 +1,27 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ArrowLeft } from "lucide-react";
-import { db } from "@/lib/db";
+import { useState } from "react";
+import { ArrowLeft, Hash } from "lucide-react";
+import { db, getNextMemberNumber } from "@/lib/db";
+import { useSession, canEditDeleteMembers } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { StatusBadge } from "./_authenticated.members";
 import { format } from "date-fns";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/members/$id")({
   component: MemberDetail,
@@ -18,6 +32,7 @@ export const Route = createFileRoute("/_authenticated/members/$id")({
 
 function MemberDetail() {
   const { id } = Route.useParams();
+  const { session } = useSession();
   const { singular: cellSingular } = useCellTerm();
   const member = useLiveQuery(() => db.members.get(id), [id]);
   const household = useLiveQuery(
@@ -32,6 +47,8 @@ function MemberDetail() {
   if (member === undefined) return null;
   if (!member) throw notFound();
 
+  const canAssignNumber = session ? canEditDeleteMembers(session.role) : false;
+
   return (
     <div>
       <Button asChild variant="ghost" size="sm" className="mb-2">
@@ -42,7 +59,16 @@ function MemberDetail() {
       <PageHeader
         title={`${member.firstName} ${member.lastName}`}
         description={member.email || member.phone || undefined}
-        actions={<StatusBadge status={member.status} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <Badge variant="outline">
+              <Hash className="mr-1 h-3 w-3" />
+              {member.number ?? "Unnumbered"}
+            </Badge>
+            <StatusBadge status={member.status} />
+            {canAssignNumber && <AssignNumberDialog memberId={member.id} current={member.number} />}
+          </div>
+        }
       />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card>
@@ -97,6 +123,69 @@ function MemberDetail() {
         </Card>
       </div>
     </div>
+  );
+}
+
+function AssignNumberDialog({ memberId, current }: { memberId: string; current?: string }) {
+  const [open, setOpen] = useState(false);
+  const [number, setNumber] = useState("");
+
+  async function openDialog() {
+    setNumber(current ?? (await getNextMemberNumber()));
+    setOpen(true);
+  }
+
+  async function save() {
+    const trimmed = number.trim();
+    if (!/^\d{3,}$/.test(trimmed)) {
+      toast.error("Number must be at least 3 digits");
+      return;
+    }
+    try {
+      const existing = await db.members.where("number").equals(trimmed).first();
+      if (existing && existing.id !== memberId) {
+        toast.error(`Number ${trimmed} is already assigned to another member`);
+        return;
+      }
+      await db.members.update(memberId, { number: trimmed });
+      toast.success("Member number assigned");
+      setOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to assign number");
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" onClick={openDialog}>
+          <Hash className="mr-1 h-4 w-4" /> {current ? "Change number" : "Assign number"}
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="font-display">Assign member number</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-1.5">
+          <Label>Number</Label>
+          <Input
+            value={number}
+            onChange={(e) => setNumber(e.target.value)}
+            placeholder="001"
+            className="font-mono"
+          />
+          <p className="text-xs text-muted-foreground">
+            Suggested next number, zero-padded to at least 3 digits — accept it or override.
+          </p>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button onClick={save}>Save</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

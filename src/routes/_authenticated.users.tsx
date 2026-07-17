@@ -8,6 +8,7 @@ import {
   unassignDepartmentLeader,
   uid,
   type Department,
+  type Member,
   type Role,
   type User,
 } from "@/lib/db";
@@ -18,7 +19,9 @@ import { PasswordInput } from "@/components/password-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { DeleteButton } from "@/components/delete-button";
+import { MemberCombobox } from "@/components/member-combobox";
 import {
   Dialog,
   DialogContent,
@@ -91,6 +94,7 @@ function UsersPage() {
   >;
   const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
   const departments = useLiveQuery(() => db.departments.orderBy("name").toArray(), []) ?? [];
+  const members = useLiveQuery(() => db.members.orderBy("lastName").toArray(), []) ?? [];
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
 
@@ -112,7 +116,12 @@ function UsersPage() {
                 <Plus className="mr-2 h-4 w-4" /> New user
               </Button>
             </DialogTrigger>
-            <NewUserDialog departments={departments} roles={roles} onClose={() => setOpen(false)} />
+            <NewUserDialog
+              departments={departments}
+              roles={roles}
+              members={members}
+              onClose={() => setOpen(false)}
+            />
           </Dialog>
         }
       />
@@ -174,6 +183,7 @@ function UsersPage() {
             user={editing}
             departments={departments}
             roles={roles}
+            members={members}
             onClose={() => setEditing(null)}
           />
         )}
@@ -284,13 +294,67 @@ function DepartmentField({
   );
 }
 
+function MemberLinkField({
+  members,
+  isMember,
+  onIsMemberChange,
+  memberId,
+  onMemberIdChange,
+}: {
+  members: Member[];
+  isMember: boolean;
+  onIsMemberChange: (v: boolean) => void;
+  memberId: string;
+  onMemberIdChange: (id: string) => void;
+}) {
+  const linked = members.find((m) => m.id === memberId);
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <Label>Is this user also a church member?</Label>
+        <Switch
+          checked={isMember}
+          onCheckedChange={(v) => {
+            onIsMemberChange(v);
+            if (!v) onMemberIdChange("");
+          }}
+        />
+      </div>
+      {isMember &&
+        (linked ? (
+          <div className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+            <span>
+              {linked.firstName} {linked.lastName}
+            </span>
+            <button
+              type="button"
+              className="text-xs text-muted-foreground hover:text-destructive"
+              onClick={() => onMemberIdChange("")}
+            >
+              Remove
+            </button>
+          </div>
+        ) : (
+          <MemberCombobox
+            members={members}
+            excludeIds={new Set()}
+            label="Link to a member"
+            onSelect={(m) => onMemberIdChange(m.id)}
+          />
+        ))}
+    </div>
+  );
+}
+
 function NewUserDialog({
   departments,
   roles,
+  members,
   onClose,
 }: {
   departments: Department[];
   roles: { value: Role; label: string }[];
+  members: Member[];
   onClose: () => void;
 }) {
   const [fullName, setFullName] = useState("");
@@ -300,6 +364,8 @@ function NewUserDialog({
   const [role, setRole] = useState<Role>("cell_leader");
   const [departmentChoice, setDepartmentChoice] = useState("none");
   const [otherDeptName, setOtherDeptName] = useState("");
+  const [isMember, setIsMember] = useState(false);
+  const [memberId, setMemberId] = useState("");
 
   async function save() {
     try {
@@ -308,7 +374,13 @@ function NewUserDialog({
         throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
       }
       if (password !== confirmPassword) throw new Error("Passwords don't match");
-      const user = await createUser({ fullName, email, password, role });
+      const user = await createUser({
+        fullName,
+        email,
+        password,
+        role,
+        memberId: isMember ? memberId || undefined : undefined,
+      });
       await resolveDepartmentAssignment(user.id, role, departmentChoice, otherDeptName);
       toast.success("User created");
       onClose();
@@ -362,6 +434,13 @@ function NewUserDialog({
             onOtherNameChange={setOtherDeptName}
           />
         )}
+        <MemberLinkField
+          members={members}
+          isMember={isMember}
+          onIsMemberChange={setIsMember}
+          memberId={memberId}
+          onMemberIdChange={setMemberId}
+        />
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label>Password</Label>
@@ -395,11 +474,13 @@ function EditUserDialog({
   user,
   departments,
   roles,
+  members,
   onClose,
 }: {
   user: User;
   departments: Department[];
   roles: { value: Role; label: string }[];
+  members: Member[];
   onClose: () => void;
 }) {
   const [fullName, setFullName] = useState(user.fullName);
@@ -410,6 +491,8 @@ function EditUserDialog({
   const [otherDeptName, setOtherDeptName] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [isMember, setIsMember] = useState(!!user.memberId);
+  const [memberId, setMemberId] = useState(user.memberId ?? "");
 
   async function save() {
     try {
@@ -427,7 +510,12 @@ function EditUserDialog({
         if (newPassword !== confirmPassword) throw new Error("Passwords don't match");
         await resetPassword(user.id, newPassword);
       }
-      await db.users.update(user.id, { fullName: fullName.trim(), email: trimmedEmail, role });
+      await db.users.update(user.id, {
+        fullName: fullName.trim(),
+        email: trimmedEmail,
+        role,
+        memberId: isMember ? memberId || undefined : undefined,
+      });
       await resolveDepartmentAssignment(user.id, role, departmentChoice, otherDeptName);
       toast.success("User updated");
       onClose();
@@ -474,6 +562,13 @@ function EditUserDialog({
             onOtherNameChange={setOtherDeptName}
           />
         )}
+        <MemberLinkField
+          members={members}
+          isMember={isMember}
+          onIsMemberChange={setIsMember}
+          memberId={memberId}
+          onMemberIdChange={setMemberId}
+        />
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label>New password</Label>

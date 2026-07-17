@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
-import { Plus, Search, Pencil, Download } from "lucide-react";
+import { Plus, Search, Pencil, Download, Trash2, Columns3 } from "lucide-react";
 import {
   db,
   deleteMemberCascade,
@@ -11,7 +11,7 @@ import {
   type MemberStatus,
 } from "@/lib/db";
 import { downloadCsv } from "@/lib/download";
-import { useSession } from "@/lib/auth";
+import { useSession, canEditDeleteMembers } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,25 @@ import {
 } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { DeleteButton } from "@/components/delete-button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -51,17 +69,125 @@ export const Route = createFileRoute("/_authenticated/members")({
 });
 
 const STATUSES: MemberStatus[] = ["visitor", "member", "baptized", "inactive"];
-const CATEGORIES: { value: MemberCategory; label: string }[] = [
+
+const CATEGORIES: { value: MemberCategory; label: string; description?: string }[] = [
+  { value: "member", label: "Member" },
+  { value: "committed", label: "Committed" },
   { value: "pastor", label: "Pastor" },
   { value: "leader", label: "Leader" },
-  { value: "member", label: "Member" },
-  { value: "new_member", label: "New Member" },
-  { value: "convert", label: "Convert" },
+  {
+    value: "new_recruit",
+    label: "New Recruit",
+    description:
+      "A believer with no current church, or newly relocated to the area, choosing to commit to this church.",
+  },
+  {
+    value: "new_convert",
+    label: "New Convert",
+    description:
+      "Someone who has undergone a spiritual rebirth during outreach, mission, a gathering/encounter, or revival context.",
+  },
+  {
+    value: "visitor",
+    label: "Visitor",
+    description: "Attending services/programs but not yet committed; needs follow-up.",
+  },
+  { value: "uncommitted", label: "Uncommitted" },
+  {
+    value: "fellowship_member",
+    label: "Fellowship Member",
+    description: "Attends cell/home/zonal fellowships only, not main services/programs.",
+  },
+  { value: "other", label: "Other" },
+];
+// Legacy values from before the category set was expanded — still rendered
+// for existing records, not offered for new ones.
+const CATEGORY_LABEL: Record<string, string> = {
+  ...Object.fromEntries(CATEGORIES.map((c) => [c.value, c.label])),
+  new_member: "New Recruit",
+  convert: "New Convert",
+};
+
+interface ColumnCtx {
+  households: { id: string; name: string }[];
+  cells: { id: string; name: string }[];
+  users: { id: string; fullName: string }[];
+  cellSingular: string;
+}
+
+const OPTIONAL_COLUMNS: {
+  key: string;
+  label: (ctx: ColumnCtx) => string;
+  defaultVisible: boolean;
+  render: (m: Member, ctx: ColumnCtx) => React.ReactNode;
+  csv: (m: Member, ctx: ColumnCtx) => string;
+}[] = [
+  {
+    key: "number",
+    label: () => "Number",
+    defaultVisible: true,
+    render: (m) => m.number ?? "Unnumbered",
+    csv: (m) => m.number ?? "",
+  },
+  {
+    key: "phone",
+    label: () => "Phone",
+    defaultVisible: true,
+    render: (m) => m.phone ?? "—",
+    csv: (m) => m.phone ?? "",
+  },
+  {
+    key: "address",
+    label: () => "Address",
+    defaultVisible: false,
+    render: (m) => m.address ?? "—",
+    csv: (m) => m.address ?? "",
+  },
+  {
+    key: "dob",
+    label: () => "Date of birth",
+    defaultVisible: false,
+    render: (m) => m.dob ?? "—",
+    csv: (m) => m.dob ?? "",
+  },
+  {
+    key: "category",
+    label: () => "Category",
+    defaultVisible: false,
+    render: (m) =>
+      m.category
+        ? (CATEGORY_LABEL[m.category] ?? m.category) +
+          (m.categoryOther ? ` — ${m.categoryOther}` : "")
+        : "—",
+    csv: (m) => (m.category ? (CATEGORY_LABEL[m.category] ?? m.category) : ""),
+  },
+  {
+    key: "household",
+    label: () => "Household",
+    defaultVisible: true,
+    render: (m, ctx) => ctx.households.find((h) => h.id === m.householdId)?.name ?? "—",
+    csv: (m, ctx) => ctx.households.find((h) => h.id === m.householdId)?.name ?? "",
+  },
+  {
+    key: "cell",
+    label: (ctx) => ctx.cellSingular,
+    defaultVisible: true,
+    render: (m, ctx) => ctx.cells.find((c) => c.id === m.cellId)?.name ?? "—",
+    csv: (m, ctx) => ctx.cells.find((c) => c.id === m.cellId)?.name ?? "",
+  },
+  {
+    key: "addedBy",
+    label: () => "Added by",
+    defaultVisible: true,
+    render: (m, ctx) => ctx.users.find((u) => u.id === m.createdBy)?.fullName ?? "—",
+    csv: (m, ctx) => ctx.users.find((u) => u.id === m.createdBy)?.fullName ?? "",
+  },
 ];
 
 function MembersPage() {
   const { session } = useSession();
   const { singular: cellSingular } = useCellTerm();
+  const canEditDelete = session ? canEditDeleteMembers(session.role) : false;
   const members = useLiveQuery(() => db.members.orderBy("lastName").toArray(), []) ?? [];
   const households = useLiveQuery(() => db.households.toArray(), []) ?? [];
   const cells = useLiveQuery(() => db.cells.toArray(), []) ?? [];
@@ -71,6 +197,12 @@ function MembersPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [editing, setEditing] = useState<Member | null>(null);
   const [open, setOpen] = useState(false);
+  const [visibleCols, setVisibleCols] = useState<Set<string>>(
+    () => new Set(OPTIONAL_COLUMNS.filter((c) => c.defaultVisible).map((c) => c.key)),
+  );
+
+  const ctx: ColumnCtx = { households, cells, users, cellSingular };
+  const activeColumns = OPTIONAL_COLUMNS.filter((c) => visibleCols.has(c.key));
 
   const filtered = members.filter((m) => {
     const s = `${m.firstName} ${m.lastName} ${m.phone ?? ""} ${m.email ?? ""}`.toLowerCase();
@@ -79,6 +211,15 @@ function MembersPage() {
     return true;
   });
 
+  function toggleColumn(key: string) {
+    setVisibleCols((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
   return (
     <div>
       <PageHeader
@@ -86,35 +227,37 @@ function MembersPage() {
         description="Everyone in your church directory."
         actions={
           <div className="flex gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  <Columns3 className="mr-2 h-4 w-4" /> Columns
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Show columns</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {OPTIONAL_COLUMNS.map((c) => (
+                  <DropdownMenuCheckboxItem
+                    key={c.key}
+                    checked={visibleCols.has(c.key)}
+                    onCheckedChange={() => toggleColumn(c.key)}
+                  >
+                    {c.label(ctx)}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button
               variant="outline"
               onClick={() => {
                 const rows = [
-                  [
-                    "First name",
-                    "Last name",
-                    "Status",
-                    "Phone",
-                    "Email",
-                    "Household",
-                    cellSingular,
-                    "Added by",
-                  ],
-                  ...filtered.map((m) => {
-                    const hh = households.find((h) => h.id === m.householdId);
-                    const cell = cells.find((c) => c.id === m.cellId);
-                    const addedBy = users.find((u) => u.id === m.createdBy);
-                    return [
-                      m.firstName,
-                      m.lastName,
-                      m.status,
-                      m.phone ?? "",
-                      m.email ?? "",
-                      hh?.name ?? "",
-                      cell?.name ?? "",
-                      addedBy?.fullName ?? "",
-                    ];
-                  }),
+                  ["First name", "Last name", "Status", ...activeColumns.map((c) => c.label(ctx))],
+                  ...filtered.map((m) => [
+                    m.firstName,
+                    m.lastName,
+                    m.status,
+                    ...activeColumns.map((c) => c.csv(m, ctx)),
+                  ]),
                 ];
                 downloadCsv("members.csv", rows);
               }}
@@ -173,40 +316,35 @@ function MembersPage() {
           </Select>
         </div>
 
-        <div className="rounded-md border">
+        <div className="overflow-x-auto rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead>Household</TableHead>
-                <TableHead>{cellSingular}</TableHead>
-                <TableHead>Added by</TableHead>
-                <TableHead className="w-[100px]"></TableHead>
+                {activeColumns.map((c) => (
+                  <TableHead key={c.key}>{c.label(ctx)}</TableHead>
+                ))}
+                {canEditDelete && <TableHead className="w-[100px]"></TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((m) => {
-                const hh = households.find((h) => h.id === m.householdId);
-                const cell = cells.find((c) => c.id === m.cellId);
-                const addedBy = users.find((u) => u.id === m.createdBy);
-                return (
-                  <TableRow key={m.id}>
-                    <TableCell className="font-medium">
-                      <Link to="/members/$id" params={{ id: m.id }} className="hover:underline">
-                        {m.firstName} {m.lastName}
-                      </Link>
+              {filtered.map((m) => (
+                <TableRow key={m.id}>
+                  <TableCell className="font-medium">
+                    <Link to="/members/$id" params={{ id: m.id }} className="hover:underline">
+                      {m.firstName} {m.lastName}
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge status={m.status} />
+                  </TableCell>
+                  {activeColumns.map((c) => (
+                    <TableCell key={c.key} className="text-muted-foreground">
+                      {c.render(m, ctx)}
                     </TableCell>
-                    <TableCell>
-                      <StatusBadge status={m.status} />
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{m.phone ?? "—"}</TableCell>
-                    <TableCell className="text-muted-foreground">{hh?.name ?? "—"}</TableCell>
-                    <TableCell className="text-muted-foreground">{cell?.name ?? "—"}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {addedBy?.fullName ?? "—"}
-                    </TableCell>
+                  ))}
+                  {canEditDelete && (
                     <TableCell>
                       <div className="flex justify-end gap-1">
                         <Button
@@ -220,30 +358,22 @@ function MembersPage() {
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
-                        <DeleteButton
-                          label={`Delete ${m.firstName} ${m.lastName}`}
-                          title={`Delete ${m.firstName} ${m.lastName}?`}
-                          description="This also removes their cell and event attendance history. This can't be undone."
+                        <MemberDeleteDialog
+                          member={m}
                           onConfirm={async () => {
-                            try {
-                              await deleteMemberCascade(m.id);
-                              toast.success("Member deleted");
-                            } catch (e) {
-                              toast.error(
-                                e instanceof Error ? e.message : "Failed to delete member",
-                              );
-                            }
+                            await deleteMemberCascade(m.id);
+                            toast.success("Member deleted");
                           }}
                         />
                       </div>
                     </TableCell>
-                  </TableRow>
-                );
-              })}
+                  )}
+                </TableRow>
+              ))}
               {filtered.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={3 + activeColumns.length + (canEditDelete ? 1 : 0)}
                     className="py-10 text-center text-sm text-muted-foreground"
                   >
                     No members yet. Add your first member to get started.
@@ -266,6 +396,84 @@ export function StatusBadge({ status }: { status: MemberStatus }) {
     inactive: "bg-muted text-muted-foreground",
   };
   return <Badge className={`${map[status]} capitalize border-0`}>{status}</Badge>;
+}
+
+function MemberDeleteDialog({
+  member,
+  onConfirm,
+}: {
+  member: Member;
+  onConfirm: () => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const valid = reason.trim().length >= 15;
+
+  return (
+    <AlertDialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setReason("");
+      }}
+    >
+      <AlertDialogTrigger asChild>
+        <Button
+          size="icon"
+          variant="ghost"
+          aria-label={`Delete ${member.firstName} ${member.lastName}`}
+        >
+          <Trash2 className="h-4 w-4 text-destructive" />
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="font-display">
+            Delete {member.firstName} {member.lastName}?
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            This also removes their cell and event attendance history. This can't be undone. Enter a
+            reason (at least 15 characters) — the person who added this record and pastors will be
+            notified, including who deleted it and why.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="space-y-1.5">
+          <Label>Reason for deletion</Label>
+          <Textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={3}
+            placeholder="Why is this record being deleted?"
+          />
+          <p className="text-xs text-muted-foreground">
+            {reason.trim().length}/15 characters minimum
+          </p>
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={!valid || busy}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            onClick={async (e) => {
+              e.preventDefault();
+              setBusy(true);
+              try {
+                await onConfirm();
+                setOpen(false);
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : "Failed to delete member");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
 }
 
 function MemberDialog({
@@ -294,11 +502,14 @@ function MemberDialog({
   const [address, setAddress] = useState(member?.address ?? "");
   const [status, setStatus] = useState<MemberStatus>(member?.status ?? "visitor");
   const [category, setCategory] = useState<MemberCategory | undefined>(member?.category);
+  const [categoryOther, setCategoryOther] = useState(member?.categoryOther ?? "");
   const [joinDate, setJoinDate] = useState(member?.joinDate ?? "");
   const [householdId, setHouseholdId] = useState(member?.householdId ?? "");
   const [cellId, setCellId] = useState(member?.cellId ?? "");
   const [classId, setClassId] = useState(member?.classId ?? "");
   const [notes, setNotes] = useState(member?.notes ?? "");
+
+  const categoryDescription = CATEGORIES.find((c) => c.value === category)?.description;
 
   async function save() {
     if (!firstName.trim() || !lastName.trim()) {
@@ -316,6 +527,8 @@ function MemberDialog({
       address: address || undefined,
       status,
       category,
+      categoryOther: category === "other" ? categoryOther || undefined : undefined,
+      number: member?.number,
       joinDate: joinDate || undefined,
       householdId: householdId || undefined,
       cellId: cellId || undefined,
@@ -383,24 +596,37 @@ function MemberDialog({
             </SelectContent>
           </Select>
         </Field>
-        <Field label="Category">
-          <Select
-            value={category ?? "none"}
-            onValueChange={(v) => setCategory(v === "none" ? undefined : (v as MemberCategory))}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="—" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              {CATEGORIES.map((c) => (
-                <SelectItem key={c.value} value={c.value}>
-                  {c.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
+        <div>
+          <Field label="Category">
+            <Select
+              value={category ?? "none"}
+              onValueChange={(v) => setCategory(v === "none" ? undefined : (v as MemberCategory))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="—" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {CATEGORIES.map((c) => (
+                  <SelectItem key={c.value} value={c.value}>
+                    {c.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          {categoryDescription && (
+            <p className="mt-1 text-xs text-muted-foreground">{categoryDescription}</p>
+          )}
+          {category === "other" && (
+            <Input
+              className="mt-1.5"
+              value={categoryOther}
+              onChange={(e) => setCategoryOther(e.target.value)}
+              placeholder="Describe this category"
+            />
+          )}
+        </div>
         <Field label="Join date">
           <Input type="date" value={joinDate} onChange={(e) => setJoinDate(e.target.value)} />
         </Field>

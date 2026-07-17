@@ -25,7 +25,21 @@ export interface PasswordResetToken {
 }
 
 export type MemberStatus = "visitor" | "member" | "baptized" | "inactive";
-export type MemberCategory = "pastor" | "leader" | "member" | "new_member" | "convert";
+// "new_member" and "convert" are older values kept only so existing records
+// still render (via a label fallback) — new records use the set below.
+export type MemberCategory =
+  | "member"
+  | "committed"
+  | "pastor"
+  | "leader"
+  | "new_recruit"
+  | "new_convert"
+  | "visitor"
+  | "uncommitted"
+  | "fellowship_member"
+  | "other"
+  | "new_member"
+  | "convert";
 
 export interface Household {
   id: string;
@@ -46,6 +60,8 @@ export interface Member {
   address?: string;
   status: MemberStatus;
   category?: MemberCategory;
+  categoryOther?: string; // free-text description when category === "other"
+  number?: string; // admin-assigned, zero-padded to at least 3 digits (e.g. "001")
   joinDate?: string;
   householdId?: string;
   isHeadOfHousehold?: boolean;
@@ -259,6 +275,9 @@ export class MyChurchDB extends Dexie {
             delete user.username;
           });
       });
+    this.version(6).stores({
+      members: "id, lastName, status, category, householdId, cellId, classId, number",
+    });
   }
 }
 
@@ -268,6 +287,18 @@ export const uid = () =>
   typeof crypto !== "undefined" && crypto.randomUUID
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+// Suggests the next member number: highest existing numeric value + 1,
+// zero-padded to at least 3 digits. Admin can accept or override on the
+// member detail page — numbers are never auto-assigned at creation.
+export async function getNextMemberNumber(): Promise<string> {
+  const members = await db.members.toArray();
+  const highest = members.reduce((max, m) => {
+    const n = m.number ? parseInt(m.number, 10) : NaN;
+    return Number.isNaN(n) ? max : Math.max(max, n);
+  }, 0);
+  return String(highest + 1).padStart(3, "0");
+}
 
 // ---- Cascading deletes ----
 // Dexie has no foreign keys, so related rows must be cleaned up manually.
