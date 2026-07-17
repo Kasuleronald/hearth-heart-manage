@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
-import { Plus, Search, Pencil, Download, Trash2, Columns3 } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Columns3 } from "lucide-react";
 import {
   db,
   deleteMemberCascade,
@@ -10,7 +10,7 @@ import {
   type MemberCategory,
   type MemberStatus,
 } from "@/lib/db";
-import { downloadCsv } from "@/lib/download";
+import { ExportMenu } from "@/components/export-menu";
 import { useSession, canEditDeleteMembers } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { PageHeader } from "@/components/page-header";
@@ -247,23 +247,22 @@ function MembersPage() {
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button
-              variant="outline"
-              onClick={() => {
-                const rows = [
-                  ["First name", "Last name", "Status", ...activeColumns.map((c) => c.label(ctx))],
-                  ...filtered.map((m) => [
-                    m.firstName,
-                    m.lastName,
-                    m.status,
-                    ...activeColumns.map((c) => c.csv(m, ctx)),
-                  ]),
-                ];
-                downloadCsv("members.csv", rows);
-              }}
-            >
-              <Download className="mr-2 h-4 w-4" /> Export CSV
-            </Button>
+            <ExportMenu
+              filename="members"
+              title="Members"
+              headers={[
+                "First name",
+                "Last name",
+                "Status",
+                ...activeColumns.map((c) => c.label(ctx)),
+              ]}
+              rows={filtered.map((m) => [
+                m.firstName,
+                m.lastName,
+                m.status,
+                ...activeColumns.map((c) => c.csv(m, ctx)),
+              ])}
+            />
             <Dialog
               open={open}
               onOpenChange={(o) => {

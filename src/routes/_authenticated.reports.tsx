@@ -1,7 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, FileSpreadsheet, FileText } from "lucide-react";
 import { format, subDays } from "date-fns";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
 import { db } from "@/lib/db";
@@ -15,9 +14,7 @@ import {
   collectGivingEntries,
   type ReportResult,
 } from "@/lib/reports";
-import { downloadCsv } from "@/lib/download";
-import { downloadXlsx } from "@/lib/export-xlsx";
-import { downloadPdf } from "@/lib/export-pdf";
+import { ExportMenu } from "@/components/export-menu";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -177,43 +174,15 @@ function ReportsPage() {
             <Label>To</Label>
             <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
-          <div className="ml-auto flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() =>
-                downloadCsv(`${reportType}-report.csv`, [report.tableHeaders, ...report.tableRows])
-              }
-            >
-              <Download className="mr-2 h-4 w-4" /> CSV
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() =>
-                downloadXlsx(
-                  `${reportType}-report.xlsx`,
-                  reportLabel,
-                  report.tableHeaders,
-                  report.tableRows,
-                )
-              }
-            >
-              <FileSpreadsheet className="mr-2 h-4 w-4" /> XLSX
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() =>
-                downloadPdf({
-                  filename: `${reportType}-report.pdf`,
-                  title: reportLabel,
-                  subtitle: `${from} to ${to}`,
-                  chartElement: chartRef.current,
-                  headers: report.tableHeaders,
-                  rows: report.tableRows,
-                })
-              }
-            >
-              <FileText className="mr-2 h-4 w-4" /> PDF
-            </Button>
+          <div className="ml-auto">
+            <ExportMenu
+              filename={`${reportType}-report`}
+              title={reportLabel}
+              subtitle={`${from} to ${to}`}
+              chartElement={chartRef.current}
+              headers={report.tableHeaders}
+              rows={report.tableRows}
+            />
           </div>
         </div>
 

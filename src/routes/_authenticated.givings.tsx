@@ -1,9 +1,9 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useState } from "react";
-import { Plus, Pencil, Download, HandCoins } from "lucide-react";
+import { Plus, Pencil, HandCoins } from "lucide-react";
 import { db, uid, type Giving, type GivingCategory, type Partner, type Project } from "@/lib/db";
-import { downloadCsv } from "@/lib/download";
+import { ExportMenu } from "@/components/export-menu";
 import { formatUGX } from "@/lib/currency";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -109,29 +109,31 @@ function GivingsPage() {
         description="Love offerings, tithes, first fruits, seeds and project giving."
         actions={
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                const rows = [
-                  ["Date", "Category", "Amount (UGX)", "Giver", "Project", "Notes", "Added by"],
-                  ...filtered.map((g) => {
-                    const addedBy = users.find((u) => u.id === g.createdBy);
-                    return [
-                      g.date,
-                      CATEGORY_LABEL[g.category],
-                      String(g.amount),
-                      giverName(g),
-                      projectName(g),
-                      g.notes ?? "",
-                      addedBy?.fullName ?? "",
-                    ];
-                  }),
+            <ExportMenu
+              filename="givings"
+              title="Givings"
+              headers={[
+                "Date",
+                "Category",
+                "Amount (UGX)",
+                "Giver",
+                "Project",
+                "Notes",
+                "Added by",
+              ]}
+              rows={filtered.map((g) => {
+                const addedBy = users.find((u) => u.id === g.createdBy);
+                return [
+                  g.date,
+                  CATEGORY_LABEL[g.category],
+                  String(g.amount),
+                  giverName(g),
+                  projectName(g),
+                  g.notes ?? "",
+                  addedBy?.fullName ?? "",
                 ];
-                downloadCsv("givings.csv", rows);
-              }}
-            >
-              <Download className="mr-2 h-4 w-4" /> Export CSV
-            </Button>
+              })}
+            />
             <Dialog
               open={open}
               onOpenChange={(o) => {
