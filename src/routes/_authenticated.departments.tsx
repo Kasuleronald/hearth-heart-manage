@@ -6,9 +6,11 @@ import {
   db,
   uid,
   unassignDepartmentLeader,
+  deleteDepartmentCascade,
   seedDefaultDepartments,
   type Department,
 } from "@/lib/db";
+import { formatUGX } from "@/lib/currency";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,6 +60,7 @@ function DepartmentsPage() {
           .toArray(),
       [],
     ) ?? [];
+  const expenses = useLiveQuery(() => db.expenses.toArray(), []) ?? [];
   const [editing, setEditing] = useState<Department | null>(null);
   const [open, setOpen] = useState(false);
 
@@ -113,6 +116,9 @@ function DepartmentsPage() {
         {departments.map((d) => {
           const leader = users.find((u) => u.id === d.leaderId);
           const isMine = session?.userId === d.leaderId;
+          const expenseTotal = expenses
+            .filter((e) => e.departmentId === d.id)
+            .reduce((sum, e) => sum + e.amount, 0);
           return (
             <Card key={d.id} className={isMine ? "border-primary" : undefined}>
               <CardContent className="p-5">
@@ -141,10 +147,10 @@ function DepartmentsPage() {
                       <DeleteButton
                         label={`Delete ${d.name}`}
                         title={`Delete department "${d.name}"?`}
-                        description="This can't be undone."
+                        description="This also removes its recorded expenses. This can't be undone."
                         onConfirm={async () => {
                           try {
-                            await db.departments.delete(d.id);
+                            await deleteDepartmentCascade(d.id);
                             toast.success("Department deleted");
                           } catch (e) {
                             toast.error(
@@ -168,6 +174,11 @@ function DepartmentsPage() {
                     </Badge>
                   )}
                 </div>
+                {expenseTotal > 0 && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Expenses: <span className="text-foreground">{formatUGX(expenseTotal)}</span>
+                  </p>
+                )}
               </CardContent>
             </Card>
           );

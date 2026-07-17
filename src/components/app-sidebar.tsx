@@ -16,6 +16,7 @@ import {
   Target,
   Handshake,
   Building,
+  Receipt,
 } from "lucide-react";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
 import {
@@ -95,6 +96,12 @@ function getNav(cellTermPlural: string) {
       url: "/partners",
       icon: Handshake,
       roles: ["admin", "pastor", "treasurer"] as const,
+    },
+    {
+      title: "Expenses",
+      url: "/expenses",
+      icon: Receipt,
+      roles: ["admin", "treasurer"] as const,
     },
     {
       title: "Reports",

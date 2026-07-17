@@ -224,6 +224,18 @@ export interface Department {
   createdAt: number;
 }
 
+// departmentId is required — every expense must roll up into some
+// department's totals, so departmental report views stay complete.
+export interface Expense {
+  id: string;
+  departmentId: string;
+  amount: number; // UGX
+  description: string;
+  enteredBy: string; // User.id
+  branchId?: string;
+  createdAt: number;
+}
+
 export interface Settings {
   key: string;
   value: string;
@@ -270,6 +282,7 @@ export class MyChurchDB extends Dexie {
   passwordResetTokens!: EntityTable<PasswordResetToken, "token">;
   settings!: EntityTable<Settings, "key">;
   notifications!: EntityTable<Notification, "id">;
+  expenses!: EntityTable<Expense, "id">;
 
   constructor() {
     super("my_church");
@@ -340,6 +353,9 @@ export class MyChurchDB extends Dexie {
       });
     this.version(8).stores({
       branches: "id, name",
+    });
+    this.version(9).stores({
+      expenses: "id, departmentId",
     });
   }
 }
@@ -447,6 +463,16 @@ export async function unassignDepartmentLeader(userId: string) {
   await Promise.all(led.map((d) => db.departments.update(d.id, { leaderId: undefined })));
 }
 
+// Expense.departmentId is required (not optional), so unlike other cascades
+// an expense can't be left dangling with the link cleared — it's deleted
+// along with its department.
+export async function deleteDepartmentCascade(departmentId: string) {
+  await db.transaction("rw", [db.departments, db.expenses], async () => {
+    await db.expenses.where("departmentId").equals(departmentId).delete();
+    await db.departments.delete(departmentId);
+  });
+}
+
 // Deleting a branch doesn't delete its records — it un-scopes them back to
 // "whole church" (branchId: undefined), same treatment as unlinking a leader.
 // branchId isn't an indexed field (every list page already filters it in
@@ -547,6 +573,7 @@ const BACKUP_TABLES = [
   "departments",
   "projects",
   "partners",
+  "expenses",
 ] as const;
 
 export interface DatabaseBackup {
