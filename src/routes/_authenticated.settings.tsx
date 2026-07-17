@@ -3,17 +3,20 @@ import { useEffect, useRef, useState } from "react";
 import { Download, Upload, Database, Tag } from "lucide-react";
 import { exportDatabase, importDatabase, type DatabaseBackup } from "@/lib/db";
 import { downloadJson } from "@/lib/download";
-import {
-  useCellTerm,
-  setCellTerm,
-  DEFAULT_CELL_SINGULAR,
-  DEFAULT_CELL_PLURAL,
-} from "@/lib/terminology";
+import { TERM_DEFINITIONS, useTerm, setTerm } from "@/lib/terminology";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -67,16 +70,6 @@ function SettingsPage() {
 }
 
 function TerminologyCard() {
-  const { singular, plural } = useCellTerm();
-  const [editSingular, setEditSingular] = useState(singular);
-  const [editPlural, setEditPlural] = useState(plural);
-
-  // Re-sync the inputs once the live values load (they start empty on first render).
-  useEffect(() => {
-    setEditSingular(singular);
-    setEditPlural(plural);
-  }, [singular, plural]);
-
   return (
     <Card>
       <CardHeader>
@@ -86,42 +79,71 @@ function TerminologyCard() {
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Some churches call their small groups something other than "Cell Fellowship" — Zonal
-          Fellowship, Garage, Patria Gathering, and so on. Rename it here and it updates everywhere
-          in the app.
+          Rename any of these to match how your church talks — it updates everywhere in the app.
+          Leave a field blank to fall back to the default. Saves as soon as you click away from a
+          field.
         </p>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label>Singular</Label>
-            <Input
-              value={editSingular}
-              onChange={(e) => setEditSingular(e.target.value)}
-              placeholder={DEFAULT_CELL_SINGULAR}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Plural</Label>
-            <Input
-              value={editPlural}
-              onChange={(e) => setEditPlural(e.target.value)}
-              placeholder={DEFAULT_CELL_PLURAL}
-            />
-          </div>
+        <div className="overflow-x-auto rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>System name</TableHead>
+                <TableHead>Singular</TableHead>
+                <TableHead>Plural</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {TERM_DEFINITIONS.map((def) => (
+                <TermRow key={def.key} def={def} />
+              ))}
+            </TableBody>
+          </Table>
         </div>
-        <Button
-          onClick={async () => {
-            try {
-              await setCellTerm(editSingular, editPlural);
-              toast.success("Terminology updated");
-            } catch (e) {
-              toast.error(e instanceof Error ? e.message : "Failed to save");
-            }
-          }}
-        >
-          Save terminology
-        </Button>
       </CardContent>
     </Card>
+  );
+}
+
+function TermRow({ def }: { def: (typeof TERM_DEFINITIONS)[number] }) {
+  const { singular, plural } = useTerm(def.key);
+  const [editSingular, setEditSingular] = useState(singular);
+  const [editPlural, setEditPlural] = useState(plural);
+
+  // Re-sync the inputs once the live values load (they start empty on first render).
+  useEffect(() => {
+    setEditSingular(singular);
+    setEditPlural(plural);
+  }, [singular, plural]);
+
+  async function save() {
+    try {
+      await setTerm(def.key, editSingular, editPlural);
+      toast.success(`${def.defaultSingular} terminology updated`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save");
+    }
+  }
+
+  return (
+    <TableRow>
+      <TableCell className="text-muted-foreground">{def.defaultSingular}</TableCell>
+      <TableCell>
+        <Input
+          value={editSingular}
+          onChange={(e) => setEditSingular(e.target.value)}
+          onBlur={save}
+          placeholder={def.defaultSingular}
+        />
+      </TableCell>
+      <TableCell>
+        <Input
+          value={editPlural}
+          onChange={(e) => setEditPlural(e.target.value)}
+          onBlur={save}
+          placeholder={def.defaultPlural}
+        />
+      </TableCell>
+    </TableRow>
   );
 }
 
