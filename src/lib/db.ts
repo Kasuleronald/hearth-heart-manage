@@ -21,6 +21,7 @@ export interface User {
   memberId?: string; // optional link to this user's own Member record
   financeTier?: "A"; // elevated finance powers for a leader/cell_leader; unset for others
   branchId?: string; // undefined = church-wide access (sees/manages every branch)
+  needsEmailUpdate?: boolean; // set when a placeholder email was auto-assigned — see §14
   createdAt: number;
 }
 
@@ -410,6 +411,40 @@ export class MyChurchDB extends Dexie {
           m.editRequestStatus = "none";
           delete m.offertoryAmount;
           await table.put(m);
+        }
+      });
+    // §14: defensive re-pass, independent of v5's original email backfill —
+    // any user row that still has a missing/empty email (e.g. one that
+    // slipped through an earlier partial migration) gets a unique
+    // placeholder here too, so no admin is ever locked out of login by a
+    // missing email. Existing data under the old schema: rows with no email
+    // get `user-{id}@local.invalid` (or a username-derived one if that
+    // legacy field is somehow still present), flagged via
+    // needsEmailUpdate so the UI can prompt them to set a real one.
+    this.version(12)
+      .stores({})
+      .upgrade(async (tx) => {
+        const table = tx.table("users");
+        const users = (await table.toArray()) as Record<string, unknown>[];
+        const takenEmails = new Set(
+          users.map((u) => u.email).filter((e): e is string => typeof e === "string" && e !== ""),
+        );
+        for (const user of users) {
+          if (user.email) continue;
+          const base =
+            String(user.username ?? `user-${user.id}`)
+              .toLowerCase()
+              .replace(/[^a-z0-9.]/g, "") || `user-${user.id}`;
+          let email = `${base}@local.invalid`;
+          let n = 1;
+          while (takenEmails.has(email)) {
+            email = `${base}${n}@local.invalid`;
+            n++;
+          }
+          takenEmails.add(email);
+          user.email = email;
+          user.needsEmailUpdate = true;
+          await table.put(user);
         }
       });
   }

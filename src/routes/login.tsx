@@ -81,7 +81,16 @@ function LoginPage() {
         await login(email, password);
         toast.success("Welcome to My Church");
       } else {
-        await login(email, password);
+        const s = await login(email, password);
+        if (s.needsEmailUpdate) {
+          toast.warning("Your account has a placeholder email", {
+            description:
+              s.role === "admin"
+                ? "Open Users and update it to your real email — you'll need it to sign in going forward."
+                : "Ask an admin to update it to your real email in Users — you'll need it to sign in going forward.",
+            duration: 10000,
+          });
+        }
       }
       navigate({ to: "/dashboard", replace: true });
     } catch (err) {

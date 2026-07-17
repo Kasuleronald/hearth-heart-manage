@@ -550,6 +550,8 @@ function EditUserDialog({
         role,
         memberId: isMember ? memberId || undefined : undefined,
         branchId: branchId || undefined,
+        // A real email was just set, so the §14 placeholder-email prompt is done.
+        needsEmailUpdate: trimmedEmail !== user.email ? false : user.needsEmailUpdate,
         financeTier:
           financeTierA && (role === "leader" || role === "cell_leader") ? "A" : undefined,
       });

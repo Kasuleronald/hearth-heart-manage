@@ -475,6 +475,55 @@ it belongs to first — e.g. matching a `reportRef` written on a paper receipt.
 
 ---
 
+## 14. Safe schema migrations & upgrade policy
+
+**What just happened:** the email-login change (§1) added `User.email` as
+the lookup field for login, but existing local databases (created before
+that change) have users with no `email` value — so login silently matches
+nothing and locks out any admin who already had a local database. This is a
+general risk with local-first/IndexedDB apps: every schema or logic change
+that assumes a field exists needs to also handle rows created before that
+field existed, because there's no server-side data migration step to fall
+back on — each user's browser is upgraded independently, whenever they next
+load the app.
+
+**Immediate fix — backfill the current lockout:**
+Add a new Dexie version bump in `db.ts` (the pattern already used —
+`this.version(5).stores({...})` following the existing `version(1)` through
+`version(4)` blocks) with an `.upgrade(tx => ...)` step that finds any user
+row where `email` is missing/empty and assigns a placeholder derived from
+whatever identifying field is still present (e.g. the old `username` if it's
+still in the row, falling back to `` `user-${id}@local.invalid` `` if not),
+so no existing admin is ever locked out by this specific change. Surface a
+one-time banner/toast after login prompting them to set a real email in
+their profile if a placeholder was assigned.
+
+**Standing policy for every future schema/logic change to `db.ts`, going
+forward:**
+- Any new **required** field on an existing table needs an `.upgrade()` step
+  in that version's Dexie migration that backfills a sensible default for
+  every existing row — never assume existing rows already satisfy a new
+  constraint.
+- Any change to how **login or lookup** works (e.g. switching the field
+  used to find a user, changing a role's permissions, renaming an enum
+  value like `MemberCategory`) must be checked against what happens to rows
+  created under the *previous* schema — if the change could make an
+  existing admin unable to log in or lose access to their own data, the
+  migration must handle that row, not just new rows going forward.
+- Before shipping a schema change, explicitly state (in the commit message
+  or a comment near the migration) what happens to pre-existing data under
+  the old schema — "existing users get a placeholder email" rather than
+  leaving it unstated.
+- Never bump a Dexie version number without an accompanying `.upgrade()`
+  step when the change could leave existing rows in an invalid or
+  unreachable state — an empty upgrade function is only safe when the
+  change is purely additive (a new optional field, a new table) that
+  doesn't affect how existing rows are read.
+
+---
+
+## Explicit non-goals for this pass
+
 - No real SMTP/email sending — local-mode stand-ins only, built with clear
   seams to swap in real delivery later.
 - No SuperAdmin / multi-church hosting yet — that requires a real server and

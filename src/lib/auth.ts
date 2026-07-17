@@ -13,6 +13,7 @@ export interface Session {
   role: Role;
   branchId?: string; // undefined = church-wide access; set = scoped to that branch
   financeTier?: "A"; // elevated finance powers granted to a leader/cell_leader
+  needsEmailUpdate?: boolean; // a placeholder email was auto-assigned — see §14
   expiresAt: number;
 }
 
@@ -219,6 +220,7 @@ export async function login(email: string, password: string): Promise<Session> {
     role: u.role,
     branchId: u.branchId,
     financeTier: u.financeTier,
+    needsEmailUpdate: u.needsEmailUpdate,
     expiresAt: Date.now() + IDLE_TIMEOUT_MS,
   };
   setSession(s);
