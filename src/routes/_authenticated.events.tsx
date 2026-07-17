@@ -183,10 +183,12 @@ function EventDialog({
         branchId: branchId || undefined,
         createdAt: event?.createdAt ?? Date.now(),
       };
-      await db.events.put(data);
-      if (!event) {
-        await notifyEventCreated(data, currentUserId);
-      }
+      await db.transaction("rw", [db.events, db.users, db.notifications], async () => {
+        await db.events.put(data);
+        if (!event) {
+          await notifyEventCreated(data, currentUserId);
+        }
+      });
       toast.success(event ? "Event updated" : "Event created");
       onClose();
     } catch (e) {

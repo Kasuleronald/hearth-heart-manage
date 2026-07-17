@@ -428,10 +428,16 @@ function MeetingDialog({
                 branchId: meeting?.branchId ?? cellBranchId,
                 createdAt: meeting?.createdAt ?? Date.now(),
               };
-              await db.cellMeetings.put(data);
-              if (!meeting) {
-                await notifyCellReportSubmitted(data, cellName);
-              }
+              await db.transaction(
+                "rw",
+                [db.cellMeetings, db.users, db.notifications],
+                async () => {
+                  await db.cellMeetings.put(data);
+                  if (!meeting) {
+                    await notifyCellReportSubmitted(data, cellName);
+                  }
+                },
+              );
               toast.success(
                 meeting ? "Meeting updated" : "Meeting created — mark attendance next.",
               );

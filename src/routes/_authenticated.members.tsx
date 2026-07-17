@@ -552,10 +552,12 @@ function MemberDialog({
       createdAt: member?.createdAt ?? Date.now(),
     };
     try {
-      await db.members.put(data);
-      if (!member && currentUserId) {
-        await notifyMemberAdded(data, currentUserId);
-      }
+      await db.transaction("rw", [db.members, db.users, db.notifications], async () => {
+        await db.members.put(data);
+        if (!member && currentUserId) {
+          await notifyMemberAdded(data, currentUserId);
+        }
+      });
       toast.success(member ? "Member updated" : "Member added");
       onClose();
     } catch (e) {

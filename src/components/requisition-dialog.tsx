@@ -45,8 +45,14 @@ export function RequisitionDialog({
         status: "pending" as const,
         createdAt: Date.now(),
       };
-      await db.requisitions.add(requisition);
-      await notifyRequisitionSubmitted(requisition);
+      await db.transaction(
+        "rw",
+        [db.requisitions, db.users, db.departments, db.notifications],
+        async () => {
+          await db.requisitions.add(requisition);
+          await notifyRequisitionSubmitted(requisition);
+        },
+      );
       toast.success("Requisition submitted");
       onClose();
     } catch (e) {
