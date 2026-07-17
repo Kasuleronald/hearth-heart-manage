@@ -5,6 +5,7 @@ import {
   type ChurchEvent,
   type Member,
   type NotificationType,
+  type Pledge,
   type Requisition,
   type Role,
   type Testimony,
@@ -119,6 +120,20 @@ export async function notifyTestimonyAdded(testimony: Testimony) {
     "testimony_added",
     `${author?.fullName ?? "Someone"} has entered a testimony under category ${testimony.category}.`,
     { type: "testimony", id: testimony.id },
+  );
+}
+
+export async function notifyPledgeArchived(pledge: Pledge) {
+  const [pastors, admins] = await Promise.all([
+    userIdsByRoles(["pastor"]),
+    userIdsByRoles(["admin"]),
+  ]);
+  const recipients = [...pastors, ...admins, pledge.bookedBy];
+  await notify(
+    recipients,
+    "pledge_archived",
+    `Pledge from ${pledge.name} has passed its due date by more than 30 days and was archived.`,
+    { type: "pledge", id: pledge.id },
   );
 }
 

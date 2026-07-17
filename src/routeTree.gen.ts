@@ -18,6 +18,7 @@ import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedRequisitionsRouteImport } from './routes/_authenticated.requisitions'
 import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated.reports'
 import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated.projects'
+import { Route as AuthenticatedPledgesRouteImport } from './routes/_authenticated.pledges'
 import { Route as AuthenticatedPartnersRouteImport } from './routes/_authenticated.partners'
 import { Route as AuthenticatedMembersRouteImport } from './routes/_authenticated.members'
 import { Route as AuthenticatedHouseholdsRouteImport } from './routes/_authenticated.households'
@@ -79,6 +80,11 @@ const AuthenticatedReportsRoute = AuthenticatedReportsRouteImport.update({
 const AuthenticatedProjectsRoute = AuthenticatedProjectsRouteImport.update({
   id: '/projects',
   path: '/projects',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedPledgesRoute = AuthenticatedPledgesRouteImport.update({
+  id: '/pledges',
+  path: '/pledges',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedPartnersRoute = AuthenticatedPartnersRouteImport.update({
@@ -179,6 +185,7 @@ export interface FileRoutesByFullPath {
   '/households': typeof AuthenticatedHouseholdsRoute
   '/members': typeof AuthenticatedMembersRouteWithChildren
   '/partners': typeof AuthenticatedPartnersRoute
+  '/pledges': typeof AuthenticatedPledgesRoute
   '/projects': typeof AuthenticatedProjectsRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/requisitions': typeof AuthenticatedRequisitionsRoute
@@ -205,6 +212,7 @@ export interface FileRoutesByTo {
   '/households': typeof AuthenticatedHouseholdsRoute
   '/members': typeof AuthenticatedMembersRouteWithChildren
   '/partners': typeof AuthenticatedPartnersRoute
+  '/pledges': typeof AuthenticatedPledgesRoute
   '/projects': typeof AuthenticatedProjectsRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/requisitions': typeof AuthenticatedRequisitionsRoute
@@ -233,6 +241,7 @@ export interface FileRoutesById {
   '/_authenticated/households': typeof AuthenticatedHouseholdsRoute
   '/_authenticated/members': typeof AuthenticatedMembersRouteWithChildren
   '/_authenticated/partners': typeof AuthenticatedPartnersRoute
+  '/_authenticated/pledges': typeof AuthenticatedPledgesRoute
   '/_authenticated/projects': typeof AuthenticatedProjectsRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/requisitions': typeof AuthenticatedRequisitionsRoute
@@ -261,6 +270,7 @@ export interface FileRouteTypes {
     | '/households'
     | '/members'
     | '/partners'
+    | '/pledges'
     | '/projects'
     | '/reports'
     | '/requisitions'
@@ -287,6 +297,7 @@ export interface FileRouteTypes {
     | '/households'
     | '/members'
     | '/partners'
+    | '/pledges'
     | '/projects'
     | '/reports'
     | '/requisitions'
@@ -314,6 +325,7 @@ export interface FileRouteTypes {
     | '/_authenticated/households'
     | '/_authenticated/members'
     | '/_authenticated/partners'
+    | '/_authenticated/pledges'
     | '/_authenticated/projects'
     | '/_authenticated/reports'
     | '/_authenticated/requisitions'
@@ -395,6 +407,13 @@ declare module '@tanstack/react-router' {
       path: '/projects'
       fullPath: '/projects'
       preLoaderRoute: typeof AuthenticatedProjectsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/pledges': {
+      id: '/_authenticated/pledges'
+      path: '/pledges'
+      fullPath: '/pledges'
+      preLoaderRoute: typeof AuthenticatedPledgesRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/partners': {
@@ -569,6 +588,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedHouseholdsRoute: typeof AuthenticatedHouseholdsRoute
   AuthenticatedMembersRoute: typeof AuthenticatedMembersRouteWithChildren
   AuthenticatedPartnersRoute: typeof AuthenticatedPartnersRoute
+  AuthenticatedPledgesRoute: typeof AuthenticatedPledgesRoute
   AuthenticatedProjectsRoute: typeof AuthenticatedProjectsRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedRequisitionsRoute: typeof AuthenticatedRequisitionsRoute
@@ -590,6 +610,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedHouseholdsRoute: AuthenticatedHouseholdsRoute,
   AuthenticatedMembersRoute: AuthenticatedMembersRouteWithChildren,
   AuthenticatedPartnersRoute: AuthenticatedPartnersRoute,
+  AuthenticatedPledgesRoute: AuthenticatedPledgesRoute,
   AuthenticatedProjectsRoute: AuthenticatedProjectsRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedRequisitionsRoute: AuthenticatedRequisitionsRoute,

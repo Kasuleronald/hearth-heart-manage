@@ -20,6 +20,7 @@ import {
   ClipboardList,
   FileSearch,
   MessageCircleHeart,
+  PiggyBank,
 } from "lucide-react";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
 import {
@@ -100,6 +101,12 @@ function getNav(cellTermPlural: string, givingsPlural: string) {
       url: "/givings",
       icon: HandCoins,
       roles: ["admin", "pastor", "treasurer"] as const,
+    },
+    {
+      title: "Pledges",
+      url: "/pledges",
+      icon: PiggyBank,
+      roles: ["admin", "pastor", "cell_leader", "leader", "treasurer"] as const,
     },
     {
       title: "Partners",

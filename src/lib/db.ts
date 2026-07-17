@@ -265,6 +265,27 @@ export interface Requisition {
   createdAt: number;
 }
 
+export type PledgeCause = "project" | "seed";
+export type PledgeStatus = "active" | "fulfilled" | "banned" | "archived";
+// Auto-archived once 30+ days past collectionDate while still "active" —
+// see archiveOverduePledges(). Admin/Treasurer can restore an archived
+// pledge, but must set collectionDate to a future date when doing so.
+export const PLEDGE_ARCHIVE_GRACE_DAYS = 30;
+
+export interface Pledge {
+  id: string;
+  name: string; // who is pledging — may not be a Member/Partner record
+  amount: number; // UGX
+  collectionDate: string; // YYYY-MM-DD — target date
+  cause: PledgeCause;
+  projectId?: string; // only meaningful when cause === "project"
+  description?: string;
+  bookedBy: string; // User.id — who entered it
+  status: PledgeStatus;
+  branchId?: string;
+  createdAt: number;
+}
+
 export type TestimonyCategory =
   | "Salvation"
   | "Healing"
@@ -314,7 +335,8 @@ export type NotificationType =
   | "event_created"
   | "requisition_submitted"
   | "cell_report_submitted"
-  | "testimony_added";
+  | "testimony_added"
+  | "pledge_archived";
 
 export interface Notification {
   id: string;
@@ -350,6 +372,7 @@ export class MyChurchDB extends Dexie {
   expenses!: EntityTable<Expense, "id">;
   requisitions!: EntityTable<Requisition, "id">;
   testimonies!: EntityTable<Testimony, "id">;
+  pledges!: EntityTable<Pledge, "id">;
 
   constructor() {
     super("my_church");
@@ -511,6 +534,9 @@ export class MyChurchDB extends Dexie {
       });
     this.version(14).stores({
       testimonies: "id, userId, category, createdAt",
+    });
+    this.version(15).stores({
+      pledges: "id, bookedBy, status, collectionDate",
     });
   }
 }
@@ -756,6 +782,7 @@ const BACKUP_TABLES = [
   "expenses",
   "requisitions",
   "testimonies",
+  "pledges",
 ] as const;
 
 export interface DatabaseBackup {

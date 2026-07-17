@@ -406,6 +406,24 @@ export function canToggleCurrency(role: Role, financeTier?: "A") {
 export function canManageCurrencySettings(role: Role) {
   return role === "admin";
 }
+// Pledges: any signed-in user can book one and sees only their own; these
+// three cover the elevated finance-side powers.
+export function canViewAllPledges(role: Role, financeTier?: "A") {
+  return role === "admin" || role === "treasurer" || isTierAFinanceLeader(role, financeTier);
+}
+export function canEditAnyPledge(role: Role, financeTier?: "A") {
+  return role === "admin" || role === "treasurer" || isTierAFinanceLeader(role, financeTier);
+}
+// Delete / mark fulfilled / ban.
+export function canManagePledgeStatus(role: Role, financeTier?: "A") {
+  return role === "admin" || role === "treasurer" || isTierAFinanceLeader(role, financeTier);
+}
+// Restoring an archived pledge is narrower than the general management
+// power above — Tier-A finance leaders can delete/fulfill/ban, but only
+// Admin/Treasurer can bring an archived pledge back.
+export function canRestorePledges(role: Role) {
+  return role === "admin" || role === "treasurer";
+}
 // Branch-match check, layered on top of the role checks above: a church-wide
 // user (branchId undefined) can reach every record; a branch-scoped user can
 // only reach records in their own branch or church-wide records (branchId
