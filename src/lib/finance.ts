@@ -23,3 +23,34 @@ export function getCellBalance(
     0,
   );
 }
+
+// Per-report running balance, grouped by cell and accumulated in
+// chronological order — the same delta math as getCellBalance, just kept as
+// a cumulative total as of each individual report rather than one grand
+// total. Used by the cross-cell report index (§13) where each row needs to
+// show where that cell's balance stood at that point in time.
+export function getRunningBalances(
+  meetings: Pick<
+    CellMeeting,
+    "id" | "cellId" | "date" | "createdAt" | "offertoryReported" | "offertoryReceived"
+  >[],
+): Map<string, number> {
+  const byCell = new Map<string, typeof meetings>();
+  for (const m of meetings) {
+    const arr = byCell.get(m.cellId) ?? [];
+    arr.push(m);
+    byCell.set(m.cellId, arr);
+  }
+  const result = new Map<string, number>();
+  for (const cellMeetings of byCell.values()) {
+    const sorted = [...cellMeetings].sort((a, b) =>
+      a.date === b.date ? a.createdAt - b.createdAt : a.date < b.date ? -1 : 1,
+    );
+    let running = 0;
+    for (const m of sorted) {
+      running += (m.offertoryReceived ?? 0) - (m.offertoryReported ?? 0);
+      result.set(m.id, running);
+    }
+  }
+  return result;
+}

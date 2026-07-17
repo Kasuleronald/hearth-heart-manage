@@ -27,6 +27,7 @@ import { Route as AuthenticatedDepartmentsRouteImport } from './routes/_authenti
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated.dashboard'
 import { Route as AuthenticatedClassesRouteImport } from './routes/_authenticated.classes'
 import { Route as AuthenticatedCellsRouteImport } from './routes/_authenticated.cells'
+import { Route as AuthenticatedCellReportsRouteImport } from './routes/_authenticated.cell-reports'
 import { Route as AuthenticatedBranchesRouteImport } from './routes/_authenticated.branches'
 import { Route as AuthenticatedMembersIdRouteImport } from './routes/_authenticated.members.$id'
 import { Route as AuthenticatedEventsIdRouteImport } from './routes/_authenticated.events.$id'
@@ -124,6 +125,12 @@ const AuthenticatedCellsRoute = AuthenticatedCellsRouteImport.update({
   path: '/cells',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedCellReportsRoute =
+  AuthenticatedCellReportsRouteImport.update({
+    id: '/cell-reports',
+    path: '/cell-reports',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedBranchesRoute = AuthenticatedBranchesRouteImport.update({
   id: '/branches',
   path: '/branches',
@@ -154,6 +161,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/branches': typeof AuthenticatedBranchesRoute
+  '/cell-reports': typeof AuthenticatedCellReportsRoute
   '/cells': typeof AuthenticatedCellsRouteWithChildren
   '/classes': typeof AuthenticatedClassesRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -178,6 +186,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/branches': typeof AuthenticatedBranchesRoute
+  '/cell-reports': typeof AuthenticatedCellReportsRoute
   '/cells': typeof AuthenticatedCellsRouteWithChildren
   '/classes': typeof AuthenticatedClassesRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -204,6 +213,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
   '/_authenticated/branches': typeof AuthenticatedBranchesRoute
+  '/_authenticated/cell-reports': typeof AuthenticatedCellReportsRoute
   '/_authenticated/cells': typeof AuthenticatedCellsRouteWithChildren
   '/_authenticated/classes': typeof AuthenticatedClassesRouteWithChildren
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
@@ -230,6 +240,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/branches'
+    | '/cell-reports'
     | '/cells'
     | '/classes'
     | '/dashboard'
@@ -254,6 +265,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/branches'
+    | '/cell-reports'
     | '/cells'
     | '/classes'
     | '/dashboard'
@@ -279,6 +291,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/login'
     | '/_authenticated/branches'
+    | '/_authenticated/cell-reports'
     | '/_authenticated/cells'
     | '/_authenticated/classes'
     | '/_authenticated/dashboard'
@@ -434,6 +447,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCellsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/cell-reports': {
+      id: '/_authenticated/cell-reports'
+      path: '/cell-reports'
+      fullPath: '/cell-reports'
+      preLoaderRoute: typeof AuthenticatedCellReportsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/branches': {
       id: '/_authenticated/branches'
       path: '/branches'
@@ -518,6 +538,7 @@ const AuthenticatedMembersRouteWithChildren =
 
 interface AuthenticatedRouteChildren {
   AuthenticatedBranchesRoute: typeof AuthenticatedBranchesRoute
+  AuthenticatedCellReportsRoute: typeof AuthenticatedCellReportsRoute
   AuthenticatedCellsRoute: typeof AuthenticatedCellsRouteWithChildren
   AuthenticatedClassesRoute: typeof AuthenticatedClassesRouteWithChildren
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
@@ -537,6 +558,7 @@ interface AuthenticatedRouteChildren {
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedBranchesRoute: AuthenticatedBranchesRoute,
+  AuthenticatedCellReportsRoute: AuthenticatedCellReportsRoute,
   AuthenticatedCellsRoute: AuthenticatedCellsRouteWithChildren,
   AuthenticatedClassesRoute: AuthenticatedClassesRouteWithChildren,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,

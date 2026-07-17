@@ -18,6 +18,7 @@ import {
   Building,
   Receipt,
   ClipboardList,
+  FileSearch,
 } from "lucide-react";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
 import {
@@ -111,6 +112,13 @@ function getNav(cellTermPlural: string) {
       url: "/requisitions",
       icon: ClipboardList,
       roles: ["admin", "pastor", "treasurer", "leader"] as const,
+      financeTierAllowed: true,
+    },
+    {
+      title: "Cell Reports",
+      url: "/cell-reports",
+      icon: FileSearch,
+      roles: ["admin", "pastor", "treasurer"] as const,
       financeTierAllowed: true,
     },
     {

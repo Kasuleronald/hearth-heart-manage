@@ -361,10 +361,57 @@ This is the most stateful new workflow — build it as its own small module.
    otherwise stable.
 7. Expenses (§6) and Requisitions/Tier-A (§8).
 8. Cell report offertory reconciliation (§9) — most complex, do last.
+9. Multi-currency support (§12) — added after the rest was already underway;
+   safe to slot in once Givings/Reports/Projects/Partners screens are stable,
+   since it touches display logic across all of them rather than adding new
+   entities.
 
 ---
 
-## Testing expectations
+## 12. Multi-currency support
+
+- Add to the existing `settings` key/value table (same pattern as
+  terminology, §2): `baseCurrency: string` (ISO 4217 code, e.g. `"UGX"`),
+  `baseCurrencyToUsdRate: number` (how many units of the base currency equal
+  1 USD), `baseCurrencyRateUpdatedAt?: number`.
+- **Admin-only Settings UI**: a new card (alongside Terminology) with a
+  searchable dropdown of major world currencies — a practical list of ~30-40
+  common ISO codes (USD, EUR, GBP, UGX, KES, TZS, RWF, NGN, GHS, ZAR, INR,
+  and similar — doesn't need to be the full ISO 4217 set of ~180) — to pick
+  the church's base/local currency, plus a numeric input for the current
+  exchange rate to USD and a read-only "last updated" timestamp.
+- Replace the hardcoded `formatUGX()` in `src/lib/currency.ts` — currently
+  called from `cells.$id.tsx`, `classes.$id.tsx`, `events.tsx`,
+  `events.$id.tsx`, `givings.tsx`, `partners.tsx`, and `projects.tsx` — with
+  a generic `formatCurrency(amount, currencyCode)`, and a `useBaseCurrency()`
+  hook (same settings-table pattern as `useTerm()`) that reads the current
+  base currency and rate.
+- **The toggle**: assume only Treasurer, Tier-A Finance Leaders, and Admin
+  see a currency toggle (a small "[Base Currency] | USD" control near amount
+  displays) — everyone else only ever sees the base currency, since USD
+  conversion is a finance-oversight feature, not a general display
+  preference. Build to this assumption unless told otherwise.
+- Toggling recalculates every visible amount on that screen using the stored
+  rate — apply it everywhere `formatUGX`/`formatCurrency` is currently
+  called: Givings, Reports, Projects (targets/raised), Partners
+  (pledges/totals), and cell/class/event offertory displays.
+- **Exports must reflect the active toggle state**: the CSV/XLSX/PDF export
+  picker (§3) and the report exports in `reports.ts` (which currently
+  hardcode `"Amount (UGX)"` / `"Total (UGX)"` / `"Offertory total (UGX)"` as
+  column headers) must label the currency dynamically based on what's
+  currently toggled at export time, not hardcode UGX.
+- **Data is always stored in the base currency, never converted at write
+  time.** Currency conversion is a display/export-time calculation only,
+  always using the *current* rate — this deliberately does not implement
+  historical rate tracking (e.g. what the rate was on the date a specific
+  giving was recorded). That's a materially bigger feature and out of scope
+  for this pass; state clearly to Claude Code that recomputing past amounts
+  with the current rate on toggle is the expected, accepted behavior.
+- **No live exchange-rate API** — the rate is manually entered/updated by the
+  admin, consistent with keeping the app fully offline-capable in local mode.
+  Do not add an external FX API call.
+
+
 
 For every feature above:
 - Verify existing features still work after the change (e.g. adding
@@ -389,7 +436,44 @@ For every feature above:
 
 ---
 
-## Explicit non-goals for this pass
+## 13. Cell reports index/search
+
+Currently, cell reports (the reconciliation records added in §9 — `reportRef`,
+`offertoryReported`, `offertoryReceived`, `editRequestStatus` on
+`CellMeeting`) are only browsable from each cell's own detail page
+(`_authenticated.cells.$id.tsx`). Add a standalone list view across **all**
+cells so finance/admin can find a specific report without knowing which cell
+it belongs to first — e.g. matching a `reportRef` written on a paper receipt.
+
+- New route, e.g. `_authenticated.cell-reports.tsx` (or a "Reports" tab on
+  the existing Cells list page if that reads more naturally in the nav —
+  either is fine, pick whichever fits the existing route/nav structure
+  better).
+- **Table columns**: `reportRef`, cell name, date, `offertoryReported`,
+  `offertoryReceived`, running balance (deficit/credit, same calculation
+  already used on the per-cell detail page), `editRequestStatus`.
+- **Filters**, matching the existing filter pattern already used on the
+  Givings page (`Select`/`SelectTrigger`/`SelectContent` for the dropdowns —
+  see `_authenticated.givings.tsx` for the exact pattern to reuse):
+  - **Ref number** — free-text search box, matches on partial/full `reportRef`.
+  - **Date range** — from/to date pickers, filtering on the meeting date.
+  - **Cell** — a `Select` populated from existing cells, "All cells" default.
+  - **Reconciliation status** — a `Select` with options: All, Fully received
+    (`offertoryReceived === offertoryReported`), Deficit
+    (`offertoryReceived < offertoryReported`), Credit
+    (`offertoryReceived > offertoryReported`), Edit requested
+    (`editRequestStatus === "requested"`).
+- Access: same roles who can already see cell financials today (Finance-role
+  users, Admin, Pastor) — don't introduce a new permission check, reuse
+  whatever gate already exists on the per-cell offertory view.
+- Respect the branch filter (§4) and the currency toggle (§12) if both are
+  already implemented by the time this is built — amounts shown here should
+  behave the same as everywhere else in the app, not diverge into their own
+  formatting.
+- This is additive only — it doesn't change the reconciliation workflow
+  itself (§9), just adds a way to browse/search what already exists.
+
+---
 
 - No real SMTP/email sending — local-mode stand-ins only, built with clear
   seams to swap in real delivery later.
@@ -399,3 +483,7 @@ For every feature above:
   church; cross-church tenancy is a separate, later project.
 - No billing/tier-limit enforcement (the "10 users / 50 users" plan tiers) —
   deferred until there's a server to enforce them against.
+- No live/automatic exchange-rate fetching and no per-transaction historical
+  rate tracking (§12) — the admin sets the rate manually, and toggled views
+  always use the current rate, not the rate at the time each amount was
+  recorded.
