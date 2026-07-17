@@ -201,6 +201,8 @@ function MembersPage() {
   const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [joinedFrom, setJoinedFrom] = useState("");
+  const [joinedTo, setJoinedTo] = useState("");
   const [editing, setEditing] = useState<Member | null>(null);
   const [open, setOpen] = useState(false);
   const [viewing, setViewing] = useState<Member | null>(null);
@@ -216,6 +218,8 @@ function MembersPage() {
     const s = `${m.firstName} ${m.lastName} ${m.phone ?? ""} ${m.email ?? ""}`.toLowerCase();
     if (q && !s.includes(q.toLowerCase())) return false;
     if (statusFilter !== "all" && m.status !== statusFilter) return false;
+    if (joinedFrom && (!m.joinDate || m.joinDate < joinedFrom)) return false;
+    if (joinedTo && (!m.joinDate || m.joinDate > joinedTo)) return false;
     if (!matchesBranchFilter(effectiveBranch, m.branchId)) return false;
     return true;
   });
@@ -323,6 +327,37 @@ function MembersPage() {
               ))}
             </SelectContent>
           </Select>
+          <div className="flex items-center gap-1.5">
+            <Label htmlFor="joinedFrom" className="text-xs text-muted-foreground whitespace-nowrap">
+              Joined
+            </Label>
+            <Input
+              id="joinedFrom"
+              type="date"
+              value={joinedFrom}
+              onChange={(e) => setJoinedFrom(e.target.value)}
+              className="w-40"
+            />
+            <span className="text-xs text-muted-foreground">to</span>
+            <Input
+              type="date"
+              value={joinedTo}
+              onChange={(e) => setJoinedTo(e.target.value)}
+              className="w-40"
+            />
+            {(joinedFrom || joinedTo) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setJoinedFrom("");
+                  setJoinedTo("");
+                }}
+              >
+                Clear
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="overflow-x-auto rounded-md border">

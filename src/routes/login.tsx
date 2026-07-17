@@ -193,7 +193,7 @@ function LoginPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  autoComplete="email"
+                  autoComplete="off"
                   placeholder="you@church.org"
                   required
                 />
@@ -204,7 +204,7 @@ function LoginPage() {
                   id="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  autoComplete={firstRun ? "new-password" : "current-password"}
+                  autoComplete={firstRun ? "new-password" : "off"}
                   minLength={firstRun ? MIN_PASSWORD_LENGTH : undefined}
                   required
                 />

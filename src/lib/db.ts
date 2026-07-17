@@ -265,6 +265,41 @@ export interface Requisition {
   createdAt: number;
 }
 
+export type TestimonyCategory =
+  | "Salvation"
+  | "Healing"
+  | "Financial Liberty"
+  | "Breakthrough"
+  | "Employment"
+  | "Restoration"
+  | "Spiritual Growth"
+  | "Academic"
+  | "Miracle"
+  | "Other";
+
+export const TESTIMONY_CATEGORIES: TestimonyCategory[] = [
+  "Salvation",
+  "Healing",
+  "Financial Liberty",
+  "Breakthrough",
+  "Employment",
+  "Restoration",
+  "Spiritual Growth",
+  "Academic",
+  "Miracle",
+  "Other",
+];
+
+// Any signed-in user can share one — see the Testimonies page. Everyone else
+// gets notified when a new one is entered.
+export interface Testimony {
+  id: string;
+  userId: string; // User.id — who shared it
+  category: TestimonyCategory;
+  body: string;
+  createdAt: number;
+}
+
 export interface Settings {
   key: string;
   value: string;
@@ -278,7 +313,8 @@ export type NotificationType =
   | "member_deleted"
   | "event_created"
   | "requisition_submitted"
-  | "cell_report_submitted";
+  | "cell_report_submitted"
+  | "testimony_added";
 
 export interface Notification {
   id: string;
@@ -313,6 +349,7 @@ export class MyChurchDB extends Dexie {
   notifications!: EntityTable<Notification, "id">;
   expenses!: EntityTable<Expense, "id">;
   requisitions!: EntityTable<Requisition, "id">;
+  testimonies!: EntityTable<Testimony, "id">;
 
   constructor() {
     super("my_church");
@@ -472,6 +509,9 @@ export class MyChurchDB extends Dexie {
           await table.put(m);
         }
       });
+    this.version(14).stores({
+      testimonies: "id, userId, category, createdAt",
+    });
   }
 }
 
@@ -715,6 +755,7 @@ const BACKUP_TABLES = [
   "partners",
   "expenses",
   "requisitions",
+  "testimonies",
 ] as const;
 
 export interface DatabaseBackup {

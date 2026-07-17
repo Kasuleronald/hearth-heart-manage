@@ -19,6 +19,7 @@ import {
   Receipt,
   ClipboardList,
   FileSearch,
+  MessageCircleHeart,
 } from "lucide-react";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
 import {
@@ -80,6 +81,12 @@ function getNav(cellTermPlural: string, givingsPlural: string) {
       title: "Events",
       url: "/events",
       icon: CalendarDays,
+      roles: ["admin", "pastor", "cell_leader", "leader", "treasurer"] as const,
+    },
+    {
+      title: "Testimonies",
+      url: "/testimonies",
+      icon: MessageCircleHeart,
       roles: ["admin", "pastor", "cell_leader", "leader", "treasurer"] as const,
     },
     {

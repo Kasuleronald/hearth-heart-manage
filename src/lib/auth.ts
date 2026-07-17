@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { db, uid, type Role, type User } from "./db";
 
 const SESSION_KEY = "mychurch.session";
-const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+const IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 const TOUCH_THROTTLE_MS = 60 * 1000; // don't rewrite storage more than once a minute
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 

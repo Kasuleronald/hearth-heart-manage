@@ -20,6 +20,7 @@ const ENTITY_ROUTES: Record<string, string> = {
   event: "/events/$id",
   requisition: "/requisitions",
   cell: "/cells/$id",
+  testimony: "/testimonies",
 };
 
 export function NotificationBell({ userId }: { userId: string }) {

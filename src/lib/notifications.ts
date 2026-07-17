@@ -7,6 +7,7 @@ import {
   type NotificationType,
   type Requisition,
   type Role,
+  type Testimony,
 } from "./db";
 
 async function notify(
@@ -106,6 +107,19 @@ export async function notifyCellReportSubmitted(meeting: CellMeeting, cellName: 
     type: "cell",
     id: meeting.cellId,
   });
+}
+
+export async function notifyTestimonyAdded(testimony: Testimony) {
+  const author = await db.users.get(testimony.userId);
+  const recipients = (await db.users.toArray())
+    .map((u) => u.id)
+    .filter((id) => id !== testimony.userId);
+  await notify(
+    recipients,
+    "testimony_added",
+    `${author?.fullName ?? "Someone"} has entered a testimony under category ${testimony.category}.`,
+    { type: "testimony", id: testimony.id },
+  );
 }
 
 export async function notifyRequisitionSubmitted(requisition: Requisition) {

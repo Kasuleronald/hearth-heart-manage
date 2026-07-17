@@ -13,6 +13,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated.users'
+import { Route as AuthenticatedTestimoniesRouteImport } from './routes/_authenticated.testimonies'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated.settings'
 import { Route as AuthenticatedRequisitionsRouteImport } from './routes/_authenticated.requisitions'
 import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated.reports'
@@ -53,6 +54,12 @@ const AuthenticatedUsersRoute = AuthenticatedUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedTestimoniesRoute =
+  AuthenticatedTestimoniesRouteImport.update({
+    id: '/testimonies',
+    path: '/testimonies',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -176,6 +183,7 @@ export interface FileRoutesByFullPath {
   '/reports': typeof AuthenticatedReportsRoute
   '/requisitions': typeof AuthenticatedRequisitionsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/testimonies': typeof AuthenticatedTestimoniesRoute
   '/users': typeof AuthenticatedUsersRoute
   '/cells/$id': typeof AuthenticatedCellsIdRoute
   '/classes/$id': typeof AuthenticatedClassesIdRoute
@@ -201,6 +209,7 @@ export interface FileRoutesByTo {
   '/reports': typeof AuthenticatedReportsRoute
   '/requisitions': typeof AuthenticatedRequisitionsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/testimonies': typeof AuthenticatedTestimoniesRoute
   '/users': typeof AuthenticatedUsersRoute
   '/cells/$id': typeof AuthenticatedCellsIdRoute
   '/classes/$id': typeof AuthenticatedClassesIdRoute
@@ -228,6 +237,7 @@ export interface FileRoutesById {
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/requisitions': typeof AuthenticatedRequisitionsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/testimonies': typeof AuthenticatedTestimoniesRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
   '/_authenticated/cells/$id': typeof AuthenticatedCellsIdRoute
   '/_authenticated/classes/$id': typeof AuthenticatedClassesIdRoute
@@ -255,6 +265,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/requisitions'
     | '/settings'
+    | '/testimonies'
     | '/users'
     | '/cells/$id'
     | '/classes/$id'
@@ -280,6 +291,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/requisitions'
     | '/settings'
+    | '/testimonies'
     | '/users'
     | '/cells/$id'
     | '/classes/$id'
@@ -306,6 +318,7 @@ export interface FileRouteTypes {
     | '/_authenticated/reports'
     | '/_authenticated/requisitions'
     | '/_authenticated/settings'
+    | '/_authenticated/testimonies'
     | '/_authenticated/users'
     | '/_authenticated/cells/$id'
     | '/_authenticated/classes/$id'
@@ -347,6 +360,13 @@ declare module '@tanstack/react-router' {
       path: '/users'
       fullPath: '/users'
       preLoaderRoute: typeof AuthenticatedUsersRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/testimonies': {
+      id: '/_authenticated/testimonies'
+      path: '/testimonies'
+      fullPath: '/testimonies'
+      preLoaderRoute: typeof AuthenticatedTestimoniesRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/settings': {
@@ -553,6 +573,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedRequisitionsRoute: typeof AuthenticatedRequisitionsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedTestimoniesRoute: typeof AuthenticatedTestimoniesRoute
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
 }
 
@@ -573,6 +594,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedRequisitionsRoute: AuthenticatedRequisitionsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedTestimoniesRoute: AuthenticatedTestimoniesRoute,
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,
 }
 
