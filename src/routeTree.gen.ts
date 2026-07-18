@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated.users'
 import { Route as AuthenticatedTestimoniesRouteImport } from './routes/_authenticated.testimonies'
+import { Route as AuthenticatedSuperadminPreviewRouteImport } from './routes/_authenticated.superadmin-preview'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated.settings'
 import { Route as AuthenticatedRequisitionsRouteImport } from './routes/_authenticated.requisitions'
 import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated.reports'
@@ -59,6 +60,12 @@ const AuthenticatedTestimoniesRoute =
   AuthenticatedTestimoniesRouteImport.update({
     id: '/testimonies',
     path: '/testimonies',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedSuperadminPreviewRoute =
+  AuthenticatedSuperadminPreviewRouteImport.update({
+    id: '/superadmin-preview',
+    path: '/superadmin-preview',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
@@ -190,6 +197,7 @@ export interface FileRoutesByFullPath {
   '/reports': typeof AuthenticatedReportsRoute
   '/requisitions': typeof AuthenticatedRequisitionsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/superadmin-preview': typeof AuthenticatedSuperadminPreviewRoute
   '/testimonies': typeof AuthenticatedTestimoniesRoute
   '/users': typeof AuthenticatedUsersRoute
   '/cells/$id': typeof AuthenticatedCellsIdRoute
@@ -217,6 +225,7 @@ export interface FileRoutesByTo {
   '/reports': typeof AuthenticatedReportsRoute
   '/requisitions': typeof AuthenticatedRequisitionsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/superadmin-preview': typeof AuthenticatedSuperadminPreviewRoute
   '/testimonies': typeof AuthenticatedTestimoniesRoute
   '/users': typeof AuthenticatedUsersRoute
   '/cells/$id': typeof AuthenticatedCellsIdRoute
@@ -246,6 +255,7 @@ export interface FileRoutesById {
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/requisitions': typeof AuthenticatedRequisitionsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/superadmin-preview': typeof AuthenticatedSuperadminPreviewRoute
   '/_authenticated/testimonies': typeof AuthenticatedTestimoniesRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
   '/_authenticated/cells/$id': typeof AuthenticatedCellsIdRoute
@@ -275,6 +285,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/requisitions'
     | '/settings'
+    | '/superadmin-preview'
     | '/testimonies'
     | '/users'
     | '/cells/$id'
@@ -302,6 +313,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/requisitions'
     | '/settings'
+    | '/superadmin-preview'
     | '/testimonies'
     | '/users'
     | '/cells/$id'
@@ -330,6 +342,7 @@ export interface FileRouteTypes {
     | '/_authenticated/reports'
     | '/_authenticated/requisitions'
     | '/_authenticated/settings'
+    | '/_authenticated/superadmin-preview'
     | '/_authenticated/testimonies'
     | '/_authenticated/users'
     | '/_authenticated/cells/$id'
@@ -379,6 +392,13 @@ declare module '@tanstack/react-router' {
       path: '/testimonies'
       fullPath: '/testimonies'
       preLoaderRoute: typeof AuthenticatedTestimoniesRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/superadmin-preview': {
+      id: '/_authenticated/superadmin-preview'
+      path: '/superadmin-preview'
+      fullPath: '/superadmin-preview'
+      preLoaderRoute: typeof AuthenticatedSuperadminPreviewRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/settings': {
@@ -593,6 +613,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedRequisitionsRoute: typeof AuthenticatedRequisitionsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedSuperadminPreviewRoute: typeof AuthenticatedSuperadminPreviewRoute
   AuthenticatedTestimoniesRoute: typeof AuthenticatedTestimoniesRoute
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
 }
@@ -615,6 +636,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedRequisitionsRoute: AuthenticatedRequisitionsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedSuperadminPreviewRoute: AuthenticatedSuperadminPreviewRoute,
   AuthenticatedTestimoniesRoute: AuthenticatedTestimoniesRoute,
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,
 }

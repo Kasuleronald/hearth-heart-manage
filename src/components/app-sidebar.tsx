@@ -21,6 +21,7 @@ import {
   FileSearch,
   MessageCircleHeart,
   PiggyBank,
+  Shield,
 } from "lucide-react";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
 import {
@@ -144,6 +145,12 @@ function getNav(cellTermPlural: string, givingsPlural: string) {
     { title: "Branches", url: "/branches", icon: Building, roles: ["admin"] as const },
     { title: "Users", url: "/users", icon: UserCog, roles: ["admin"] as const },
     { title: "Settings", url: "/settings", icon: Settings, roles: ["admin", "pastor"] as const },
+    {
+      title: "SuperAdmin (concept)",
+      url: "/superadmin-preview",
+      icon: Shield,
+      roles: ["admin"] as const,
+    },
   ];
 }
 

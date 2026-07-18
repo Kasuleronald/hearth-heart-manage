@@ -1,0 +1,1208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Platform Console — SuperAdmin (concept)</title>
+<style>
+  :root {
+    --radius: 0.75rem;
+
+    --bg: oklch(0.985 0.008 300);
+    --canvas: oklch(0.97 0.012 300);
+    --surface: oklch(1 0 0);
+    --surface-2: oklch(0.96 0.015 300);
+    --text: oklch(0.22 0.06 285);
+    --text-muted: oklch(0.52 0.05 285);
+    --border: oklch(0.9 0.02 295);
+
+    --primary: oklch(0.48 0.22 295);
+    --primary-ink: oklch(0.985 0.01 300);
+    --primary-soft: oklch(0.94 0.03 295);
+
+    --sidebar-top: oklch(0.22 0.09 285);
+    --sidebar-bottom: oklch(0.16 0.06 285);
+    --sidebar-ink: oklch(0.95 0.02 300);
+    --sidebar-ink-dim: oklch(0.72 0.04 295);
+    --sidebar-line: oklch(1 0 0 / 10%);
+    --sidebar-active: oklch(0.3 0.09 285);
+
+    --good: oklch(0.55 0.14 155);
+    --good-soft: oklch(0.94 0.045 155);
+    --warn: oklch(0.72 0.15 70);
+    --warn-soft: oklch(0.95 0.05 75);
+    --danger: oklch(0.58 0.24 27);
+    --danger-soft: oklch(0.95 0.045 27);
+
+    --shadow: 0 1px 2px oklch(0.22 0.06 285 / 6%), 0 8px 24px oklch(0.22 0.06 285 / 8%);
+    --font-display: ui-serif, "Iowan Old Style", Charter, Georgia, serif;
+    --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: oklch(0.18 0.06 285);
+      --canvas: oklch(0.2 0.055 285);
+      --surface: oklch(0.24 0.07 285);
+      --surface-2: oklch(0.28 0.07 285);
+      --text: oklch(0.96 0.02 300);
+      --text-muted: oklch(0.72 0.045 295);
+      --border: oklch(1 0 0 / 10%);
+
+      --primary: oklch(0.7 0.17 295);
+      --primary-ink: oklch(0.16 0.05 285);
+      --primary-soft: oklch(0.32 0.09 292);
+
+      --sidebar-top: oklch(0.15 0.05 285);
+      --sidebar-bottom: oklch(0.11 0.035 285);
+      --sidebar-active: oklch(0.26 0.07 285);
+
+      --good: oklch(0.72 0.15 155);
+      --good-soft: oklch(0.27 0.06 155);
+      --warn: oklch(0.78 0.14 75);
+      --warn-soft: oklch(0.3 0.06 75);
+      --danger: oklch(0.7 0.19 22);
+      --danger-soft: oklch(0.32 0.09 22);
+
+      --shadow: 0 1px 2px oklch(0 0 0 / 30%), 0 12px 28px oklch(0 0 0 / 35%);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: oklch(0.18 0.06 285);
+    --canvas: oklch(0.2 0.055 285);
+    --surface: oklch(0.24 0.07 285);
+    --surface-2: oklch(0.28 0.07 285);
+    --text: oklch(0.96 0.02 300);
+    --text-muted: oklch(0.72 0.045 295);
+    --border: oklch(1 0 0 / 10%);
+    --primary: oklch(0.7 0.17 295);
+    --primary-ink: oklch(0.16 0.05 285);
+    --primary-soft: oklch(0.32 0.09 292);
+    --sidebar-top: oklch(0.15 0.05 285);
+    --sidebar-bottom: oklch(0.11 0.035 285);
+    --sidebar-active: oklch(0.26 0.07 285);
+    --good: oklch(0.72 0.15 155);
+    --good-soft: oklch(0.27 0.06 155);
+    --warn: oklch(0.78 0.14 75);
+    --warn-soft: oklch(0.3 0.06 75);
+    --danger: oklch(0.7 0.19 22);
+    --danger-soft: oklch(0.32 0.09 22);
+    --shadow: 0 1px 2px oklch(0 0 0 / 30%), 0 12px 28px oklch(0 0 0 / 35%);
+  }
+  :root[data-theme="light"] {
+    --bg: oklch(0.985 0.008 300);
+    --canvas: oklch(0.97 0.012 300);
+    --surface: oklch(1 0 0);
+    --surface-2: oklch(0.96 0.015 300);
+    --text: oklch(0.22 0.06 285);
+    --text-muted: oklch(0.52 0.05 285);
+    --border: oklch(0.9 0.02 295);
+    --primary: oklch(0.48 0.22 295);
+    --primary-ink: oklch(0.985 0.01 300);
+    --primary-soft: oklch(0.94 0.03 295);
+    --sidebar-top: oklch(0.22 0.09 285);
+    --sidebar-bottom: oklch(0.16 0.06 285);
+    --sidebar-active: oklch(0.3 0.09 285);
+    --good: oklch(0.55 0.14 155);
+    --good-soft: oklch(0.94 0.045 155);
+    --warn: oklch(0.72 0.15 70);
+    --warn-soft: oklch(0.95 0.05 75);
+    --danger: oklch(0.58 0.24 27);
+    --danger-soft: oklch(0.95 0.045 27);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, .display {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    font-weight: 600;
+    margin: 0;
+  }
+  .mono, .tabular { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  button { font-family: inherit; }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+  /* ---------- Shell ---------- */
+  .shell { display: flex; min-height: 100vh; }
+
+  .rail {
+    width: 248px;
+    flex-shrink: 0;
+    background: linear-gradient(180deg, var(--sidebar-top), var(--sidebar-bottom));
+    color: oklch(0.95 0.02 300);
+    display: flex;
+    flex-direction: column;
+    padding: 20px 14px;
+    gap: 22px;
+  }
+  .rail-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 8px;
+  }
+  .rail-mark {
+    width: 34px; height: 34px; border-radius: 9px;
+    background: linear-gradient(135deg, oklch(0.48 0.22 295), oklch(0.68 0.18 295));
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display); font-weight: 700; font-size: 16px; color: white;
+    flex-shrink: 0;
+  }
+  .rail-brand-text { display: flex; flex-direction: column; line-height: 1.2; }
+  .rail-brand-text strong { font-family: var(--font-display); font-size: 15px; font-weight: 600; }
+  .rail-brand-text span { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: oklch(0.75 0.05 295); }
+
+  .rail-section-label {
+    font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase;
+    color: oklch(0.62 0.05 295); padding: 0 10px; margin-top: 4px;
+  }
+  .rail-nav { display: flex; flex-direction: column; gap: 2px; }
+  .rail-link {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 8px; text-decoration: none;
+    color: oklch(0.88 0.03 295); font-size: 13.5px; font-weight: 500;
+    background: transparent; border: none; cursor: pointer; text-align: left; width: 100%;
+  }
+  .rail-link svg { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.85; }
+  .rail-link.active { background: var(--sidebar-active); color: #fff; }
+  .rail-link.disabled { color: oklch(0.5 0.04 295); cursor: default; }
+  .rail-link .soon {
+    margin-left: auto; font-size: 9.5px; letter-spacing: 0.05em; text-transform: uppercase;
+    background: oklch(1 0 0 / 10%); padding: 2px 6px; border-radius: 999px; color: oklch(0.7 0.04 295);
+  }
+  .rail-spacer { flex: 1; }
+  .rail-owner {
+    display: flex; align-items: center; gap: 9px; padding: 10px; border-radius: 9px;
+    background: oklch(1 0 0 / 6%); border: 1px solid var(--sidebar-line);
+  }
+  .rail-owner-avatar {
+    width: 28px; height: 28px; border-radius: 999px; background: var(--primary);
+    display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--primary-ink);
+    flex-shrink: 0;
+  }
+  .rail-owner div { line-height: 1.25; overflow: hidden; }
+  .rail-owner strong { font-size: 12.5px; display: block; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+  .rail-owner span { font-size: 11px; color: oklch(0.68 0.04 295); }
+
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+  .topbar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 14px 28px; border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    position: sticky; top: 0; z-index: 5;
+  }
+  .topbar h1 { font-size: 19px; }
+  .badge-super {
+    font-family: var(--font-sans); font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em;
+    text-transform: uppercase; color: var(--primary); background: var(--primary-soft);
+    padding: 3px 8px; border-radius: 6px; border: 1px solid color-mix(in oklch, var(--primary) 30%, transparent);
+  }
+  .topbar-spacer { flex: 1; }
+  .search {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 10px; width: 260px; color: var(--text-muted); font-size: 13px;
+  }
+  .search svg { width: 15px; height: 15px; flex-shrink: 0; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px; justify-content: center;
+    font-size: 13.5px; font-weight: 600; border-radius: 8px; padding: 8px 14px;
+    border: 1px solid transparent; cursor: pointer; white-space: nowrap;
+  }
+  .btn svg { width: 15px; height: 15px; }
+  .btn-primary { background: var(--primary); color: var(--primary-ink); }
+  .btn-primary:hover { filter: brightness(1.06); }
+  .btn-ghost { background: transparent; color: var(--text); border-color: var(--border); }
+  .btn-ghost:hover { background: var(--surface-2); }
+  .btn-sm { padding: 5px 10px; font-size: 12.5px; }
+
+  .content { padding: 24px 28px 48px; max-width: 1180px; width: 100%; margin: 0 auto; }
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* ---------- Stat strip ---------- */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 22px; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 15px 16px; box-shadow: var(--shadow);
+  }
+  .stat-label { font-size: 11.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat-value { font-family: var(--font-display); font-size: 26px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .stat-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 999px; margin-right: 5px; }
+  .dot-good { background: var(--good); }
+  .dot-warn { background: var(--warn); }
+  .dot-danger { background: var(--danger); }
+
+  /* ---------- Panel / table ---------- */
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+  .panel-head { display: flex; align-items: center; gap: 10px; padding: 16px 18px; border-bottom: 1px solid var(--border); }
+  .panel-head h2 { font-size: 16px; }
+  .panel-head-sub { color: var(--text-muted); font-size: 12.5px; }
+  .panel-head-spacer { flex: 1; }
+
+  .filters { display: flex; gap: 8px; padding: 12px 18px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .chip {
+    font-size: 12.5px; font-weight: 600; padding: 6px 11px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer;
+  }
+  .chip.active { background: var(--primary-soft); color: var(--primary); border-color: color-mix(in oklch, var(--primary) 35%, transparent); }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-muted); font-weight: 600; padding: 10px 18px; border-bottom: 1px solid var(--border);
+  }
+  tbody td { padding: 13px 18px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: var(--surface-2); }
+
+  .org-name { display: flex; align-items: center; gap: 11px; }
+  .org-mark {
+    width: 34px; height: 34px; border-radius: 8px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display); font-weight: 700; font-size: 14px;
+    background: var(--primary-soft); color: var(--primary);
+  }
+  .org-name strong { display: block; font-size: 13.5px; }
+  .org-name span { display: block; font-size: 12px; color: var(--text-muted); }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600;
+    padding: 3px 9px; border-radius: 999px;
+  }
+  .pill-good { background: var(--good-soft); color: var(--good); }
+  .pill-warn { background: var(--warn-soft); color: var(--warn); }
+  .pill-danger { background: var(--danger-soft); color: var(--danger); }
+
+  .avatars { display: flex; align-items: center; }
+  .avatars .av {
+    width: 22px; height: 22px; border-radius: 999px; background: var(--surface-2);
+    border: 2px solid var(--surface); display: flex; align-items: center; justify-content: center;
+    font-size: 9.5px; font-weight: 700; color: var(--text-muted); margin-left: -7px;
+  }
+  .avatars .av:first-child { margin-left: 0; }
+
+  .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+  .icon-btn {
+    width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 7px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; color: var(--text-muted);
+  }
+  .icon-btn:hover { background: var(--surface-2); color: var(--text); }
+  .icon-btn svg { width: 14px; height: 14px; }
+
+  /* ---------- Slide-over ---------- */
+  .scrim {
+    position: fixed; inset: 0; background: oklch(0.1 0.03 285 / 45%);
+    opacity: 0; pointer-events: none; transition: opacity 0.18s ease; z-index: 20;
+  }
+  .scrim.open { opacity: 1; pointer-events: auto; }
+  .drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 420px; max-width: 92vw;
+    background: var(--bg); border-left: 1px solid var(--border);
+    box-shadow: -18px 0 40px oklch(0.1 0.03 285 / 18%);
+    transform: translateX(100%); transition: transform 0.22s ease; z-index: 21;
+    display: flex; flex-direction: column;
+  }
+  .drawer.open { transform: translateX(0); }
+  .drawer-head { padding: 18px 22px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; gap: 12px; }
+  .drawer-head h2 { font-size: 17px; }
+  .drawer-head p { margin: 4px 0 0; font-size: 12.5px; color: var(--text-muted); }
+  .drawer-close { margin-left: auto; }
+  .drawer-body { padding: 20px 22px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 16px; }
+  .drawer-foot { padding: 16px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 12.5px; font-weight: 600; }
+  .field .hint { font-size: 11.5px; color: var(--text-muted); font-weight: 400; }
+  .input, select.input {
+    font-family: inherit; font-size: 13.5px; padding: 9px 11px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text); width: 100%;
+  }
+  .input:focus { border-color: var(--primary); }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .divider { height: 1px; background: var(--border); margin: 2px 0; }
+  .section-eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); font-weight: 700; }
+
+  /* ---------- Org detail ---------- */
+  .detail-head { display: flex; align-items: flex-start; gap: 16px; padding: 20px 4px 22px; }
+  .detail-head .org-mark { width: 52px; height: 52px; font-size: 20px; border-radius: 12px; }
+  .detail-head h2 { font-size: 21px; }
+  .detail-head-meta { display: flex; gap: 14px; margin-top: 6px; color: var(--text-muted); font-size: 12.5px; }
+  .detail-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; align-items: start; }
+
+  .kv { display: grid; grid-template-columns: 130px 1fr; gap: 10px 12px; font-size: 13px; padding: 16px 18px; }
+  .kv div:nth-child(odd) { color: var(--text-muted); }
+
+  .note-box {
+    background: var(--warn-soft); color: var(--warn); border: 1px solid color-mix(in oklch, var(--warn) 30%, transparent);
+    border-radius: 8px; padding: 10px 12px; font-size: 12.5px; display: flex; gap: 8px; align-items: flex-start;
+  }
+  .note-box svg { width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; }
+
+  .admin-row { display: flex; align-items: center; gap: 10px; padding: 11px 18px; border-bottom: 1px solid var(--border); }
+  .admin-row:last-child { border-bottom: none; }
+  .admin-row .av-lg {
+    width: 30px; height: 30px; border-radius: 999px; background: var(--primary-soft); color: var(--primary);
+    display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0;
+  }
+  .admin-row strong { font-size: 13px; display: block; }
+  .admin-row span { font-size: 12px; color: var(--text-muted); }
+  .admin-row-spacer { flex: 1; }
+
+  /* ---------- Login-block preview ---------- */
+  .preview-card {
+    background: var(--surface); border: 1px dashed var(--border); border-radius: var(--radius);
+    padding: 20px; margin-top: 8px;
+  }
+  .fake-login {
+    max-width: 300px; margin: 6px auto 0; background: var(--canvas); border: 1px solid var(--border);
+    border-radius: 10px; padding: 22px; text-align: center;
+  }
+  .fake-login .lock {
+    width: 38px; height: 38px; border-radius: 999px; background: var(--danger-soft); color: var(--danger);
+    display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;
+  }
+  .fake-login h3 { font-size: 14.5px; }
+  .fake-login p { font-size: 12.5px; color: var(--text-muted); margin: 6px 0 0; }
+
+  ::selection { background: var(--primary-soft); }
+
+  /* ---------- Rail collapse ---------- */
+  .rail { transition: width 0.18s ease; }
+  .rail-collapse-btn {
+    width: 26px; height: 26px; flex-shrink: 0; border-radius: 7px; border: 1px solid var(--sidebar-line);
+    background: oklch(1 0 0 / 6%); color: oklch(0.85 0.03 295); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; margin-left: auto;
+  }
+  .rail-collapse-btn:hover { background: oklch(1 0 0 / 12%); }
+  .rail-collapse-btn svg { width: 14px; height: 14px; transition: transform 0.18s ease; }
+  .rail.collapsed { width: 72px; }
+  .rail.collapsed .rail-brand { justify-content: center; }
+  .rail.collapsed .rail-brand-text,
+  .rail.collapsed .rail-section-label,
+  .rail.collapsed .rail-link-text,
+  .rail.collapsed .rail-link .soon,
+  .rail.collapsed .rail-owner div { display: none; }
+  .rail.collapsed .rail-collapse-btn { transform: rotate(180deg); margin: 0 auto; }
+  .rail.collapsed .rail-link { justify-content: center; padding: 8px; }
+  .rail.collapsed .rail-owner { justify-content: center; padding: 8px; }
+  .rail.collapsed .rail-owner-avatar,
+  .rail.collapsed .rail-owner-logout { flex-shrink: 0; }
+  .rail-owner { position: relative; }
+  .rail-owner-logout {
+    width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--sidebar-line);
+    background: transparent; color: oklch(0.8 0.04 295); cursor: pointer; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; margin-left: auto;
+  }
+  .rail-owner-logout:hover { background: oklch(1 0 0 / 10%); color: #fff; }
+  .rail-owner-logout svg { width: 13px; height: 13px; }
+  .rail.collapsed .rail-owner-logout { display: none; }
+
+  /* ---------- Toggle switch ---------- */
+  .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 0; }
+  .switch-row + .switch-row { border-top: 1px solid var(--border); }
+  .switch-row-label strong { display: block; font-size: 13.5px; font-weight: 600; }
+  .switch-row-label span { display: block; font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .switch {
+    width: 38px; height: 22px; border-radius: 999px; border: none; flex-shrink: 0;
+    background: var(--border); position: relative; cursor: pointer; padding: 0;
+  }
+  .switch::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 999px;
+    background: var(--surface); box-shadow: 0 1px 2px oklch(0 0 0 / 20%); transition: transform 0.16s ease;
+  }
+  .switch.on { background: var(--primary); }
+  .switch.on::after { transform: translateX(16px); background: var(--primary-ink); }
+
+  /* ---------- Settings ---------- */
+  .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  .settings-card { padding: 4px 18px 6px; }
+  .settings-card .panel-head { margin: 0 -18px 4px; }
+  .theme-picker { display: flex; gap: 10px; padding: 13px 0; }
+  .theme-opt {
+    flex: 1; border: 1.5px solid var(--border); border-radius: 10px; padding: 10px; cursor: pointer;
+    background: var(--surface); display: flex; flex-direction: column; gap: 8px; align-items: center;
+    font-size: 12px; font-weight: 600; color: var(--text-muted);
+  }
+  .theme-opt.selected { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
+  .theme-opt-swatch { width: 100%; height: 34px; border-radius: 6px; border: 1px solid var(--border); }
+  .theme-opt-swatch.light { background: linear-gradient(135deg, #fff 55%, #ece7f5 55%); }
+  .theme-opt-swatch.dark { background: linear-gradient(135deg, #232030 55%, #171522 55%); }
+  .theme-opt-swatch.system { background: linear-gradient(90deg, #fff 50%, #171522 50%); }
+
+  /* ---------- Billing ---------- */
+  .plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+  .plan-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 10px;
+  }
+  .plan-card.featured { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary), var(--shadow); }
+  .plan-name { font-size: 13px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .plan-price { font-family: var(--font-display); font-size: 25px; font-weight: 600; }
+  .plan-price span { font-family: var(--font-sans); font-size: 12px; font-weight: 500; color: var(--text-muted); }
+  .plan-feats { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--text-muted); }
+  .plan-feats li { display: flex; gap: 7px; align-items: flex-start; }
+  .plan-feats svg { width: 13px; height: 13px; color: var(--good); flex-shrink: 0; margin-top: 2px; }
+
+  .invoice-status { font-size: 12px; font-weight: 600; }
+  .invoice-status.paid { color: var(--good); }
+  .invoice-status.overdue { color: var(--danger); }
+  .invoice-status.trial { color: var(--warn); }
+
+  /* ---------- Toast ---------- */
+  .toast-stack {
+    position: fixed; bottom: 20px; right: 20px; z-index: 50; display: flex; flex-direction: column; gap: 8px;
+    align-items: flex-end;
+  }
+  .toast {
+    background: var(--text); color: var(--bg); font-size: 13px; font-weight: 500;
+    padding: 10px 14px; border-radius: 9px; box-shadow: var(--shadow);
+    display: flex; align-items: center; gap: 8px;
+    opacity: 0; transform: translateY(6px); animation: toast-in 0.18s ease forwards;
+  }
+  .toast svg { width: 15px; height: 15px; flex-shrink: 0; }
+  @keyframes toast-in { to { opacity: 1; transform: translateY(0); } }
+
+  /* ---------- Mid-session logout preview ---------- */
+  .session-toast-demo {
+    max-width: 320px; margin: 6px auto 0; background: var(--canvas); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; display: flex; gap: 10px; align-items: flex-start; text-align: left;
+  }
+  .session-toast-demo .lock {
+    width: 30px; height: 30px; border-radius: 8px; background: var(--danger-soft); color: var(--danger);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .session-toast-demo .lock svg { width: 15px; height: 15px; }
+  .session-toast-demo strong { font-size: 13px; display: block; }
+  .session-toast-demo p { font-size: 12px; color: var(--text-muted); margin: 3px 0 0; }
+  .preview-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }
+  .preview-col .section-eyebrow { margin-bottom: 6px; display: block; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <aside class="rail" id="rail">
+    <div class="rail-brand">
+      <div class="rail-mark">M</div>
+      <div class="rail-brand-text">
+        <strong>My Church</strong>
+        <span>Platform Console</span>
+      </div>
+      <button class="rail-collapse-btn" id="collapseRail" title="Collapse sidebar" aria-label="Collapse sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
+    </div>
+
+    <nav class="rail-nav">
+      <div class="rail-section-label">Platform</div>
+      <button class="rail-link active" data-view="view-orgs" title="Organizations">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 21h18M6 21V7l6-4 6 4v14M9 21v-6h6v6M9 11h.01M9 15h.01M15 11h.01M15 15h.01"/></svg>
+        <span class="rail-link-text">Organizations</span>
+      </button>
+      <button class="rail-link" data-view="view-admins" title="All admins">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 2.9-6.2 6.5-6.2s6.5 2.6 6.5 6.2M17 8.5a3 3 0 1 1 0 6M21 20c0-2.6-1.7-4.7-4-5.7"/></svg>
+        <span class="rail-link-text">All admins</span>
+      </button>
+      <button class="rail-link" data-view="view-billing" title="Billing">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="5" width="19" height="14" rx="2.4"/><path d="M2.5 10h19M6.5 15h4"/></svg>
+        <span class="rail-link-text">Billing</span>
+        <span class="soon">Demo</span>
+      </button>
+      <div class="rail-section-label">Account</div>
+      <button class="rail-link" data-view="view-settings" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.6a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V20a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.55-1.1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1.6Z"/></svg>
+        <span class="rail-link-text">Settings</span>
+      </button>
+      <button class="rail-link" data-view="view-locked" title="Inactive-account preview">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+        <span class="rail-link-text">Locked-out preview</span>
+      </button>
+    </nav>
+
+    <div class="rail-spacer"></div>
+
+    <div class="rail-owner">
+      <div class="rail-owner-avatar">RK</div>
+      <div>
+        <strong>Ronald Kasule</strong>
+        <span>Platform Owner</span>
+      </div>
+      <button class="rail-owner-logout" id="logoutBtn" title="Log out" aria-label="Log out">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <h1 class="display" id="topbarTitle">Organizations</h1>
+      <span class="badge-super">Superadmin</span>
+      <div class="topbar-spacer"></div>
+      <div class="search" id="topbarSearch">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>
+        Search organizations…
+      </div>
+      <button class="icon-btn" id="quickTheme" title="Toggle theme" aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="quickThemeIcon"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M4.6 4.6l1.7 1.7M17.7 17.7l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.6 19.4l1.7-1.7M17.7 6.3l1.7-1.7"/></svg>
+      </button>
+      <button class="btn btn-primary" id="openAdd">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
+        New organization
+      </button>
+    </header>
+
+    <div class="content">
+      <!-- ORGANIZATIONS VIEW -->
+      <section class="view active" id="view-orgs">
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-label">Organizations</div>
+            <div class="stat-value tabular">7</div>
+            <div class="stat-sub">across 4 countries</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Active</div>
+            <div class="stat-value tabular"><span class="dot dot-good"></span>5</div>
+            <div class="stat-sub">signed in this week</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Suspended</div>
+            <div class="stat-value tabular"><span class="dot dot-warn"></span>1</div>
+            <div class="stat-sub">overdue on subscription</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Disabled</div>
+            <div class="stat-value tabular"><span class="dot dot-danger"></span>1</div>
+            <div class="stat-sub">manually closed</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="filters">
+            <button class="chip active">All (7)</button>
+            <button class="chip">Active (5)</button>
+            <button class="chip">Suspended (1)</button>
+            <button class="chip">Disabled (1)</button>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Organization</th>
+                <th>Status</th>
+                <th>Admins</th>
+                <th>Members</th>
+                <th>Created</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="orgRows"><!-- injected --></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ORG DETAIL VIEW -->
+      <section class="view" id="view-detail">
+        <button class="btn btn-ghost btn-sm" id="backToOrgs" style="margin-bottom: 14px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m15 18-6-6 6-6"/></svg>
+          All organizations
+        </button>
+
+        <div class="detail-head">
+          <div class="org-mark" id="detailMark">GC</div>
+          <div>
+            <h2 class="display" id="detailName">Grace Chapel Kampala</h2>
+            <div class="detail-head-meta">
+              <span id="detailStatus"></span>
+              <span>Church</span>
+              <span class="mono">org_4f81ac</span>
+            </div>
+          </div>
+          <div style="margin-left: auto; display: flex; gap: 8px;">
+            <button class="btn btn-ghost btn-sm" id="toggleSuspend">Suspend organization</button>
+          </div>
+        </div>
+
+        <div class="detail-grid">
+          <div class="panel">
+            <div class="panel-head"><h2>Admins</h2><span class="panel-head-sub" id="adminCount">2 people</span></div>
+            <div id="adminList"><!-- injected --></div>
+            <div style="padding: 12px 18px;">
+              <button class="btn btn-ghost btn-sm">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
+                Add an admin
+              </button>
+            </div>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:16px;">
+            <div class="panel">
+              <div class="panel-head"><h2>Record</h2></div>
+              <div class="kv">
+                <div>Contact email</div><div class="mono">office@gracechapel.ug</div>
+                <div>Time zone</div><div>Africa / Kampala</div>
+                <div>Created</div><div class="tabular">14 Feb 2026</div>
+                <div>Last sign-in</div><div class="tabular">2 hours ago</div>
+                <div>Plan</div><div>—</div>
+              </div>
+            </div>
+            <div class="note-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18.5a1.9 1.9 0 0 0 1.65 2.85h17.1a1.9 1.9 0 0 0 1.65-2.85L13.7 3.9a1.9 1.9 0 0 0-3.4 0Z"/></svg>
+              <div>Billing &amp; subscription status isn't wired up yet — "Suspended" is set by hand here until that lands.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ADMINS VIEW -->
+      <section class="view" id="view-admins">
+        <div class="panel">
+          <div class="panel-head"><h2>All admins</h2><span class="panel-head-sub">Every first-admin account across every organization</span></div>
+          <table>
+            <thead><tr><th>Admin</th><th>Organization</th><th>Email</th><th>Added</th></tr></thead>
+            <tbody id="adminRows"><!-- injected --></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- LOGIN-BLOCK PREVIEW -->
+      <section class="view" id="view-locked">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Inactive-account preview</h2>
+            <span class="panel-head-sub">What members of a suspended or disabled organization experience</span>
+          </div>
+          <div style="padding: 20px 18px;">
+            <div class="preview-row">
+              <div class="preview-col">
+                <span class="section-eyebrow">Trying to sign in</span>
+                <div class="preview-card">
+                  <div class="fake-login">
+                    <div class="lock">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+                    </div>
+                    <h3 class="display">Account inactive</h3>
+                    <p>Contact your Administrator.</p>
+                  </div>
+                </div>
+              </div>
+              <div class="preview-col">
+                <span class="section-eyebrow">Already signed in when it happens</span>
+                <div class="preview-card">
+                  <div class="session-toast-demo">
+                    <div class="lock">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+                    </div>
+                    <div>
+                      <strong>You've been signed out</strong>
+                      <p>Account inactive — contact your Administrator. Redirecting to login…</p>
+                    </div>
+                  </div>
+                  <div style="margin-top: 12px; text-align: center;">
+                    <button class="btn btn-ghost btn-sm" id="replaySessionDemo">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7M3 3v5h5"/></svg>
+                      Replay
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SETTINGS VIEW -->
+      <section class="view" id="view-settings">
+        <div class="settings-grid">
+          <div class="panel settings-card">
+            <div class="panel-head"><h2>Appearance</h2></div>
+            <div class="theme-picker">
+              <button class="theme-opt" data-theme-opt="light">
+                <div class="theme-opt-swatch light"></div>
+                Light
+              </button>
+              <button class="theme-opt" data-theme-opt="dark">
+                <div class="theme-opt-swatch dark"></div>
+                Dark
+              </button>
+              <button class="theme-opt" data-theme-opt="system">
+                <div class="theme-opt-swatch system"></div>
+                System
+              </button>
+            </div>
+            <div class="switch-row">
+              <div class="switch-row-label">
+                <strong>Compact tables</strong>
+                <span>Tighter row height across every list</span>
+              </div>
+              <button class="switch" data-dummy-toggle></button>
+            </div>
+          </div>
+
+          <div class="panel settings-card">
+            <div class="panel-head"><h2>Platform</h2></div>
+            <div class="field" style="padding: 13px 0 0;">
+              <label>Platform name</label>
+              <input class="input" value="My Church" />
+            </div>
+            <div class="field" style="padding: 13px 0 0;">
+              <label>Support email</label>
+              <input class="input" value="support@mychurch.app" />
+            </div>
+            <div class="field-row" style="padding: 13px 0;">
+              <div class="field">
+                <label>Default timezone</label>
+                <select class="input">
+                  <option>Africa / Kampala</option>
+                  <option>Africa / Nairobi</option>
+                  <option>Africa / Lagos</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Default currency</label>
+                <select class="input">
+                  <option>UGX</option>
+                  <option>KES</option>
+                  <option>USD</option>
+                </select>
+              </div>
+            </div>
+            <div style="padding-bottom: 4px;">
+              <button class="btn btn-primary btn-sm" id="saveSettings">Save changes</button>
+            </div>
+          </div>
+
+          <div class="panel settings-card">
+            <div class="panel-head"><h2>Security</h2></div>
+            <div class="switch-row">
+              <div class="switch-row-label">
+                <strong>Require 2FA for admins</strong>
+                <span>Applies to every organization's Admin accounts</span>
+              </div>
+              <button class="switch" data-dummy-toggle></button>
+            </div>
+            <div class="switch-row">
+              <div class="switch-row-label">
+                <strong>Auto-suspend on overdue billing</strong>
+                <span>Sets an organization to Suspended automatically</span>
+              </div>
+              <button class="switch" data-dummy-toggle></button>
+            </div>
+            <div class="field" style="padding: 13px 0;">
+              <label>Session idle timeout (minutes)</label>
+              <input class="input" type="number" value="10" style="max-width: 120px;" />
+            </div>
+          </div>
+
+          <div class="panel settings-card">
+            <div class="panel-head"><h2>Notifications</h2></div>
+            <div class="switch-row">
+              <div class="switch-row-label">
+                <strong>New organization created</strong>
+                <span>Email the platform owner</span>
+              </div>
+              <button class="switch on" data-dummy-toggle></button>
+            </div>
+            <div class="switch-row">
+              <div class="switch-row-label">
+                <strong>Organization suspended or reactivated</strong>
+                <span>Email the platform owner</span>
+              </div>
+              <button class="switch on" data-dummy-toggle></button>
+            </div>
+            <div class="switch-row">
+              <div class="switch-row-label">
+                <strong>Weekly platform digest</strong>
+                <span>Signups, churn, active-org summary</span>
+              </div>
+              <button class="switch" data-dummy-toggle></button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- BILLING VIEW -->
+      <section class="view" id="view-billing">
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-label">MRR</div>
+            <div class="stat-value tabular">$1,840</div>
+            <div class="stat-sub">across 6 paying orgs</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Paid</div>
+            <div class="stat-value tabular"><span class="dot dot-good"></span>5</div>
+            <div class="stat-sub">current on invoices</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Overdue</div>
+            <div class="stat-value tabular"><span class="dot dot-warn"></span>1</div>
+            <div class="stat-sub">grace period active</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Trial</div>
+            <div class="stat-value tabular"><span class="dot dot-danger"></span>1</div>
+            <div class="stat-sub">no card on file</div>
+          </div>
+        </div>
+
+        <div class="plans">
+          <div class="plan-card">
+            <div class="plan-name">Starter</div>
+            <div class="plan-price">$19<span>/mo</span></div>
+            <ul class="plan-feats">
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Up to 150 members</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>1 branch</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Email support</li>
+            </ul>
+          </div>
+          <div class="plan-card featured">
+            <div class="plan-name">Growth</div>
+            <div class="plan-price">$49<span>/mo</span></div>
+            <ul class="plan-feats">
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Up to 1,000 members</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Unlimited branches</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Priority support</li>
+            </ul>
+          </div>
+          <div class="plan-card">
+            <div class="plan-name">Enterprise</div>
+            <div class="plan-price">Custom</div>
+            <ul class="plan-feats">
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Unlimited members</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>Dedicated onboarding</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>SLA support</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>Invoices by organization</h2></div>
+          <table>
+            <thead><tr><th>Organization</th><th>Plan</th><th>Status</th><th>Next invoice</th><th>Amount</th></tr></thead>
+            <tbody id="billingRows"><!-- injected --></tbody>
+          </table>
+        </div>
+        <div class="note-box" style="margin-top: 14px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18.5a1.9 1.9 0 0 0 1.65 2.85h17.1a1.9 1.9 0 0 0 1.65-2.85L13.7 3.9a1.9 1.9 0 0 0-3.4 0Z"/></svg>
+          <div>Demo data — no payment processor is connected yet. This shows the shape of the page once billing is real.</div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toastStack"></div>
+
+<!-- ADD ORGANIZATION DRAWER -->
+<div class="scrim" id="scrim"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-head">
+    <div>
+      <h2 class="display">New organization</h2>
+      <p>Creates the church's isolated workspace and its first Admin in one step.</p>
+    </div>
+    <button class="icon-btn drawer-close" id="closeDrawer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="drawer-body">
+    <div class="section-eyebrow">Organization</div>
+    <div class="field">
+      <label>Name</label>
+      <input class="input" placeholder="e.g. Grace Chapel Kampala" />
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Type</label>
+        <select class="input">
+          <option>Church</option>
+          <option>Ministry</option>
+          <option>Organization</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Time zone</label>
+        <select class="input">
+          <option>Africa / Kampala</option>
+          <option>Africa / Nairobi</option>
+          <option>Africa / Lagos</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="section-eyebrow">First admin</div>
+    <div class="field">
+      <label>Full name</label>
+      <input class="input" placeholder="Pastor Jane Doe" />
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input class="input" placeholder="jane@gracechapel.ug" />
+      <span class="hint">They'll set their own password on first sign-in.</span>
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn btn-ghost" id="cancelDrawer">Cancel</button>
+    <button class="btn btn-primary">Create organization</button>
+  </div>
+</div>
+
+<script>
+  const orgs = [
+    { id: "org_4f81ac", initials: "GC", name: "Grace Chapel Kampala", status: "active", admins: [
+        { name: "Pastor Jane Doe", email: "jane@gracechapel.ug", added: "14 Feb 2026" },
+        { name: "Peter Okello", email: "peter@gracechapel.ug", added: "2 Mar 2026" },
+      ], members: 412 },
+    { id: "org_9c02e1", initials: "RH", name: "Redeemed Hearts Fellowship", status: "active", admins: [
+        { name: "Bishop Samuel Mwesigwa", email: "samuel@redeemedhearts.org", added: "3 Jan 2026" },
+      ], members: 268 },
+    { id: "org_11a7f0", initials: "LC", name: "Lighthouse Chapel Jinja", status: "active", admins: [
+        { name: "Pastor Grace Nabirye", email: "grace@lighthousejinja.org", added: "20 Nov 2025" },
+      ], members: 190 },
+    { id: "org_66d4bb", initials: "NL", name: "New Life Ministries", status: "suspended", admins: [
+        { name: "Pastor Tom Kirunda", email: "tom@newlifemin.org", added: "9 Sep 2025" },
+      ], members: 331 },
+    { id: "org_a03c19", initials: "CF", name: "Covenant Family Church", status: "active", admins: [
+        { name: "Rev. Esther Nakato", email: "esther@covenantfamily.org", added: "17 Jul 2025" },
+      ], members: 154 },
+    { id: "org_1e5f8a", initials: "HG", name: "Harvest Ground Ministries", status: "active", admins: [
+        { name: "Apostle Daniel Ochieng", email: "daniel@harvestground.org", added: "2 Jun 2025" },
+      ], members: 97 },
+    { id: "org_d290bc", initials: "SR", name: "Shalom Revival Center", status: "disabled", admins: [
+        { name: "Pastor Ruth Amondi", email: "ruth@shalomrevival.org", added: "11 Feb 2025" },
+      ], members: 60 },
+  ];
+
+  const statusPill = (s) => ({
+    active: '<span class="pill pill-good"><span class="dot dot-good"></span>Active</span>',
+    suspended: '<span class="pill pill-warn"><span class="dot dot-warn"></span>Suspended</span>',
+    disabled: '<span class="pill pill-danger"><span class="dot dot-danger"></span>Disabled</span>',
+  }[s]);
+
+  function renderOrgRows() {
+    document.getElementById("orgRows").innerHTML = orgs.map((o) => `
+      <tr data-org="${o.id}">
+        <td>
+          <div class="org-name">
+            <div class="org-mark">${o.initials}</div>
+            <div><strong>${o.name}</strong><span class="mono">${o.id}</span></div>
+          </div>
+        </td>
+        <td>${statusPill(o.status)}</td>
+        <td>
+          <div class="avatars">
+            ${o.admins.slice(0, 3).map((a) => `<div class="av">${a.name.split(" ").map((p) => p[0]).slice(0,2).join("")}</div>`).join("")}
+          </div>
+        </td>
+        <td class="tabular">${o.members}</td>
+        <td class="tabular" style="color: var(--text-muted);">${o.admins[0].added}</td>
+        <td>
+          <div class="row-actions">
+            <button class="icon-btn" title="View" data-view-org="${o.id}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `).join("");
+    document.querySelectorAll("#orgRows tr").forEach((tr) => {
+      tr.addEventListener("click", () => openDetail(tr.dataset.org));
+    });
+  }
+
+  function renderAdminRows() {
+    const rows = [];
+    orgs.forEach((o) => o.admins.forEach((a) => rows.push({ ...a, org: o.name })));
+    document.getElementById("adminRows").innerHTML = rows.map((a) => `
+      <tr>
+        <td><div class="org-name"><div class="org-mark" style="width:28px;height:28px;font-size:11px;border-radius:999px;">${a.name.split(" ").map((p)=>p[0]).slice(0,2).join("")}</div><strong>${a.name}</strong></div></td>
+        <td>${a.org}</td>
+        <td class="mono" style="color: var(--text-muted);">${a.email}</td>
+        <td class="tabular" style="color: var(--text-muted);">${a.added}</td>
+      </tr>
+    `).join("");
+  }
+
+  function views(id) {
+    document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
+    document.getElementById(id).classList.add("active");
+  }
+
+  let currentOrg = null;
+  function openDetail(id) {
+    const o = orgs.find((x) => x.id === id);
+    currentOrg = o;
+    document.getElementById("detailMark").textContent = o.initials;
+    document.getElementById("detailName").textContent = o.name;
+    document.getElementById("detailStatus").innerHTML = statusPill(o.status);
+    document.getElementById("adminCount").textContent = o.admins.length + (o.admins.length === 1 ? " person" : " people");
+    document.getElementById("adminList").innerHTML = o.admins.map((a) => `
+      <div class="admin-row">
+        <div class="av-lg">${a.name.split(" ").map((p)=>p[0]).slice(0,2).join("")}</div>
+        <div><strong>${a.name}</strong><span>${a.email}</span></div>
+        <div class="admin-row-spacer"></div>
+        <span style="font-size:11.5px;color:var(--text-muted);">Admin since ${a.added}</span>
+      </div>
+    `).join("");
+    const btn = document.getElementById("toggleSuspend");
+    btn.textContent = o.status === "suspended" ? "Reactivate organization" : "Suspend organization";
+    views("view-detail");
+    document.getElementById("topbarTitle").textContent = o.name;
+    document.getElementById("topbarSearch").style.display = "none";
+  }
+
+  const VIEW_TITLES = {
+    "view-orgs": "Organizations",
+    "view-admins": "All admins",
+    "view-detail": "Organization",
+    "view-billing": "Billing",
+    "view-settings": "Settings",
+    "view-locked": "Inactive-account preview",
+  };
+  const SEARCHABLE_VIEWS = new Set(["view-orgs", "view-admins", "view-billing"]);
+
+  function goTo(viewId) {
+    views(viewId);
+    document.getElementById("topbarTitle").textContent = VIEW_TITLES[viewId] ?? "";
+    document.querySelectorAll(".rail-link[data-view]").forEach((b) => {
+      b.classList.toggle("active", b.dataset.view === viewId);
+    });
+    document.getElementById("topbarSearch").style.display = SEARCHABLE_VIEWS.has(viewId) ? "flex" : "none";
+  }
+
+  document.getElementById("backToOrgs").addEventListener("click", () => goTo("view-orgs"));
+  document.querySelectorAll(".rail-link[data-view]").forEach((btn) => {
+    btn.addEventListener("click", () => goTo(btn.dataset.view));
+  });
+
+  document.getElementById("toggleSuspend").addEventListener("click", () => {
+    if (!currentOrg) return;
+    currentOrg.status = currentOrg.status === "suspended" ? "active" : "suspended";
+    document.getElementById("detailStatus").innerHTML = statusPill(currentOrg.status);
+    document.getElementById("toggleSuspend").textContent = currentOrg.status === "suspended" ? "Reactivate organization" : "Suspend organization";
+    renderOrgRows();
+    toast(currentOrg.status === "suspended" ? `${currentOrg.name} suspended` : `${currentOrg.name} reactivated`);
+  });
+
+  const drawer = document.getElementById("drawer");
+  const scrim = document.getElementById("scrim");
+  function openDrawer() { drawer.classList.add("open"); scrim.classList.add("open"); }
+  function closeDrawer() { drawer.classList.remove("open"); scrim.classList.remove("open"); }
+  document.getElementById("openAdd").addEventListener("click", openDrawer);
+  document.getElementById("closeDrawer").addEventListener("click", closeDrawer);
+  document.getElementById("cancelDrawer").addEventListener("click", closeDrawer);
+  scrim.addEventListener("click", closeDrawer);
+
+  /* ---------- Toasts ---------- */
+  function toast(message) {
+    const stack = document.getElementById("toastStack");
+    const el = document.createElement("div");
+    el.className = "toast";
+    el.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg><span></span>`;
+    el.querySelector("span").textContent = message;
+    stack.appendChild(el);
+    setTimeout(() => {
+      el.style.transition = "opacity 0.2s ease";
+      el.style.opacity = "0";
+      setTimeout(() => el.remove(), 200);
+    }, 2400);
+  }
+
+  /* ---------- Rail collapse ---------- */
+  document.getElementById("collapseRail").addEventListener("click", () => {
+    document.getElementById("rail").classList.toggle("collapsed");
+  });
+
+  /* ---------- Theme ---------- */
+  function currentTheme() {
+    return document.documentElement.getAttribute("data-theme") || "system";
+  }
+  function isDark() {
+    const t = currentTheme();
+    if (t === "dark") return true;
+    if (t === "light") return false;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+  function applyTheme(theme) {
+    if (theme === "system") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", theme);
+    document.querySelectorAll(".theme-opt").forEach((b) => {
+      b.classList.toggle("selected", b.dataset.themeOpt === theme);
+    });
+    document.getElementById("quickThemeIcon").innerHTML = isDark()
+      ? '<path d="M20 14.5a8.5 8.5 0 1 1-9.5-9.4 7 7 0 0 0 9.5 9.4Z"/>'
+      : '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M4.6 4.6l1.7 1.7M17.7 17.7l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.6 19.4l1.7-1.7M17.7 6.3l1.7-1.7"/>';
+  }
+  document.getElementById("quickTheme").addEventListener("click", () => {
+    applyTheme(isDark() ? "light" : "dark");
+  });
+  document.querySelectorAll(".theme-opt").forEach((btn) => {
+    btn.addEventListener("click", () => applyTheme(btn.dataset.themeOpt));
+  });
+  applyTheme("system");
+
+  /* ---------- Dummy toggles ---------- */
+  document.querySelectorAll("[data-dummy-toggle]").forEach((btn) => {
+    btn.addEventListener("click", () => btn.classList.toggle("on"));
+  });
+  document.getElementById("saveSettings").addEventListener("click", () => toast("Settings saved (demo)"));
+
+  /* ---------- Logout demo ---------- */
+  document.getElementById("logoutBtn").addEventListener("click", () => {
+    toast("Signed out (demo only)");
+  });
+
+  /* ---------- Mid-session inactive-logout replay ---------- */
+  function replaySessionDemo() {
+    const card = document.querySelector("#view-locked .preview-col:nth-child(2) .session-toast-demo");
+    if (!card) return;
+    card.style.animation = "none";
+    void card.offsetWidth;
+    card.style.animation = "toast-in 0.18s ease";
+  }
+  document.getElementById("replaySessionDemo").addEventListener("click", replaySessionDemo);
+
+  /* ---------- Billing demo data ---------- */
+  const billingByStatus = { active: "paid", suspended: "overdue", disabled: "trial" };
+  const billingPlan = ["Growth", "Growth", "Starter", "Starter", "Growth", "Starter", "Starter"];
+  function renderBillingRows() {
+    document.getElementById("billingRows").innerHTML = orgs.map((o, i) => {
+      const status = billingByStatus[o.status] || "paid";
+      const amount = status === "trial" ? "—" : billingPlan[i] === "Growth" ? "$49.00" : "$19.00";
+      const next = status === "trial" ? "Trial ends 12 Aug" : status === "overdue" ? "Overdue since 3 Jul" : "1 Aug 2026";
+      const label = status === "paid" ? "Paid" : status === "overdue" ? "Overdue" : "Trial";
+      return `
+        <tr>
+          <td><div class="org-name"><div class="org-mark" style="width:26px;height:26px;font-size:10.5px;">${o.initials}</div><strong>${o.name}</strong></div></td>
+          <td>${billingPlan[i]}</td>
+          <td><span class="invoice-status ${status}">${label}</span></td>
+          <td class="tabular" style="color: var(--text-muted);">${next}</td>
+          <td class="tabular">${amount}</td>
+        </tr>`;
+    }).join("");
+  }
+
+  renderOrgRows();
+  renderAdminRows();
+  renderBillingRows();
+</script>
+</body>
+</html>
