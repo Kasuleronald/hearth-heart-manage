@@ -29,7 +29,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -91,6 +90,15 @@ const TYPE_DOT: Record<EventType, string> = {
   special: "bg-amber-500",
 };
 
+// Solid pastel pill per type, in the app's own palette — background/text
+// pairs already used for badges elsewhere (e.g. member status).
+const TYPE_CHIP: Record<EventType, string> = {
+  sunday_service: "bg-primary/15 text-primary",
+  prayer: "bg-accent/25 text-accent-foreground",
+  overnight_prayer: "bg-purple-500/15 text-purple-700 dark:text-purple-300",
+  special: "bg-amber-500/15 text-amber-800 dark:text-amber-300",
+};
+
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const YEAR_RANGE = 6; // years shown on either side of the current year
 
@@ -104,6 +112,7 @@ function EventsPage() {
   const [editing, setEditing] = useState<ChurchEvent | null>(null);
   const [defaultDate, setDefaultDate] = useState<string | undefined>(undefined);
   const [open, setOpen] = useState(false);
+  const [dayDialogDate, setDayDialogDate] = useState<string | null>(null);
   const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
   const { base } = useDisplayCurrency(canToggle);
 
@@ -139,6 +148,18 @@ function EventsPage() {
     setOpen(true);
   }
 
+  function openEditFromDayDialog(e: ChurchEvent) {
+    setDayDialogDate(null);
+    setEditing(e);
+    setDefaultDate(undefined);
+    setOpen(true);
+  }
+
+  function openNewFromDayDialog(date: string) {
+    setDayDialogDate(null);
+    openNewEventDialog(date);
+  }
+
   return (
     <div>
       <PageHeader
@@ -148,29 +169,9 @@ function EventsPage() {
           <div className="flex items-center gap-2">
             {canToggle && <CurrencyToggle baseCode={base.code} />}
             {canManage && (
-              <Dialog
-                open={open}
-                onOpenChange={(o) => {
-                  setOpen(o);
-                  if (!o) {
-                    setEditing(null);
-                    setDefaultDate(undefined);
-                  }
-                }}
-              >
-                <DialogTrigger asChild>
-                  <Button onClick={() => openNewEventDialog()}>
-                    <Plus className="mr-2 h-4 w-4" /> New event
-                  </Button>
-                </DialogTrigger>
-                <EventDialog
-                  key={editing?.id ?? defaultDate ?? "new"}
-                  event={editing}
-                  defaultDate={defaultDate}
-                  currentUserId={session?.userId}
-                  onClose={() => setOpen(false)}
-                />
-              </Dialog>
+              <Button onClick={() => openNewEventDialog()}>
+                <Plus className="mr-2 h-4 w-4" /> New event
+              </Button>
             )}
           </div>
         }
@@ -237,64 +238,37 @@ function EventsPage() {
           return (
             <div
               key={dateStr}
-              role={canManage ? "button" : undefined}
-              onClick={canManage ? () => openNewEventDialog(dateStr) : undefined}
-              className={`group flex min-h-28 flex-col gap-1 bg-card p-1.5 sm:min-h-32 ${
+              role="button"
+              tabIndex={0}
+              onClick={() => setDayDialogDate(dateStr)}
+              onKeyDown={(ev) => {
+                if (ev.key === "Enter" || ev.key === " ") setDayDialogDate(dateStr);
+              }}
+              className={`flex min-h-28 cursor-pointer flex-col gap-1 bg-card p-1.5 hover:bg-accent/10 sm:min-h-32 ${
                 inMonth ? "" : "bg-muted/40"
-              } ${canManage ? "cursor-pointer hover:bg-accent/10" : ""}`}
+              }`}
             >
-              <div className="flex items-center justify-between">
-                <span
-                  className={`flex h-6 w-6 items-center justify-center rounded-full text-xs ${
-                    isToday
-                      ? "bg-primary font-semibold text-primary-foreground"
-                      : inMonth
-                        ? "text-foreground"
-                        : "text-muted-foreground/50"
-                  }`}
-                >
-                  {format(day, "d")}
-                </span>
-                {canManage && (
-                  <Plus className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                )}
-              </div>
+              <span
+                className={`flex h-6 w-6 items-center justify-center rounded-full text-xs ${
+                  isToday
+                    ? "bg-primary font-semibold text-primary-foreground"
+                    : inMonth
+                      ? "text-foreground"
+                      : "text-muted-foreground/50"
+                }`}
+              >
+                {format(day, "d")}
+              </span>
               <div className="flex flex-1 flex-col gap-1">
                 {dayEvents.map((e) => (
                   <div
                     key={e.id}
-                    onClick={(ev) => ev.stopPropagation()}
-                    className="group/event flex items-center gap-1 rounded bg-secondary px-1.5 py-1 text-[11px] leading-tight"
+                    className={`flex items-center gap-1 truncate rounded px-1.5 py-1 text-[11px] font-medium leading-tight ${TYPE_CHIP[e.type]}`}
+                    title={e.recurrenceId ? `${e.title} (recurring)` : e.title}
                   >
-                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${TYPE_DOT[e.type]}`} />
-                    <Link
-                      to="/events/$id"
-                      params={{ id: e.id }}
-                      className="min-w-0 flex-1 truncate hover:underline"
-                      title={e.recurrenceId ? `${e.title} (recurring)` : e.title}
-                    >
-                      {e.startTime && <span className="text-muted-foreground">{e.startTime} </span>}
-                      {e.title}
-                    </Link>
-                    {!!e.recurrenceId && (
-                      <Repeat className="h-3 w-3 shrink-0 text-muted-foreground" />
-                    )}
-                    {canManage && (
-                      <div className="hidden shrink-0 items-center gap-0.5 group-hover/event:flex">
-                        <button
-                          type="button"
-                          aria-label={`Edit ${e.title}`}
-                          onClick={() => {
-                            setEditing(e);
-                            setDefaultDate(undefined);
-                            setOpen(true);
-                          }}
-                        >
-                          <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
-                        </button>
-                        <EventDeleteButton event={e} />
-                      </div>
-                    )}
+                    {e.startTime && <span className="shrink-0 opacity-80">{e.startTime}</span>}
+                    <span className="truncate">{e.title}</span>
+                    {!!e.recurrenceId && <Repeat className="h-3 w-3 shrink-0 opacity-70" />}
                   </div>
                 ))}
               </div>
@@ -313,7 +287,119 @@ function EventsPage() {
       </div>
 
       {events.length === 0 && <p className="mt-4 text-sm text-muted-foreground">No events yet.</p>}
+
+      <DayEventsDialog
+        date={dayDialogDate}
+        events={dayDialogDate ? (eventsByDate.get(dayDialogDate) ?? []) : []}
+        canManage={canManage}
+        onClose={() => setDayDialogDate(null)}
+        onAddEvent={() => dayDialogDate && openNewFromDayDialog(dayDialogDate)}
+        onEditEvent={openEditFromDayDialog}
+      />
+
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) {
+            setEditing(null);
+            setDefaultDate(undefined);
+          }
+        }}
+      >
+        <EventDialog
+          key={editing?.id ?? defaultDate ?? "new"}
+          event={editing}
+          defaultDate={defaultDate}
+          currentUserId={session?.userId}
+          onClose={() => setOpen(false)}
+        />
+      </Dialog>
     </div>
+  );
+}
+
+function DayEventsDialog({
+  date,
+  events,
+  canManage,
+  onClose,
+  onAddEvent,
+  onEditEvent,
+}: {
+  date: string | null;
+  events: ChurchEvent[];
+  canManage: boolean;
+  onClose: () => void;
+  onAddEvent: () => void;
+  onEditEvent: (event: ChurchEvent) => void;
+}) {
+  return (
+    <Dialog open={date !== null} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="font-display">
+            {date && format(new Date(`${date}T00:00:00`), "EEEE, MMMM d, yyyy")}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-2">
+          {events.map((e) => (
+            <div key={e.id} className={`rounded-md p-3 ${TYPE_CHIP[e.type]}`}>
+              <div className="flex items-start justify-between gap-2">
+                <Link
+                  to="/events/$id"
+                  params={{ id: e.id }}
+                  onClick={onClose}
+                  className="font-medium hover:underline"
+                >
+                  {e.title}
+                </Link>
+                {canManage && (
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      aria-label={`Edit ${e.title}`}
+                      onClick={() => onEditEvent(e)}
+                    >
+                      <Pencil className="h-3.5 w-3.5 opacity-70 hover:opacity-100" />
+                    </button>
+                    <EventDeleteButton event={e} />
+                  </div>
+                )}
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs opacity-80">
+                {e.startTime && (
+                  <span>
+                    {e.startTime}
+                    {e.endTime ? ` – ${e.endTime}` : ""}
+                  </span>
+                )}
+                <span className="capitalize">{e.type.replace("_", " ")}</span>
+                {e.recurrence && (
+                  <span className="flex items-center gap-1">
+                    <Repeat className="h-3 w-3" /> {describeRecurrence(e.recurrence)}
+                  </span>
+                )}
+              </div>
+              {e.notes && <p className="mt-1 text-xs opacity-80">{e.notes}</p>}
+            </div>
+          ))}
+          {events.length === 0 && (
+            <p className="py-6 text-center text-sm text-muted-foreground">No events on this day.</p>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Close
+          </Button>
+          {canManage && (
+            <Button onClick={onAddEvent}>
+              <Plus className="mr-2 h-4 w-4" /> Add event
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
