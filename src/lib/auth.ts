@@ -336,6 +336,11 @@ export function canEditClass(role: Role, facilitatorId: string | undefined, user
 export function canAccessGivings(role: Role) {
   return role === "admin" || role === "pastor" || role === "treasurer";
 }
+// A Pastor can view Givings but not record/edit/delete entries — that stays
+// with Admin and Treasurer.
+export function canManageGivings(role: Role) {
+  return role === "admin" || role === "treasurer";
+}
 // View access: admin/pastor manage every department; a "leader" needs to see
 // this page too, since it's the only place their own assignment shows up.
 // `isAssignedLeader` covers someone whose primary role isn't "leader" (e.g. a

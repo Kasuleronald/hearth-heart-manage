@@ -41,7 +41,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useSession, canAccessGivings, canToggleCurrency } from "@/lib/auth";
+import { useSession, canAccessGivings, canManageGivings, canToggleCurrency } from "@/lib/auth";
 import { useGivingsTerm } from "@/lib/terminology";
 import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
 import { toast } from "sonner";
@@ -84,6 +84,8 @@ function GivingsPage() {
   }, [session, navigate]);
 
   if (!session || !canAccessGivings(session.role)) return null;
+
+  const canManage = canManageGivings(session.role);
 
   const filtered = givings.filter((g) => {
     if (categoryFilter !== "all" && g.category !== categoryFilter) return false;
@@ -148,28 +150,30 @@ function GivingsPage() {
                 ];
               })}
             />
-            <Dialog
-              open={open}
-              onOpenChange={(o) => {
-                setOpen(o);
-                if (!o) setEditing(null);
-              }}
-            >
-              <DialogTrigger asChild>
-                <Button onClick={() => setEditing(null)}>
-                  <Plus className="mr-2 h-4 w-4" /> Record {givingsSingular.toLowerCase()}
-                </Button>
-              </DialogTrigger>
-              <GivingDialog
-                key={editing?.id ?? "new"}
-                giving={editing}
-                members={members}
-                partners={partners}
-                projects={projects}
-                currentUserId={session.userId}
-                onClose={() => setOpen(false)}
-              />
-            </Dialog>
+            {canManage && (
+              <Dialog
+                open={open}
+                onOpenChange={(o) => {
+                  setOpen(o);
+                  if (!o) setEditing(null);
+                }}
+              >
+                <DialogTrigger asChild>
+                  <Button onClick={() => setEditing(null)}>
+                    <Plus className="mr-2 h-4 w-4" /> Record {givingsSingular.toLowerCase()}
+                  </Button>
+                </DialogTrigger>
+                <GivingDialog
+                  key={editing?.id ?? "new"}
+                  giving={editing}
+                  members={members}
+                  partners={partners}
+                  projects={projects}
+                  currentUserId={session.userId}
+                  onClose={() => setOpen(false)}
+                />
+              </Dialog>
+            )}
           </div>
         }
       />
@@ -237,34 +241,36 @@ function GivingsPage() {
                       {addedBy?.fullName ?? "—"}
                     </TableCell>
                     <TableCell>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          aria-label={`Edit giving on ${g.date}`}
-                          onClick={() => {
-                            setEditing(g);
-                            setOpen(true);
-                          }}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <DeleteButton
-                          label={`Delete giving on ${g.date}`}
-                          title="Delete this giving record?"
-                          description="This can't be undone."
-                          onConfirm={async () => {
-                            try {
-                              await db.givings.delete(g.id);
-                              toast.success("Giving deleted");
-                            } catch (e) {
-                              toast.error(
-                                e instanceof Error ? e.message : "Failed to delete giving",
-                              );
-                            }
-                          }}
-                        />
-                      </div>
+                      {canManage && (
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            aria-label={`Edit giving on ${g.date}`}
+                            onClick={() => {
+                              setEditing(g);
+                              setOpen(true);
+                            }}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <DeleteButton
+                            label={`Delete giving on ${g.date}`}
+                            title="Delete this giving record?"
+                            description="This can't be undone."
+                            onConfirm={async () => {
+                              try {
+                                await db.givings.delete(g.id);
+                                toast.success("Giving deleted");
+                              } catch (e) {
+                                toast.error(
+                                  e instanceof Error ? e.message : "Failed to delete giving",
+                                );
+                              }
+                            }}
+                          />
+                        </div>
+                      )}
                     </TableCell>
                   </TableRow>
                 );
