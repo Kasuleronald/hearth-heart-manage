@@ -74,7 +74,10 @@ function CellDetail() {
     ? canRecordOffertoryReceived(session.role, session.financeTier)
     : false;
   const canApproveEdit = session ? canApproveEditRequest(session.role) : false;
-  const isPlainCellLeader = session?.role === "cell_leader" && cell.leaderId === session.userId;
+  // Anyone who can edit this cell without being admin/pastor got that access by
+  // being the assigned leader — regardless of their account's primary role — so
+  // they're still subject to the edit-request-approval workflow below.
+  const isPlainCellLeader = canEdit && session?.role !== "admin" && session?.role !== "pastor";
   const unassigned = allMembers.filter((m) => !m.cellId);
   const balance = getCellBalance(meetings);
 

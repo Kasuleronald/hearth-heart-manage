@@ -1,4 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useLiveQuery } from "dexie-react-hooks";
+import { db } from "@/lib/db";
 import {
   LayoutDashboard,
   Users,
@@ -66,6 +68,7 @@ function getNav(cellTermPlural: string, givingsPlural: string) {
       icon: Users2,
       roles: ["admin", "pastor", "cell_leader", "treasurer"] as const,
       financeTierAllowed: true,
+      assignedCellLeaderAllowed: true,
     },
     {
       title: "Discipleship Classes",
@@ -78,6 +81,7 @@ function getNav(cellTermPlural: string, givingsPlural: string) {
       url: "/departments",
       icon: Building2,
       roles: ["admin", "pastor", "leader"] as const,
+      assignedDeptLeaderAllowed: true,
     },
     {
       title: "Events",
@@ -161,12 +165,28 @@ export function AppSidebar() {
   const { singular: treasurerLabel } = useTreasurerTerm();
   const { plural: givingsPlural } = useGivingsTerm();
   const nav = getNav(plural, givingsPlural);
+  // A user whose primary role wouldn't normally see these — e.g. a Department
+  // Leader the Admin has also assigned to lead a cell, or vice versa — still
+  // needs the nav item for whichever they're actually assigned to.
+  const isAssignedCellLeader =
+    useLiveQuery(async () => {
+      if (!session) return false;
+      return (await db.cells.where("leaderId").equals(session.userId).count()) > 0;
+    }, [session?.userId]) ?? false;
+  const isAssignedDeptLeader =
+    useLiveQuery(async () => {
+      if (!session) return false;
+      return (await db.departments.where("leaderId").equals(session.userId).count()) > 0;
+    }, [session?.userId]) ?? false;
+
   if (!session) return null;
   const visible = nav.filter((n) => {
     if ((n.roles as readonly string[]).includes(session.role)) return true;
     if (n.financeTierAllowed && isTierAFinanceLeader(session.role, session.financeTier)) {
       return true;
     }
+    if (n.assignedCellLeaderAllowed && isAssignedCellLeader) return true;
+    if (n.assignedDeptLeaderAllowed && isAssignedDeptLeader) return true;
     return false;
   });
 

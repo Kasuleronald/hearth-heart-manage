@@ -49,7 +49,8 @@ function DepartmentsPage() {
   const canManage = session ? canManageDepartments(session.role) : false;
   const baseCurrency = useBaseCurrency();
   const effectiveBranch = useEffectiveBranch(session?.branchId);
-  const allDepartments = useLiveQuery(() => db.departments.orderBy("name").toArray(), []) ?? [];
+  const allDepartmentsRaw = useLiveQuery(() => db.departments.orderBy("name").toArray(), []);
+  const allDepartments = allDepartmentsRaw ?? [];
   const departments = allDepartments.filter((d) =>
     matchesBranchFilter(effectiveBranch, d.branchId),
   );
@@ -57,7 +58,13 @@ function DepartmentsPage() {
     useLiveQuery(
       () =>
         db.users
-          .filter((u) => u.role === "leader" || u.role === "pastor" || u.role === "admin")
+          .filter(
+            (u) =>
+              u.role === "leader" ||
+              u.role === "pastor" ||
+              u.role === "admin" ||
+              u.role === "cell_leader",
+          )
           .toArray(),
       [],
     ) ?? [];
@@ -65,13 +72,25 @@ function DepartmentsPage() {
   const [editing, setEditing] = useState<Department | null>(null);
   const [open, setOpen] = useState(false);
 
+  // A Cell Leader the Admin has assigned to lead a department also needs
+  // access here, even though their primary role isn't "leader".
+  const roleAllows = session ? canAccessDepartments(session.role) : false;
+  const isAssignedDeptLeader = session
+    ? allDepartments.some((d) => d.leaderId === session.userId)
+    : false;
+  // Don't redirect away before the departments query has actually resolved —
+  // otherwise someone whose only access is via assignment gets bounced on
+  // the first render, before we know whether they're assigned.
+  const dataPending = !roleAllows && allDepartmentsRaw === undefined;
+  const canAccess = session ? canAccessDepartments(session.role, isAssignedDeptLeader) : false;
+
   useEffect(() => {
-    if (session && !canAccessDepartments(session.role)) {
+    if (session && !dataPending && !canAccess) {
       navigate({ to: "/dashboard", replace: true });
     }
-  }, [session, navigate]);
+  }, [session, dataPending, canAccess, navigate]);
 
-  if (!session || !canAccessDepartments(session.role)) return null;
+  if (!session || dataPending || !canAccess) return null;
 
   return (
     <div>

@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { DeleteButton } from "@/components/delete-button";
 import { BranchField } from "@/components/branch-field";
-import { useSession, canManageUsers } from "@/lib/auth";
+import { useSession, canManageUsers, isTierAFinanceLeader } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
 import {
@@ -43,7 +43,10 @@ function CellsPage() {
   const cells = useLiveQuery(() => db.cells.orderBy("name").toArray(), []) ?? [];
   const users =
     useLiveQuery(
-      () => db.users.filter((u) => u.role === "cell_leader" || u.role === "pastor").toArray(),
+      () =>
+        db.users
+          .filter((u) => u.role === "cell_leader" || u.role === "pastor" || u.role === "leader")
+          .toArray(),
       [],
     ) ?? [];
   const members = useLiveQuery(() => db.members.toArray(), []) ?? [];
@@ -52,8 +55,18 @@ function CellsPage() {
 
   const canManage = session ? session.role === "admin" || session.role === "pastor" : false;
   const effectiveBranch = useEffectiveBranch(session?.branchId);
+  // Admin/pastor/treasurer and tier-A finance leaders see every cell; anyone
+  // else only sees cell(s) they're actually assigned to lead — via
+  // leaderId, not their account's primary role, so a Department Leader the
+  // Admin has assigned to a cell is scoped the same way a cell_leader is.
+  const seesAllCells = session
+    ? session.role === "admin" ||
+      session.role === "pastor" ||
+      session.role === "treasurer" ||
+      isTierAFinanceLeader(session.role, session.financeTier)
+    : false;
   const visibleCells = (
-    session?.role === "cell_leader" ? cells.filter((c) => c.leaderId === session.userId) : cells
+    seesAllCells ? cells : cells.filter((c) => c.leaderId === session?.userId)
   ).filter((c) => matchesBranchFilter(effectiveBranch, c.branchId));
 
   return (

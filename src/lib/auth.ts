@@ -321,9 +321,13 @@ export function useSession() {
 export function canManageUsers(role: Role) {
   return role === "admin";
 }
+// Cell-editing rights follow the cell's actual leaderId assignment, not the
+// account's primary role — a Department Leader the Admin has assigned to lead
+// a cell gets the same rights here as someone whose primary role is
+// cell_leader.
 export function canEditCell(role: Role, cellLeaderId: string | undefined, userId: string) {
   if (role === "admin" || role === "pastor") return true;
-  return role === "cell_leader" && cellLeaderId === userId;
+  return cellLeaderId === userId;
 }
 export function canEditClass(role: Role, facilitatorId: string | undefined, userId: string) {
   if (role === "admin" || role === "pastor") return true;
@@ -334,8 +338,10 @@ export function canAccessGivings(role: Role) {
 }
 // View access: admin/pastor manage every department; a "leader" needs to see
 // this page too, since it's the only place their own assignment shows up.
-export function canAccessDepartments(role: Role) {
-  return role === "admin" || role === "pastor" || role === "leader";
+// `isAssignedLeader` covers someone whose primary role isn't "leader" (e.g. a
+// cell_leader) but who the Admin has assigned to lead a specific department.
+export function canAccessDepartments(role: Role, isAssignedLeader = false) {
+  return role === "admin" || role === "pastor" || role === "leader" || isAssignedLeader;
 }
 export function canManageDepartments(role: Role) {
   return role === "admin" || role === "pastor";
