@@ -761,7 +761,7 @@ function MemberDialog({
           if (!o) setDuplicateMatches([]);
         }}
         matches={duplicateMatches}
-        allowContinue
+        subject="member"
         onContinue={() => {
           setDuplicateMatches([]);
           doSave(buildData());

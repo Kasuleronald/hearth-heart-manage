@@ -442,7 +442,7 @@ function NewUserDialog({
           if (!o) setDuplicateMatches([]);
         }}
         matches={duplicateMatches}
-        allowContinue={!duplicateMatches.some((m) => m.kind === "user")}
+        subject="user"
         onContinue={() => {
           setDuplicateMatches([]);
           doCreate();
@@ -614,7 +614,7 @@ function EditUserDialog({
           if (!o) setDuplicateMatches([]);
         }}
         matches={duplicateMatches}
-        allowContinue={!duplicateMatches.some((m) => m.kind === "user")}
+        subject="user"
         onContinue={() => {
           const trimmedEmail = email.trim().toLowerCase();
           setDuplicateMatches([]);

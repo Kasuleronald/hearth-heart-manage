@@ -14,21 +14,30 @@ export function DuplicateEmailAlert({
   open,
   onOpenChange,
   matches,
-  allowContinue,
+  subject,
   onContinue,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   matches: DuplicateEmailMatch[];
-  allowContinue: boolean;
+  subject: "user" | "member";
   onContinue: () => void;
 }) {
   const match = matches[0];
+  // A user account can never share a sign-in email with anyone else — a
+  // member record can, but only after the admin is looped in.
+  const blockedByUser = matches.some((m) => m.kind === "user");
+  const allowContinue = !blockedByUser;
+
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle className="font-display">Is this the same person?</AlertDialogTitle>
+          <AlertDialogTitle className="font-display">
+            {blockedByUser && subject === "member"
+              ? "Can't add this member"
+              : "Is this the same person?"}
+          </AlertDialogTitle>
           <AlertDialogDescription>
             {match && (
               <>
@@ -36,9 +45,11 @@ export function DuplicateEmailAlert({
                 already uses this email address.{" "}
               </>
             )}
-            {allowContinue
-              ? "If it's the same person, go back rather than creating a duplicate record. If it's a different person who just happens to share this email, you can continue."
-              : "Sign-in email must be unique, so if this is the same person, edit their existing account instead of creating a new one. If it's a different person, go back and use a different email."}
+            {blockedByUser
+              ? subject === "member"
+                ? "Members can't be added with an email that already belongs to a user account. Contact the admin to resolve this."
+                : "Sign-in email must be unique, so if this is the same person, edit their existing account instead of creating a new one. If it's a different person, go back and use a different email."
+              : "If it's the same person, go back rather than creating a duplicate record. If it's a different person who just happens to share this email, you can continue."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
