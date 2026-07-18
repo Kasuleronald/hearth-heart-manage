@@ -1,10 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Download, Upload, Database, Tag, Coins } from "lucide-react";
+import { Download, Upload, Database, Tag, Coins, CalendarDays } from "lucide-react";
 import { exportDatabase, importDatabase, type DatabaseBackup } from "@/lib/db";
 import { downloadJson } from "@/lib/download";
 import { TERM_DEFINITIONS, useTerm, setTerm } from "@/lib/terminology";
 import { useBaseCurrency, setBaseCurrency, DEFAULT_BASE_RATE } from "@/lib/currency";
+import { useWeekStartDay, setWeekStartDay, WEEKDAY_OPTIONS } from "@/lib/week";
 import { CurrencyCombobox } from "@/components/currency-combobox";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -37,7 +38,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { useSession, canManageCurrencySettings } from "@/lib/auth";
+import { useSession, canManageCurrencySettings, canManageWeekStartSetting } from "@/lib/auth";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -65,6 +66,7 @@ function SettingsPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <TerminologyCard />
         {canManageCurrencySettings(session.role) && <CurrencyCard />}
+        {canManageWeekStartSetting(session.role) && <WeekStartCard />}
         <ExportCard />
         <ImportCard />
       </div>
@@ -212,6 +214,49 @@ function CurrencyCard() {
           </p>
         </div>
         <Button onClick={save}>Save currency settings</Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function WeekStartCard() {
+  const weekStartDay = useWeekStartDay();
+
+  async function save(day: number) {
+    try {
+      await setWeekStartDay(day);
+      toast.success("Week start day updated");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save");
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="font-display flex items-center gap-2">
+          <CalendarDays className="h-5 w-5" /> Week start
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Which day a week begins on — used to group the Cell Reports weekly view.
+        </p>
+        <div className="space-y-1.5">
+          <Label>Week starts on</Label>
+          <Select value={String(weekStartDay)} onValueChange={(v) => save(Number(v))}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {WEEKDAY_OPTIONS.map((d) => (
+                <SelectItem key={d.value} value={String(d.value)}>
+                  {d.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </CardContent>
     </Card>
   );

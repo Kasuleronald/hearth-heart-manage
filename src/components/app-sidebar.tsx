@@ -39,6 +39,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useSession, isTierAFinanceLeader } from "@/lib/auth";
+import { useIsHeadOfCellFellowships } from "@/lib/cell-fellowships";
 import { useCellTerm, useTreasurerTerm, useGivingsTerm } from "@/lib/terminology";
 import { Button } from "@/components/ui/button";
 
@@ -69,6 +70,7 @@ function getNav(cellTermPlural: string, givingsPlural: string) {
       roles: ["admin", "pastor", "cell_leader", "treasurer"] as const,
       financeTierAllowed: true,
       assignedCellLeaderAllowed: true,
+      headOfCellFellowshipsAllowed: true,
     },
     {
       title: "Discipleship Classes",
@@ -139,6 +141,7 @@ function getNav(cellTermPlural: string, givingsPlural: string) {
       icon: FileSearch,
       roles: ["admin", "pastor", "treasurer"] as const,
       financeTierAllowed: true,
+      headOfCellFellowshipsAllowed: true,
     },
     {
       title: "Reports",
@@ -178,6 +181,7 @@ export function AppSidebar() {
       if (!session) return false;
       return (await db.departments.where("leaderId").equals(session.userId).count()) > 0;
     }, [session?.userId]) ?? false;
+  const isHeadOfCellFellowships = useIsHeadOfCellFellowships(session?.userId);
 
   if (!session) return null;
   const visible = nav.filter((n) => {
@@ -187,6 +191,7 @@ export function AppSidebar() {
     }
     if (n.assignedCellLeaderAllowed && isAssignedCellLeader) return true;
     if (n.assignedDeptLeaderAllowed && isAssignedDeptLeader) return true;
+    if (n.headOfCellFellowshipsAllowed && isHeadOfCellFellowships) return true;
     return false;
   });
 

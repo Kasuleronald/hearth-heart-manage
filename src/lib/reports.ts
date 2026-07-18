@@ -216,15 +216,18 @@ export function buildAttendanceReport(
     });
   }
   for (const m of data.cellMeetings.filter((m) => inRange(m.date, from, to))) {
-    const presentIds = data.cellAttendance
-      .filter((a) => a.meetingId === m.id && a.present)
+    // Present rows include guest attendees (no memberId) — they count toward
+    // the total but can't be sorted into a member category.
+    const presentRows = data.cellAttendance.filter((a) => a.meetingId === m.id && a.present);
+    const presentMemberIds = presentRows
+      .filter((a): a is typeof a & { memberId: string } => !!a.memberId)
       .map((a) => a.memberId);
     occurrences.push({
       date: m.date,
       type: `${cellSingular} Meeting`,
       name: cellById.get(m.cellId)?.name ?? `Unknown ${cellSingular.toLowerCase()}`,
-      counts: countByCategory(presentIds),
-      total: presentIds.length,
+      counts: countByCategory(presentMemberIds),
+      total: presentRows.length,
     });
   }
   for (const s of data.classSessions.filter((s) => inRange(s.date, from, to))) {

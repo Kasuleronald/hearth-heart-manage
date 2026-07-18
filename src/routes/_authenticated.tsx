@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth";
 import { useTreasurerTerm } from "@/lib/terminology";
 import { checkBirthdayReminders } from "@/lib/birthdays";
+import { ensureCellFellowshipsDepartment } from "@/lib/cell-fellowships";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -28,6 +29,10 @@ function AuthenticatedLayout() {
 
   useEffect(() => {
     if (session) checkBirthdayReminders();
+  }, [session]);
+
+  useEffect(() => {
+    if (session) ensureCellFellowshipsDepartment();
   }, [session]);
 
   useEffect(() => {

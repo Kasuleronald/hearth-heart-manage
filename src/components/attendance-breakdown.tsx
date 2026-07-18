@@ -28,9 +28,11 @@ const CATEGORY_ORDER = Object.keys(CATEGORY_LABELS);
 export function AttendanceBreakdown({
   roster,
   presentIds,
+  guestCount = 0,
 }: {
   roster: Pick<Member, "id" | "category">[];
   presentIds: Set<string>;
+  guestCount?: number;
 }) {
   const counts = CATEGORY_ORDER.map((category) => ({
     category,
@@ -39,17 +41,17 @@ export function AttendanceBreakdown({
   })).filter((c) => c.count > 0);
 
   const uncategorized = roster.filter((m) => !m.category && presentIds.has(m.id)).length;
-  const total = presentIds.size;
+  const total = presentIds.size + guestCount;
 
   if (total === 0) return null;
 
+  const segments = counts.map(({ category, count }) => `${count} ${CATEGORY_LABELS[category]}`);
+  if (uncategorized > 0) segments.push(`${uncategorized} Uncategorized`);
+  if (guestCount > 0) segments.push(`${guestCount} Guests`);
+
   return (
     <p className="text-xs text-muted-foreground">
-      {counts.map(({ category, count }) => `${count} ${CATEGORY_LABELS[category]}`).join(" · ")}
-      {uncategorized > 0 &&
-        (counts.length > 0
-          ? ` · ${uncategorized} Uncategorized`
-          : `${uncategorized} Uncategorized`)}
+      {segments.join(" · ")}
       {" — "}
       {total} present
     </p>

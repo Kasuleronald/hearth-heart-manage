@@ -4,14 +4,23 @@ import { useState } from "react";
 import { db } from "@/lib/db";
 import { useSession, canSubmitRequisitions } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
+import { useWeekStartDay } from "@/lib/week";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogTrigger } from "@/components/ui/dialog";
 import { RequisitionDialog } from "@/components/requisition-dialog";
-import { Users, Users2, CalendarDays, TrendingUp, Cake, ClipboardList } from "lucide-react";
+import {
+  Users,
+  Users2,
+  CalendarDays,
+  TrendingUp,
+  Cake,
+  ClipboardList,
+  ArrowRight,
+} from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
-import { format, subDays } from "date-fns";
+import { format, subDays, startOfWeek, endOfWeek } from "date-fns";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -29,6 +38,20 @@ function Dashboard() {
   const departments = useLiveQuery(() => db.departments.orderBy("name").toArray(), []) ?? [];
   const [requisitionOpen, setRequisitionOpen] = useState(false);
   const canSubmit = session ? canSubmitRequisitions(session.role) : false;
+
+  const weekStartsOn = useWeekStartDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6;
+  const weekStartStr = format(startOfWeek(new Date(), { weekStartsOn }), "yyyy-MM-dd");
+  const weekEndStr = format(endOfWeek(new Date(), { weekStartsOn }), "yyyy-MM-dd");
+  const ledCells =
+    useLiveQuery(async () => {
+      if (!session) return [];
+      return db.cells.where("leaderId").equals(session.userId).toArray();
+    }, [session?.userId]) ?? [];
+  const thisWeekMeetings =
+    useLiveQuery(
+      () => db.cellMeetings.where("date").between(weekStartStr, weekEndStr, true, true).toArray(),
+      [weekStartStr, weekEndStr],
+    ) ?? [];
 
   const activeMembers = members.filter((m) => m.status !== "inactive").length;
   const upcoming = events.filter((e) => e.date >= format(new Date(), "yyyy-MM-dd")).length;
@@ -99,6 +122,41 @@ function Dashboard() {
           )
         }
       />
+
+      {ledCells.length > 0 && (
+        <Card className="mb-4">
+          <CardHeader>
+            <CardTitle className="font-display">
+              Your {cellSingular} Fellowship{ledCells.length > 1 ? "s" : ""}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {ledCells.map((c) => {
+              const reported = thisWeekMeetings.some((m) => m.cellId === c.id);
+              return (
+                <div
+                  key={c.id}
+                  className="flex items-center justify-between gap-3 rounded-md border px-3 py-2"
+                >
+                  <div>
+                    <div className="font-medium">{c.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {reported ? "Reported this week" : "Not yet reported this week"}
+                    </div>
+                  </div>
+                  <Button asChild size="sm" variant={reported ? "outline" : "default"}>
+                    <Link to="/cells/$id" params={{ id: c.id }}>
+                      {reported ? "View" : "Enter this week's report"}
+                      <ArrowRight className="ml-1 h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
           icon={<Users className="h-5 w-5" />}

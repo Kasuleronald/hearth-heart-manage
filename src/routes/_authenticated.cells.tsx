@@ -12,6 +12,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { DeleteButton } from "@/components/delete-button";
 import { BranchField } from "@/components/branch-field";
 import { useSession, canManageUsers, isTierAFinanceLeader } from "@/lib/auth";
+import { useIsHeadOfCellFellowships } from "@/lib/cell-fellowships";
 import { useCellTerm } from "@/lib/terminology";
 import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
 import {
@@ -52,8 +53,11 @@ function CellsPage() {
   const members = useLiveQuery(() => db.members.toArray(), []) ?? [];
   const [editing, setEditing] = useState<Cell | null>(null);
   const [open, setOpen] = useState(false);
+  const isHeadOfCellFellowships = useIsHeadOfCellFellowships(session?.userId);
 
-  const canManage = session ? session.role === "admin" || session.role === "pastor" : false;
+  const canManage = session
+    ? session.role === "admin" || session.role === "pastor" || isHeadOfCellFellowships
+    : false;
   const effectiveBranch = useEffectiveBranch(session?.branchId);
   // Admin/pastor/treasurer and tier-A finance leaders see every cell; anyone
   // else only sees cell(s) they're actually assigned to lead — via

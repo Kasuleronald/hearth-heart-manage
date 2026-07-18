@@ -111,6 +111,12 @@ export interface Cell {
 // (finance's confirmation) — see §9 of the feature brief / src/lib/finance.ts.
 export type EditRequestStatus = "none" | "requested" | "approved";
 
+// Money the leader spent out of the offertory before handing in the rest
+// (e.g. transport) — a claim until the Treasurer approves it, at which point
+// it's posted as a real Expense row against the Cell Fellowships department.
+// See src/lib/cell-fellowships.ts.
+export type CellExpenseStatus = "none" | "pending" | "approved" | "rejected";
+
 export interface CellMeeting {
   id: string;
   cellId: string;
@@ -121,6 +127,11 @@ export interface CellMeeting {
   offertoryReceived: number; // UGX — what finance has confirmed; 0 until acted on
   reportRef: string; // DDMMYYYY + 2-digit sequence for that date
   editRequestStatus: EditRequestStatus;
+  expenseClaimed?: number; // UGX — what the leader says they spent before handing in the rest
+  expenseDescription?: string; // what it was spent on
+  expenseStatus?: CellExpenseStatus; // undefined is treated as "none"
+  expenseApproved?: number; // UGX — what the Treasurer actually approved
+  expenseId?: string; // Expense.id created at approval time
   branchId?: string; // inherited from the parent cell at creation time
   createdAt: number;
 }
@@ -128,7 +139,9 @@ export interface CellMeeting {
 export interface CellAttendance {
   id: string;
   meetingId: string;
-  memberId: string;
+  memberId?: string; // absent for a guest row — see guestName below
+  guestName?: string; // set (optionally with guestPhone) only when memberId is absent
+  guestPhone?: string;
   present: boolean;
 }
 
@@ -358,7 +371,8 @@ export type NotificationType =
   | "cell_report_submitted"
   | "testimony_added"
   | "pledge_archived"
-  | "birthday_reminder";
+  | "birthday_reminder"
+  | "cell_expense_approved";
 
 export interface Notification {
   id: string;

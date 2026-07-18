@@ -110,6 +110,28 @@ export async function notifyCellReportSubmitted(meeting: CellMeeting, cellName: 
   });
 }
 
+export async function notifyCellExpenseApproved(
+  meeting: CellMeeting,
+  cellName: string,
+  cellLeaderId: string | undefined,
+) {
+  const [roleRecipients, tierARecipients] = await Promise.all([
+    userIdsByRoles(["admin", "pastor", "treasurer"]),
+    tierAFinanceLeaderIds(),
+  ]);
+  const recipients = [
+    ...roleRecipients,
+    ...tierARecipients,
+    ...(cellLeaderId ? [cellLeaderId] : []),
+  ];
+  await notify(
+    recipients,
+    "cell_expense_approved",
+    `${cellName}'s reported expense was approved and posted to Expenses`,
+    { type: "cell", id: meeting.cellId },
+  );
+}
+
 export async function notifyTestimonyAdded(testimony: Testimony) {
   const author = await db.users.get(testimony.userId);
   const recipients = (await db.users.toArray())

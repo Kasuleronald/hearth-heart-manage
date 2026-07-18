@@ -11,15 +11,18 @@ export async function generateReportRef(date: string): Promise<string> {
   return `${prefix}${String(countForDate + 1).padStart(2, "0")}`;
 }
 
-// A cell's running offertory balance: what finance has actually received,
-// minus what the cell leader reported, summed across every report. Negative
-// = the cell still owes money against what it reported; positive = it has
-// brought in more than reported (or made up an earlier shortfall).
+// A cell's running offertory balance: what finance has actually received
+// plus any Treasurer-approved expense, minus what the cell leader reported,
+// summed across every report. Negative = the cell still owes money against
+// what it reported; positive = it has brought in more than reported (or made
+// up an earlier shortfall). A pending/unapproved expense claim doesn't count
+// yet — it only closes the gap once the Treasurer approves it.
 export function getCellBalance(
-  meetings: Pick<CellMeeting, "offertoryReported" | "offertoryReceived">[],
+  meetings: Pick<CellMeeting, "offertoryReported" | "offertoryReceived" | "expenseApproved">[],
 ): number {
   return meetings.reduce(
-    (sum, m) => sum + (m.offertoryReceived ?? 0) - (m.offertoryReported ?? 0),
+    (sum, m) =>
+      sum + (m.offertoryReceived ?? 0) + (m.expenseApproved ?? 0) - (m.offertoryReported ?? 0),
     0,
   );
 }
@@ -32,7 +35,13 @@ export function getCellBalance(
 export function getRunningBalances(
   meetings: Pick<
     CellMeeting,
-    "id" | "cellId" | "date" | "createdAt" | "offertoryReported" | "offertoryReceived"
+    | "id"
+    | "cellId"
+    | "date"
+    | "createdAt"
+    | "offertoryReported"
+    | "offertoryReceived"
+    | "expenseApproved"
   >[],
 ): Map<string, number> {
   const byCell = new Map<string, typeof meetings>();
@@ -48,7 +57,7 @@ export function getRunningBalances(
     );
     let running = 0;
     for (const m of sorted) {
-      running += (m.offertoryReceived ?? 0) - (m.offertoryReported ?? 0);
+      running += (m.offertoryReceived ?? 0) + (m.expenseApproved ?? 0) - (m.offertoryReported ?? 0);
       result.set(m.id, running);
     }
   }

@@ -17,17 +17,28 @@ export function MemberCombobox({
   excludeIds,
   onSelect,
   label = "Add attendee",
+  allowGuestAdd = false,
+  onAddGuest,
 }: {
   members: Member[];
   excludeIds: Set<string>;
   onSelect: (member: Member) => void;
   label?: string;
+  allowGuestAdd?: boolean;
+  onAddGuest?: (name: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const available = members.filter((m) => !excludeIds.has(m.id));
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setQuery("");
+      }}
+    >
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" role="combobox" aria-expanded={open}>
           <UserPlus className="mr-1 h-4 w-4" /> {label}
@@ -35,9 +46,25 @@ export function MemberCombobox({
       </PopoverTrigger>
       <PopoverContent className="w-72 p-0" align="start">
         <Command>
-          <CommandInput placeholder="Search members…" />
+          <CommandInput placeholder="Search members…" value={query} onValueChange={setQuery} />
           <CommandList>
-            <CommandEmpty>No member found — add them from the Members page first.</CommandEmpty>
+            <CommandEmpty>
+              {allowGuestAdd && query.trim() ? (
+                <button
+                  type="button"
+                  className="w-full px-2 py-1.5 text-left text-sm hover:text-primary"
+                  onClick={() => {
+                    onAddGuest?.(query.trim());
+                    setOpen(false);
+                    setQuery("");
+                  }}
+                >
+                  + Add "{query.trim()}" as a guest
+                </button>
+              ) : (
+                "No member found — add them from the Members page first."
+              )}
+            </CommandEmpty>
             <CommandGroup>
               {available.map((m) => (
                 <CommandItem
@@ -46,6 +73,7 @@ export function MemberCombobox({
                   onSelect={() => {
                     onSelect(m);
                     setOpen(false);
+                    setQuery("");
                   }}
                 >
                   {m.firstName} {m.lastName}
