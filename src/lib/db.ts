@@ -134,15 +134,32 @@ export interface CellAttendance {
 
 export type EventType = "sunday_service" | "prayer" | "overnight_prayer" | "special";
 
+// A recurring event is materialized into one ChurchEvent row per occurrence
+// (so each has its own attendance/offertory) — `recurrenceId` groups the rows
+// that came from the same rule, and `recurrence` is denormalized onto each
+// one purely for display (e.g. an "Every Sunday" badge).
+export type RecurrenceFrequency = "weekly" | "monthly";
+export type MonthlyPosition = "first" | "second" | "third" | "fourth" | "last";
+export interface EventRecurrence {
+  frequency: RecurrenceFrequency;
+  weekday: number; // 0 (Sunday) - 6 (Saturday)
+  monthlyPosition?: MonthlyPosition; // only for frequency === "monthly"
+  until: string; // YYYY-MM-DD — last date occurrences were generated through
+}
+
 export interface ChurchEvent {
   id: string;
   title: string;
   date: string; // YYYY-MM-DD
+  startTime?: string; // HH:MM
+  endTime?: string; // HH:MM
   type: EventType;
   audience: "all" | "leaders"; // who gets notified when this event is created
   notes?: string;
   offertoryAmount?: number; // UGX
   branchId?: string;
+  recurrenceId?: string; // shared by every occurrence generated from the same rule
+  recurrence?: EventRecurrence;
   createdAt: number;
 }
 

@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { AttendanceBreakdown } from "@/components/attendance-breakdown";
 import { MemberCombobox } from "@/components/member-combobox";
 import { CurrencyToggle } from "@/components/currency-toggle";
+import { describeRecurrence } from "@/lib/recurrence";
 import { format } from "date-fns";
 
 export const Route = createFileRoute("/_authenticated/events/$id")({
@@ -63,7 +64,13 @@ function EventDetail() {
       </Button>
       <PageHeader
         title={event.title}
-        description={format(new Date(event.date), "PPPP")}
+        description={
+          format(new Date(event.date), "PPPP") +
+          (event.startTime
+            ? ` · ${event.startTime}${event.endTime ? ` – ${event.endTime}` : ""}`
+            : "") +
+          (event.recurrence ? ` · ${describeRecurrence(event.recurrence)}` : "")
+        }
         actions={
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="capitalize">
