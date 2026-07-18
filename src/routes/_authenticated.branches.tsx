@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Building } from "lucide-react";
+import { format } from "date-fns";
 import { db, uid, deleteBranchCascade, type Branch } from "@/lib/db";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useSession, canManageBranches } from "@/lib/auth";
 import { toast } from "sonner";
 
@@ -29,6 +37,14 @@ function BranchesPage() {
   const { session } = useSession();
   const canManage = session ? canManageBranches(session.role) : false;
   const branches = useLiveQuery(() => db.branches.orderBy("name").toArray(), []) ?? [];
+  const users =
+    useLiveQuery(
+      () =>
+        db.users
+          .filter((u) => u.role === "pastor" || u.role === "leader" || u.role === "admin")
+          .toArray(),
+      [],
+    ) ?? [];
   const [editing, setEditing] = useState<Branch | null>(null);
   const [open, setOpen] = useState(false);
 
@@ -59,6 +75,7 @@ function BranchesPage() {
             <BranchDialog
               key={editing?.id ?? "new"}
               branch={editing}
+              users={users}
               onClose={() => setOpen(false)}
             />
           </Dialog>
@@ -66,44 +83,57 @@ function BranchesPage() {
       />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {branches.map((b) => (
-          <Card key={b.id}>
-            <CardContent className="p-5">
-              <div className="flex items-start justify-between">
-                <div className="min-w-0">
-                  <h3 className="font-display text-lg font-semibold">{b.name}</h3>
-                  {b.address && <p className="mt-1 text-xs text-muted-foreground">{b.address}</p>}
+        {branches.map((b) => {
+          const leadPastor = users.find((u) => u.id === b.leadPastorId);
+          return (
+            <Card key={b.id}>
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between">
+                  <div className="min-w-0">
+                    <h3 className="font-display text-lg font-semibold">{b.name}</h3>
+                    {b.address && <p className="mt-1 text-xs text-muted-foreground">{b.address}</p>}
+                    {leadPastor && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        In-charge: {leadPastor.fullName}
+                      </p>
+                    )}
+                    {b.startDate && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Started {format(new Date(b.startDate), "PPP")}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-1">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`Edit ${b.name}`}
+                      onClick={() => {
+                        setEditing(b);
+                        setOpen(true);
+                      }}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <DeleteButton
+                      label={`Delete ${b.name}`}
+                      title={`Delete "${b.name}"?`}
+                      description="Records scoped to this branch aren't deleted — they become church-wide instead. This can't be undone."
+                      onConfirm={async () => {
+                        try {
+                          await deleteBranchCascade(b.id);
+                          toast.success("Branch deleted");
+                        } catch (e) {
+                          toast.error(e instanceof Error ? e.message : "Failed to delete branch");
+                        }
+                      }}
+                    />
+                  </div>
                 </div>
-                <div className="flex gap-1">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    aria-label={`Edit ${b.name}`}
-                    onClick={() => {
-                      setEditing(b);
-                      setOpen(true);
-                    }}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <DeleteButton
-                    label={`Delete ${b.name}`}
-                    title={`Delete "${b.name}"?`}
-                    description="Records scoped to this branch aren't deleted — they become church-wide instead. This can't be undone."
-                    onConfirm={async () => {
-                      try {
-                        await deleteBranchCascade(b.id);
-                        toast.success("Branch deleted");
-                      } catch (e) {
-                        toast.error(e instanceof Error ? e.message : "Failed to delete branch");
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          );
+        })}
         {branches.length === 0 && (
           <div className="col-span-full py-10 text-center text-sm text-muted-foreground">
             <Building className="mx-auto mb-2 h-6 w-6 text-muted-foreground/60" />
@@ -115,9 +145,19 @@ function BranchesPage() {
   );
 }
 
-function BranchDialog({ branch, onClose }: { branch: Branch | null; onClose: () => void }) {
+function BranchDialog({
+  branch,
+  users,
+  onClose,
+}: {
+  branch: Branch | null;
+  users: { id: string; fullName: string; role: string }[];
+  onClose: () => void;
+}) {
   const [name, setName] = useState(branch?.name ?? "");
   const [address, setAddress] = useState(branch?.address ?? "");
+  const [leadPastorId, setLeadPastorId] = useState(branch?.leadPastorId ?? "");
+  const [startDate, setStartDate] = useState(branch?.startDate ?? "");
 
   async function save() {
     if (!name.trim()) return toast.error("Name is required");
@@ -126,6 +166,8 @@ function BranchDialog({ branch, onClose }: { branch: Branch | null; onClose: () 
         id: branch?.id ?? uid(),
         name: name.trim(),
         address: address || undefined,
+        leadPastorId: leadPastorId || undefined,
+        startDate: startDate || undefined,
         createdAt: branch?.createdAt ?? Date.now(),
       });
       toast.success(branch ? "Branch updated" : "Branch created");
@@ -148,6 +190,29 @@ function BranchDialog({ branch, onClose }: { branch: Branch | null; onClose: () 
         <div className="space-y-1.5">
           <Label>Address</Label>
           <Input value={address} onChange={(e) => setAddress(e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label>In-charge / Lead Pastor</Label>
+          <Select
+            value={leadPastorId || "none"}
+            onValueChange={(v) => setLeadPastorId(v === "none" ? "" : v)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Assign an in-charge" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Unassigned</SelectItem>
+              {users.map((u) => (
+                <SelectItem key={u.id} value={u.id}>
+                  {u.fullName} ({u.role.replace("_", " ")})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Date started</Label>
+          <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
         </div>
       </div>
       <DialogFooter>

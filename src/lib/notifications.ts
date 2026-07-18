@@ -137,6 +137,16 @@ export async function notifyPledgeArchived(pledge: Pledge) {
   );
 }
 
+export async function notifyBirthdayReminder(member: Member) {
+  const recipients = (await db.users.toArray()).map((u) => u.id);
+  await notify(
+    recipients,
+    "birthday_reminder",
+    `${member.firstName} ${member.lastName}'s birthday is tomorrow!`,
+    { type: "member", id: member.id },
+  );
+}
+
 export async function notifyRequisitionSubmitted(requisition: Requisition) {
   const [roleRecipients, tierARecipients, requester, department] = await Promise.all([
     userIdsByRoles(["admin", "pastor", "treasurer"]),

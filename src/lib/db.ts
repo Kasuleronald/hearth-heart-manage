@@ -9,6 +9,8 @@ export interface Branch {
   id: string;
   name: string;
   address?: string;
+  leadPastorId?: string; // User.id
+  startDate?: string; // YYYY-MM-DD
   createdAt: number;
 }
 
@@ -36,7 +38,8 @@ export interface PasswordResetToken {
   createdAt: number;
 }
 
-export type MemberStatus = "visitor" | "member" | "baptized" | "inactive";
+export type MemberStatus =
+  "active" | "inactive" | "leader" | "deacon" | "elder" | "pastor" | "minister";
 // "new_member" and "convert" are older values kept only so existing records
 // still render (via a label fallback) — new records use the set below.
 export type MemberCategory =
@@ -75,6 +78,7 @@ export interface Member {
   birthMonth?: number; // 1-12
   birthDay?: number; // 1-31
   birthYear?: number; // optional
+  lastBirthdayReminderYear?: number; // guards against re-notifying on the same birthday
   address?: string;
   status: MemberStatus;
   category?: MemberCategory;
@@ -336,7 +340,8 @@ export type NotificationType =
   | "requisition_submitted"
   | "cell_report_submitted"
   | "testimony_added"
-  | "pledge_archived";
+  | "pledge_archived"
+  | "birthday_reminder";
 
 export interface Notification {
   id: string;
@@ -538,6 +543,20 @@ export class MyChurchDB extends Dexie {
     this.version(15).stores({
       pledges: "id, bookedBy, status, collectionDate",
     });
+    this.version(16)
+      .stores({})
+      .upgrade(async (tx) => {
+        // Replace the old visitor/member/baptized pipeline with the
+        // active/inactive + leadership-rank status set.
+        const table = tx.table("members");
+        const members = (await table.toArray()) as Record<string, unknown>[];
+        for (const m of members) {
+          if (m.status === "visitor" || m.status === "member" || m.status === "baptized") {
+            m.status = "active";
+            await table.put(m);
+          }
+        }
+      });
   }
 }
 

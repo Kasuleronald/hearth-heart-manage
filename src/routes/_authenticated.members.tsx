@@ -74,7 +74,24 @@ export const Route = createFileRoute("/_authenticated/members")({
   component: MembersPage,
 });
 
-const STATUSES: MemberStatus[] = ["visitor", "member", "baptized", "inactive"];
+const STATUSES: MemberStatus[] = [
+  "active",
+  "inactive",
+  "leader",
+  "deacon",
+  "elder",
+  "pastor",
+  "minister",
+];
+const STATUS_LABELS: Record<MemberStatus, string> = {
+  active: "Active Member",
+  inactive: "Inactive Member",
+  leader: "Leader",
+  deacon: "Deacon",
+  elder: "Elder",
+  pastor: "Pastor",
+  minister: "Minister",
+};
 
 const CATEGORIES: { value: MemberCategory; label: string; description?: string }[] = [
   { value: "member", label: "Member" },
@@ -272,7 +289,7 @@ function MembersPage() {
               rows={filtered.map((m) => [
                 m.firstName,
                 m.lastName,
-                m.status,
+                STATUS_LABELS[m.status],
                 ...activeColumns.map((c) => c.csv(m, ctx)),
               ])}
             />
@@ -321,8 +338,8 @@ function MembersPage() {
             <SelectContent>
               <SelectItem value="all">All statuses</SelectItem>
               {STATUSES.map((s) => (
-                <SelectItem key={s} value={s} className="capitalize">
-                  {s}
+                <SelectItem key={s} value={s}>
+                  {STATUS_LABELS[s]}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -454,12 +471,15 @@ function MembersPage() {
 
 export function StatusBadge({ status }: { status: MemberStatus }) {
   const map: Record<MemberStatus, string> = {
-    visitor: "bg-accent/30 text-accent-foreground",
-    member: "bg-primary/15 text-primary",
-    baptized: "bg-primary text-primary-foreground",
+    active: "bg-primary/15 text-primary",
     inactive: "bg-muted text-muted-foreground",
+    leader: "bg-accent/30 text-accent-foreground",
+    deacon: "bg-accent/30 text-accent-foreground",
+    elder: "bg-accent/30 text-accent-foreground",
+    pastor: "bg-primary text-primary-foreground",
+    minister: "bg-primary text-primary-foreground",
   };
-  return <Badge className={`${map[status]} capitalize border-0`}>{status}</Badge>;
+  return <Badge className={`${map[status]} border-0`}>{STATUS_LABELS[status]}</Badge>;
 }
 
 function DetailRow({
@@ -656,7 +676,7 @@ function MemberDialog({
   const [birthDay, setBirthDay] = useState(member?.birthDay ? String(member.birthDay) : "");
   const [birthYear, setBirthYear] = useState(member?.birthYear ? String(member.birthYear) : "");
   const [address, setAddress] = useState(member?.address ?? "");
-  const [status, setStatus] = useState<MemberStatus>(member?.status ?? "visitor");
+  const [status, setStatus] = useState<MemberStatus>(member?.status ?? "active");
   const [category, setCategory] = useState<MemberCategory | undefined>(member?.category);
   const [categoryOther, setCategoryOther] = useState(member?.categoryOther ?? "");
   const [joinDate, setJoinDate] = useState(member?.joinDate ?? "");
@@ -803,8 +823,8 @@ function MemberDialog({
             </SelectTrigger>
             <SelectContent>
               {STATUSES.map((s) => (
-                <SelectItem key={s} value={s} className="capitalize">
-                  {s}
+                <SelectItem key={s} value={s}>
+                  {STATUS_LABELS[s]}
                 </SelectItem>
               ))}
             </SelectContent>

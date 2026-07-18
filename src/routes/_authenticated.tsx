@@ -9,6 +9,7 @@ import { BranchSwitcher } from "@/components/branch-switcher";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth";
 import { useTreasurerTerm } from "@/lib/terminology";
+import { checkBirthdayReminders } from "@/lib/birthdays";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -24,6 +25,10 @@ function AuthenticatedLayout() {
   useEffect(() => {
     if (ready && !session) navigate({ to: "/login", replace: true });
   }, [ready, session, navigate]);
+
+  useEffect(() => {
+    if (session) checkBirthdayReminders();
+  }, [session]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
