@@ -23,6 +23,8 @@ import { Switch } from "@/components/ui/switch";
 import { DeleteButton } from "@/components/delete-button";
 import { MemberCombobox } from "@/components/member-combobox";
 import { BranchField } from "@/components/branch-field";
+import { DuplicateEmailAlert } from "@/components/duplicate-email-alert";
+import { findEmailMatches, type DuplicateEmailMatch } from "@/lib/duplicate-contact";
 import {
   Dialog,
   DialogContent,
@@ -392,14 +394,10 @@ function NewUserDialog({
   const [memberId, setMemberId] = useState("");
   const [branchId, setBranchId] = useState("");
   const [financeTierA, setFinanceTierA] = useState(false);
+  const [duplicateMatches, setDuplicateMatches] = useState<DuplicateEmailMatch[]>([]);
 
-  async function save() {
+  async function doCreate() {
     try {
-      if (!isValidEmail(email)) throw new Error("Enter a valid email address");
-      if (password.length < MIN_PASSWORD_LENGTH) {
-        throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
-      }
-      if (password !== confirmPassword) throw new Error("Passwords don't match");
       const user = await createUser({
         fullName,
         email,
@@ -418,88 +416,120 @@ function NewUserDialog({
     }
   }
 
+  async function save() {
+    try {
+      if (!isValidEmail(email)) throw new Error("Enter a valid email address");
+      if (password.length < MIN_PASSWORD_LENGTH) {
+        throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+      }
+      if (password !== confirmPassword) throw new Error("Passwords don't match");
+      const matches = await findEmailMatches(email);
+      if (matches.length > 0) {
+        setDuplicateMatches(matches);
+        return;
+      }
+      await doCreate();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed");
+    }
+  }
+
   return (
-    <DialogContent>
-      <DialogHeader>
-        <DialogTitle className="font-display">New user</DialogTitle>
-      </DialogHeader>
-      <div className="space-y-4">
-        <div className="space-y-1.5">
-          <Label>Full name</Label>
-          <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
-        </div>
-        <div className="grid grid-cols-2 gap-4">
+    <>
+      <DuplicateEmailAlert
+        open={duplicateMatches.length > 0}
+        onOpenChange={(o) => {
+          if (!o) setDuplicateMatches([]);
+        }}
+        matches={duplicateMatches}
+        allowContinue={!duplicateMatches.some((m) => m.kind === "user")}
+        onContinue={() => {
+          setDuplicateMatches([]);
+          doCreate();
+        }}
+      />
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="font-display">New user</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label>Email</Label>
-            <Input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@church.org"
+            <Label>Full name</Label>
+            <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="name@church.org"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Role</Label>
+              <Select value={role} onValueChange={(v) => setRole(v as Role)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {roles.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>
+                      {r.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {role === "leader" && (
+            <DepartmentField
+              departments={departments}
+              choice={departmentChoice}
+              onChoiceChange={setDepartmentChoice}
+              otherName={otherDeptName}
+              onOtherNameChange={setOtherDeptName}
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Role</Label>
-            <Select value={role} onValueChange={(v) => setRole(v as Role)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {roles.map((r) => (
-                  <SelectItem key={r.value} value={r.value}>
-                    {r.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        {role === "leader" && (
-          <DepartmentField
-            departments={departments}
-            choice={departmentChoice}
-            onChoiceChange={setDepartmentChoice}
-            otherName={otherDeptName}
-            onOtherNameChange={setOtherDeptName}
+          )}
+          {(role === "leader" || role === "cell_leader") && (
+            <FinanceTierField checked={financeTierA} onCheckedChange={setFinanceTierA} />
+          )}
+          <MemberLinkField
+            members={members}
+            isMember={isMember}
+            onIsMemberChange={setIsMember}
+            memberId={memberId}
+            onMemberIdChange={setMemberId}
           />
-        )}
-        {(role === "leader" || role === "cell_leader") && (
-          <FinanceTierField checked={financeTierA} onCheckedChange={setFinanceTierA} />
-        )}
-        <MemberLinkField
-          members={members}
-          isMember={isMember}
-          onIsMemberChange={setIsMember}
-          memberId={memberId}
-          onMemberIdChange={setMemberId}
-        />
-        <BranchField value={branchId} onChange={setBranchId} />
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label>Password</Label>
-            <PasswordInput
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              minLength={MIN_PASSWORD_LENGTH}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Confirm password</Label>
-            <PasswordInput
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              minLength={MIN_PASSWORD_LENGTH}
-            />
+          <BranchField value={branchId} onChange={setBranchId} />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>Password</Label>
+              <PasswordInput
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                minLength={MIN_PASSWORD_LENGTH}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Confirm password</Label>
+              <PasswordInput
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                minLength={MIN_PASSWORD_LENGTH}
+              />
+            </div>
           </div>
         </div>
-      </div>
-      <DialogFooter>
-        <Button variant="ghost" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button onClick={save}>Create user</Button>
-      </DialogFooter>
-    </DialogContent>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={save}>Create user</Button>
+        </DialogFooter>
+      </DialogContent>
+    </>
   );
 }
 
@@ -528,16 +558,10 @@ function EditUserDialog({
   const [memberId, setMemberId] = useState(user.memberId ?? "");
   const [branchId, setBranchId] = useState(user.branchId ?? "");
   const [financeTierA, setFinanceTierA] = useState(user.financeTier === "A");
+  const [duplicateMatches, setDuplicateMatches] = useState<DuplicateEmailMatch[]>([]);
 
-  async function save() {
+  async function doUpdate(trimmedEmail: string) {
     try {
-      if (!fullName.trim()) throw new Error("Full name is required");
-      const trimmedEmail = email.trim().toLowerCase();
-      if (!isValidEmail(trimmedEmail)) throw new Error("Enter a valid email address");
-      if (trimmedEmail !== user.email) {
-        const existing = await db.users.where("email").equals(trimmedEmail).first();
-        if (existing) throw new Error("An account with this email already exists");
-      }
       if (newPassword || confirmPassword) {
         if (newPassword.length < MIN_PASSWORD_LENGTH) {
           throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
@@ -564,81 +588,114 @@ function EditUserDialog({
     }
   }
 
+  async function save() {
+    try {
+      if (!fullName.trim()) throw new Error("Full name is required");
+      const trimmedEmail = email.trim().toLowerCase();
+      if (!isValidEmail(trimmedEmail)) throw new Error("Enter a valid email address");
+      if (trimmedEmail !== user.email) {
+        const matches = await findEmailMatches(trimmedEmail, { userId: user.id });
+        if (matches.length > 0) {
+          setDuplicateMatches(matches);
+          return;
+        }
+      }
+      await doUpdate(trimmedEmail);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to update user");
+    }
+  }
+
   return (
-    <DialogContent>
-      <DialogHeader>
-        <DialogTitle className="font-display">Edit {user.fullName}</DialogTitle>
-      </DialogHeader>
-      <div className="space-y-4">
-        <div className="space-y-1.5">
-          <Label>Full name</Label>
-          <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <Label>Email</Label>
-          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <Label>Role</Label>
-          <Select value={role} onValueChange={(v) => setRole(v as Role)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {roles.map((r) => (
-                <SelectItem key={r.value} value={r.value}>
-                  {r.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        {role === "leader" && (
-          <DepartmentField
-            departments={departments}
-            choice={departmentChoice}
-            onChoiceChange={setDepartmentChoice}
-            otherName={otherDeptName}
-            onOtherNameChange={setOtherDeptName}
+    <>
+      <DuplicateEmailAlert
+        open={duplicateMatches.length > 0}
+        onOpenChange={(o) => {
+          if (!o) setDuplicateMatches([]);
+        }}
+        matches={duplicateMatches}
+        allowContinue={!duplicateMatches.some((m) => m.kind === "user")}
+        onContinue={() => {
+          const trimmedEmail = email.trim().toLowerCase();
+          setDuplicateMatches([]);
+          doUpdate(trimmedEmail);
+        }}
+      />
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="font-display">Edit {user.fullName}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Full name</Label>
+            <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Email</Label>
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Role</Label>
+            <Select value={role} onValueChange={(v) => setRole(v as Role)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {roles.map((r) => (
+                  <SelectItem key={r.value} value={r.value}>
+                    {r.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {role === "leader" && (
+            <DepartmentField
+              departments={departments}
+              choice={departmentChoice}
+              onChoiceChange={setDepartmentChoice}
+              otherName={otherDeptName}
+              onOtherNameChange={setOtherDeptName}
+            />
+          )}
+          {(role === "leader" || role === "cell_leader") && (
+            <FinanceTierField checked={financeTierA} onCheckedChange={setFinanceTierA} />
+          )}
+          <MemberLinkField
+            members={members}
+            isMember={isMember}
+            onIsMemberChange={setIsMember}
+            memberId={memberId}
+            onMemberIdChange={setMemberId}
           />
-        )}
-        {(role === "leader" || role === "cell_leader") && (
-          <FinanceTierField checked={financeTierA} onCheckedChange={setFinanceTierA} />
-        )}
-        <MemberLinkField
-          members={members}
-          isMember={isMember}
-          onIsMemberChange={setIsMember}
-          memberId={memberId}
-          onMemberIdChange={setMemberId}
-        />
-        <BranchField value={branchId} onChange={setBranchId} />
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label>New password</Label>
-            <PasswordInput
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              minLength={MIN_PASSWORD_LENGTH}
-              placeholder="Leave blank to keep current"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Confirm new password</Label>
-            <PasswordInput
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              minLength={MIN_PASSWORD_LENGTH}
-            />
+          <BranchField value={branchId} onChange={setBranchId} />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>New password</Label>
+              <PasswordInput
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                minLength={MIN_PASSWORD_LENGTH}
+                placeholder="Leave blank to keep current"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Confirm new password</Label>
+              <PasswordInput
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                minLength={MIN_PASSWORD_LENGTH}
+              />
+            </div>
           </div>
         </div>
-      </div>
-      <DialogFooter>
-        <Button variant="ghost" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button onClick={save}>Save changes</Button>
-      </DialogFooter>
-    </DialogContent>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={save}>Save changes</Button>
+        </DialogFooter>
+      </DialogContent>
+    </>
   );
 }

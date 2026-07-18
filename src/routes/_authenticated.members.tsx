@@ -15,6 +15,8 @@ import {
 import { ExportMenu } from "@/components/export-menu";
 import { BranchField } from "@/components/branch-field";
 import { notifyMemberAdded, notifyMemberDeleted } from "@/lib/notifications";
+import { DuplicateEmailAlert } from "@/components/duplicate-email-alert";
+import { findEmailMatches, type DuplicateEmailMatch } from "@/lib/duplicate-contact";
 import { useSession, canEditDeleteMembers } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
@@ -687,17 +689,25 @@ function MemberDialog({
   const [branchId, setBranchId] = useState(member?.branchId ?? "");
 
   const categoryDescription = CATEGORIES.find((c) => c.value === category)?.description;
+  const [duplicateMatches, setDuplicateMatches] = useState<DuplicateEmailMatch[]>([]);
 
-  async function save() {
-    if (!firstName.trim() || !lastName.trim()) {
-      toast.error("Name is required");
-      return;
+  async function doSave(data: Member) {
+    try {
+      await db.transaction("rw", [db.members, db.users, db.notifications], async () => {
+        await db.members.put(data);
+        if (!member && currentUserId) {
+          await notifyMemberAdded(data, currentUserId);
+        }
+      });
+      toast.success(member ? "Member updated" : "Member added");
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save member");
     }
-    if (Boolean(birthMonth) !== Boolean(birthDay)) {
-      toast.error("Enter both a birth month and day, or leave both blank");
-      return;
-    }
-    const data: Member = {
+  }
+
+  function buildData(): Member {
+    return {
       id: member?.id ?? uid(),
       firstName: firstName.trim(),
       lastName: lastName.trim(),
@@ -721,221 +731,248 @@ function MemberDialog({
       createdBy: member?.createdBy ?? currentUserId,
       createdAt: member?.createdAt ?? Date.now(),
     };
-    try {
-      await db.transaction("rw", [db.members, db.users, db.notifications], async () => {
-        await db.members.put(data);
-        if (!member && currentUserId) {
-          await notifyMemberAdded(data, currentUserId);
-        }
-      });
-      toast.success(member ? "Member updated" : "Member added");
-      onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save member");
+  }
+
+  async function save() {
+    if (!firstName.trim() || !lastName.trim()) {
+      toast.error("Name is required");
+      return;
     }
+    if (Boolean(birthMonth) !== Boolean(birthDay)) {
+      toast.error("Enter both a birth month and day, or leave both blank");
+      return;
+    }
+    const data = buildData();
+    if (data.email && data.email !== member?.email) {
+      const matches = await findEmailMatches(data.email, { memberId: member?.id });
+      if (matches.length > 0) {
+        setDuplicateMatches(matches);
+        return;
+      }
+    }
+    await doSave(data);
   }
 
   return (
-    <DialogContent className="max-w-2xl">
-      <DialogHeader>
-        <DialogTitle className="font-display">{member ? "Edit member" : "New member"}</DialogTitle>
-      </DialogHeader>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="First name">
-          <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} />
-        </Field>
-        <Field label="Last name">
-          <Input value={lastName} onChange={(e) => setLastName(e.target.value)} />
-        </Field>
-        <Field label="Phone">
-          <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
-        </Field>
-        <Field label="Email">
-          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        </Field>
-        <Field label="Gender">
-          <Select
-            value={gender ?? ""}
-            onValueChange={(v) => setGender((v || undefined) as Member["gender"])}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="—" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="male">Male</SelectItem>
-              <SelectItem value="female">Female</SelectItem>
-              <SelectItem value="other">Other</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field label="Date of birth">
-          <div className="grid grid-cols-2 gap-2">
+    <>
+      <DuplicateEmailAlert
+        open={duplicateMatches.length > 0}
+        onOpenChange={(o) => {
+          if (!o) setDuplicateMatches([]);
+        }}
+        matches={duplicateMatches}
+        allowContinue
+        onContinue={() => {
+          setDuplicateMatches([]);
+          doSave(buildData());
+        }}
+      />
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="font-display">
+            {member ? "Edit member" : "New member"}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="First name">
+            <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+          </Field>
+          <Field label="Last name">
+            <Input value={lastName} onChange={(e) => setLastName(e.target.value)} />
+          </Field>
+          <Field label="Phone">
+            <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </Field>
+          <Field label="Email">
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </Field>
+          <Field label="Gender">
             <Select
-              value={birthMonth || "none"}
-              onValueChange={(v) => setBirthMonth(v === "none" ? "" : v)}
+              value={gender ?? ""}
+              onValueChange={(v) => setGender((v || undefined) as Member["gender"])}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Month" />
+                <SelectValue placeholder="—" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                {MONTH_NAMES.map((name, i) => (
-                  <SelectItem key={name} value={String(i + 1)}>
-                    {name}
+                <SelectItem value="male">Male</SelectItem>
+                <SelectItem value="female">Female</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label="Date of birth">
+            <div className="grid grid-cols-2 gap-2">
+              <Select
+                value={birthMonth || "none"}
+                onValueChange={(v) => setBirthMonth(v === "none" ? "" : v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Month" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">—</SelectItem>
+                  {MONTH_NAMES.map((name, i) => (
+                    <SelectItem key={name} value={String(i + 1)}>
+                      {name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={birthDay || "none"}
+                onValueChange={(v) => setBirthDay(v === "none" ? "" : v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Day" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">—</SelectItem>
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                    <SelectItem key={d} value={String(d)}>
+                      {d}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Input
+              className="mt-2"
+              type="number"
+              min="1900"
+              max={new Date().getFullYear()}
+              placeholder="Year (optional)"
+              value={birthYear}
+              onChange={(e) => setBirthYear(e.target.value)}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Year is optional — leave blank if they'd rather not share it.
+            </p>
+          </Field>
+          <Field label="Status">
+            <Select value={status} onValueChange={(v) => setStatus(v as MemberStatus)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUSES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {STATUS_LABELS[s]}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Select
-              value={birthDay || "none"}
-              onValueChange={(v) => setBirthDay(v === "none" ? "" : v)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Day" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
-                  <SelectItem key={d} value={String(d)}>
-                    {d}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          </Field>
+          <div>
+            <Field label="Category">
+              <Select
+                value={category ?? "none"}
+                onValueChange={(v) => setCategory(v === "none" ? undefined : (v as MemberCategory))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {CATEGORIES.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            {categoryDescription && (
+              <p className="mt-1 text-xs text-muted-foreground">{categoryDescription}</p>
+            )}
+            {category === "other" && (
+              <Input
+                className="mt-1.5"
+                value={categoryOther}
+                onChange={(e) => setCategoryOther(e.target.value)}
+                placeholder="Describe this category"
+              />
+            )}
           </div>
-          <Input
-            className="mt-2"
-            type="number"
-            min="1900"
-            max={new Date().getFullYear()}
-            placeholder="Year (optional)"
-            value={birthYear}
-            onChange={(e) => setBirthYear(e.target.value)}
-          />
-          <p className="mt-1 text-xs text-muted-foreground">
-            Year is optional — leave blank if they'd rather not share it.
-          </p>
-        </Field>
-        <Field label="Status">
-          <Select value={status} onValueChange={(v) => setStatus(v as MemberStatus)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {STATUSES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {STATUS_LABELS[s]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        <div>
-          <Field label="Category">
+          <Field label="Join date">
+            <Input type="date" value={joinDate} onChange={(e) => setJoinDate(e.target.value)} />
+          </Field>
+          <Field label="Household">
             <Select
-              value={category ?? "none"}
-              onValueChange={(v) => setCategory(v === "none" ? undefined : (v as MemberCategory))}
+              value={householdId || "none"}
+              onValueChange={(v) => setHouseholdId(v === "none" ? "" : v)}
             >
               <SelectTrigger>
                 <SelectValue placeholder="—" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">None</SelectItem>
-                {CATEGORIES.map((c) => (
-                  <SelectItem key={c.value} value={c.value}>
-                    {c.label}
+                {households.map((h) => (
+                  <SelectItem key={h.id} value={h.id}>
+                    {h.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </Field>
-          {categoryDescription && (
-            <p className="mt-1 text-xs text-muted-foreground">{categoryDescription}</p>
-          )}
-          {category === "other" && (
-            <Input
-              className="mt-1.5"
-              value={categoryOther}
-              onChange={(e) => setCategoryOther(e.target.value)}
-              placeholder="Describe this category"
-            />
-          )}
-        </div>
-        <Field label="Join date">
-          <Input type="date" value={joinDate} onChange={(e) => setJoinDate(e.target.value)} />
-        </Field>
-        <Field label="Household">
-          <Select
-            value={householdId || "none"}
-            onValueChange={(v) => setHouseholdId(v === "none" ? "" : v)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="—" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              {households.map((h) => (
-                <SelectItem key={h.id} value={h.id}>
-                  {h.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field label={cellSingular}>
-          <Select value={cellId || "none"} onValueChange={(v) => setCellId(v === "none" ? "" : v)}>
-            <SelectTrigger>
-              <SelectValue placeholder="—" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              {cells.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field label="Discipleship class">
-          <Select
-            value={classId || "none"}
-            onValueChange={(v) => setClassId(v === "none" ? "" : v)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="—" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              {classes.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        <div className="sm:col-span-2">
-          <Field label="Address">
-            <Input value={address} onChange={(e) => setAddress(e.target.value)} />
+          <Field label={cellSingular}>
+            <Select
+              value={cellId || "none"}
+              onValueChange={(v) => setCellId(v === "none" ? "" : v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="—" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {cells.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </Field>
-        </div>
-        <div className="sm:col-span-2">
-          <Field label="Notes">
-            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
+          <Field label="Discipleship class">
+            <Select
+              value={classId || "none"}
+              onValueChange={(v) => setClassId(v === "none" ? "" : v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="—" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {classes.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </Field>
+          <div className="sm:col-span-2">
+            <Field label="Address">
+              <Input value={address} onChange={(e) => setAddress(e.target.value)} />
+            </Field>
+          </div>
+          <div className="sm:col-span-2">
+            <Field label="Notes">
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
+            </Field>
+          </div>
+          <div className="sm:col-span-2">
+            <BranchField value={branchId} onChange={setBranchId} />
+          </div>
         </div>
-        <div className="sm:col-span-2">
-          <BranchField value={branchId} onChange={setBranchId} />
-        </div>
-      </div>
-      <DialogFooter>
-        <Button variant="ghost" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button onClick={save}>{member ? "Save changes" : "Create member"}</Button>
-      </DialogFooter>
-    </DialogContent>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={save}>{member ? "Save changes" : "Create member"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </>
   );
 }
 
