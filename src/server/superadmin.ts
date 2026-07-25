@@ -1,14 +1,17 @@
 import { createServerFn } from "@tanstack/react-start";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "./db/client";
 import { organizations, users, userCredentials } from "./db/schema";
 import { requirePlatformSession, createResetToken, AuthError } from "./auth";
 import { sendInviteEmail } from "./email";
 
-// Every function here is platform-level (spans every church), so none of it
-// goes through withTenant()/RLS — organizations and userCredentials are
-// deliberately not tenant-scoped tables (see schema.ts).
+// Most of this file is platform-level (spans every church) and doesn't touch
+// RLS-protected tables at all — organizations and userCredentials are
+// deliberately not tenant-scoped (see schema.ts). createOrganizationFn is the
+// exception: it also inserts into `users`, which IS RLS-protected, so that
+// one insert needs app.current_org_id set for the brand-new org, same as
+// withTenant() does elsewhere — see the set_config call below.
 
 export const listOrganizationsFn = createServerFn({ method: "GET" }).handler(async () => {
   await requirePlatformSession();
@@ -62,6 +65,10 @@ export const createOrganizationFn = createServerFn({ method: "POST" })
         .insert(organizations)
         .values({ name: data.name.trim(), type: data.type, timezone: data.timezone })
         .returning();
+      // The `users` table's RLS policy requires app.current_org_id to match
+      // the row being inserted — set it for this transaction now that the
+      // org actually exists (mirrors withTenant() in db/client.ts).
+      await tx.execute(sql`select set_config('app.current_org_id', ${org.id}, true)`);
       const [admin] = await tx
         .insert(users)
         .values({
