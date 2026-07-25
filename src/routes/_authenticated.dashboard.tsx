@@ -1,7 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { db } from "@/lib/db";
+import { listDepartmentsFn } from "@/server/departments";
 import { useSession, canSubmitRequisitions } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { useWeekStartDay } from "@/lib/week";
@@ -35,7 +37,14 @@ function Dashboard() {
   const cellMeetings =
     useLiveQuery(() => db.cellMeetings.orderBy("date").reverse().limit(20).toArray(), []) ?? [];
   const attendance = useLiveQuery(() => db.cellAttendance.toArray(), []) ?? [];
-  const departments = useLiveQuery(() => db.departments.orderBy("name").toArray(), []) ?? [];
+  // Departments moved to the real backend — this is the one query on this
+  // still-Dexie page that needs to point there too, since the Requisition
+  // dialog below needs a real department list to submit against.
+  const departmentsQuery = useQuery({
+    queryKey: ["departments"],
+    queryFn: () => listDepartmentsFn(),
+  });
+  const departments = departmentsQuery.data ?? [];
   const [requisitionOpen, setRequisitionOpen] = useState(false);
   const canSubmit = session ? canSubmitRequisitions(session.role) : false;
 
@@ -114,7 +123,6 @@ function Dashboard() {
               {requisitionOpen && session && (
                 <RequisitionDialog
                   departments={departments}
-                  currentUserId={session.userId}
                   onClose={() => setRequisitionOpen(false)}
                 />
               )}

@@ -28,6 +28,8 @@ import type {
   NotificationType,
   EditRequestStatus,
   CellExpenseStatus,
+  DepartmentModule,
+  ExpenseStatus,
 } from "@/lib/db";
 
 // This mirrors src/lib/db.ts's shape closely (same field names/semantics) so
@@ -552,6 +554,12 @@ export const departments = pgTable(
     name: text("name").notNull(),
     description: text("description"),
     leaderId: uuid("leader_id").references(() => users.id, { onDelete: "set null" }),
+    // Modules (Givings/Projects/Pledges/Partners) this department's leader
+    // is additionally granted view access to, on top of whatever their
+    // account role already grants — see canAccessGivings() etc. in
+    // src/lib/auth.ts. A leader can only lead one department, so this is
+    // their whole extra grant set.
+    allowedModules: jsonb("allowed_modules").$type<DepartmentModule[]>().notNull().default([]),
     branchId: uuid("branch_id").references(() => branches.id, { onDelete: "set null" }),
     ...timestamps,
   },
@@ -571,6 +579,16 @@ export const expenses = pgTable(
     amount: integer("amount").notNull(),
     description: text("description").notNull(),
     enteredBy: uuid("entered_by").references(() => users.id, { onDelete: "set null" }),
+    // Directly-entered (Admin/Treasurer) expenses default "approved" and
+    // count immediately, unchanged from before this column existed. A
+    // department leader's accountability submission against an approved
+    // Requisition starts "pending" and only counts once Finance approves it.
+    status: text("status").notNull().$type<ExpenseStatus>().default("approved"),
+    requisitionId: uuid("requisition_id").references((): AnyPgColumn => requisitions.id, {
+      onDelete: "set null",
+    }),
+    approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "set null" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
     branchId: uuid("branch_id").references(() => branches.id, { onDelete: "set null" }),
     ...timestamps,
   },

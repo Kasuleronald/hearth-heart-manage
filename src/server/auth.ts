@@ -11,8 +11,9 @@ import {
   sessions,
   userCredentials,
   passwordResetTokens,
+  departments,
 } from "./db/schema";
-import type { Role } from "@/lib/db";
+import type { Role, DepartmentModule } from "@/lib/db";
 import { sendInviteEmail } from "./email";
 
 const SESSION_COOKIE = "mychurch_session";
@@ -74,6 +75,17 @@ export interface AuthedSession {
   branchId?: string;
   financeTier?: "A";
   needsEmailUpdate: boolean;
+  // Modules (Givings/Projects/Pledges/Partners) granted via the one
+  // department this user leads, if any — see departments.allowedModules in
+  // schema.ts and canAccessGivings() etc. in lib/auth.ts. Empty if they
+  // don't lead a department.
+  allowedModules: DepartmentModule[];
+  // True if they lead any department, independent of allowedModules (which
+  // can legitimately be empty for a department with no modules granted yet)
+  // — drives Departments nav visibility for a leader whose primary role
+  // isn't "leader" (e.g. a cell_leader also leading a department).
+  leadsDepartment: boolean;
+  ledDepartmentId?: string;
 }
 
 export interface PlatformSession {
@@ -133,6 +145,9 @@ export const resolveSession = createServerOnlyFn(
           .where(eq(users.id, row.userId!));
         if (!user) return null;
         if (user.organizations.status !== "active") return null;
+        const ledDepartment = await tx.query.departments.findFirst({
+          where: eq(departments.leaderId, user.users.id),
+        });
         return {
           kind: "user",
           sessionId: row.id,
@@ -145,6 +160,9 @@ export const resolveSession = createServerOnlyFn(
           branchId: user.users.branchId ?? undefined,
           financeTier: user.users.financeTier ?? undefined,
           needsEmailUpdate: user.users.needsEmailUpdate,
+          allowedModules: ledDepartment?.allowedModules ?? [],
+          leadsDepartment: !!ledDepartment,
+          ledDepartmentId: ledDepartment?.id,
         };
       });
     }

@@ -266,6 +266,11 @@ export interface Partner {
   createdAt: number;
 }
 
+// Modules a department's leader can additionally be granted view access to,
+// on top of whatever their account role already grants — see
+// canAccessGivings() etc. in lib/auth.ts.
+export type DepartmentModule = "givings" | "projects" | "pledges" | "partners";
+
 // A lightweight leadership directory for non-cell ministries (Ushering, Sound,
 // Worship, etc.) — unlike Cells/Classes this has no roster or meeting tracking,
 // just a name and an assigned leader.
@@ -274,18 +279,29 @@ export interface Department {
   name: string;
   description?: string;
   leaderId?: string; // User.id
+  allowedModules?: DepartmentModule[];
   branchId?: string;
   createdAt: number;
 }
 
+export type ExpenseStatus = "pending" | "approved" | "rejected";
+
 // departmentId is required — every expense must roll up into some
 // department's totals, so departmental report views stay complete.
+// A directly-entered Expense (Admin/Treasurer) has no status/requisitionId
+// and counts immediately. One submitted as a department leader's
+// accountability against an approved Requisition starts "pending" and only
+// counts once Finance approves it — see docs on the *Fn server functions.
 export interface Expense {
   id: string;
   departmentId: string;
   amount: number; // UGX
   description: string;
   enteredBy: string; // User.id
+  status?: ExpenseStatus;
+  requisitionId?: string; // Requisition.id — set only for an accountability submission
+  approvedBy?: string; // User.id
+  approvedAt?: number;
   branchId?: string;
   createdAt: number;
 }
@@ -378,7 +394,9 @@ export type NotificationType =
   | "testimony_added"
   | "pledge_archived"
   | "birthday_reminder"
-  | "cell_expense_approved";
+  | "cell_expense_approved"
+  | "expense_submitted"
+  | "expense_approved";
 
 export interface Notification {
   id: string;

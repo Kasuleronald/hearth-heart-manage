@@ -80,7 +80,7 @@ function PledgesPage() {
 
   if (!session) return null;
 
-  const canViewAll = canViewAllPledges(session.role, session.financeTier);
+  const canViewAll = canViewAllPledges(session.role, session.financeTier, session.allowedModules);
   const canEditAny = canEditAnyPledge(session.role, session.financeTier);
   const canManageStatus = canManagePledgeStatus(session.role, session.financeTier);
   const canRestore = canRestorePledges(session.role);

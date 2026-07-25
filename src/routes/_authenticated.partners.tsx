@@ -56,12 +56,13 @@ function PartnersPage() {
   const { format: formatAmount, base } = useDisplayCurrency(canToggle);
 
   useEffect(() => {
-    if (session && !canAccessPartners(session.role, session.financeTier)) {
+    if (session && !canAccessPartners(session.role, session.financeTier, session.allowedModules)) {
       navigate({ to: "/dashboard", replace: true });
     }
   }, [session, navigate]);
 
-  if (!session || !canAccessPartners(session.role, session.financeTier)) return null;
+  if (!session || !canAccessPartners(session.role, session.financeTier, session.allowedModules))
+    return null;
 
   return (
     <div>

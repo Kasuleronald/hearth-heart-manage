@@ -1,15 +1,17 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Building2, Sparkles } from "lucide-react";
+import type { DepartmentModule } from "@/lib/db";
 import {
-  db,
-  uid,
-  unassignDepartmentLeader,
-  deleteDepartmentCascade,
-  seedDefaultDepartments,
-  type Department,
-} from "@/lib/db";
+  listDepartmentsFn,
+  createDepartmentFn,
+  updateDepartmentFn,
+  deleteDepartmentFn,
+  seedDefaultDepartmentsFn,
+} from "@/server/departments";
+import { listOrgUsersFn } from "@/server/users";
+import { listExpensesFn } from "@/server/expenses";
 import { useBaseCurrency, formatCurrency } from "@/lib/currency";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -18,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DeleteButton } from "@/components/delete-button";
 import { BranchField } from "@/components/branch-field";
 import {
@@ -43,46 +46,61 @@ export const Route = createFileRoute("/_authenticated/departments")({
   component: DepartmentsPage,
 });
 
+type OrgDepartment = Awaited<ReturnType<typeof listDepartmentsFn>>[number];
+
+const MODULE_OPTIONS: { value: DepartmentModule; label: string }[] = [
+  { value: "givings", label: "Givings" },
+  { value: "projects", label: "Projects" },
+  { value: "pledges", label: "Pledges" },
+  { value: "partners", label: "Partners" },
+];
+
 function DepartmentsPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { session } = useSession();
-  const canManage = session ? canManageDepartments(session.role) : false;
   const baseCurrency = useBaseCurrency();
   const effectiveBranch = useEffectiveBranch(session?.branchId);
-  const allDepartmentsRaw = useLiveQuery(() => db.departments.orderBy("name").toArray(), []);
-  const allDepartments = allDepartmentsRaw ?? [];
+  const departmentsQuery = useQuery({
+    queryKey: ["departments"],
+    queryFn: () => listDepartmentsFn(),
+  });
+  const usersQuery = useQuery({ queryKey: ["org-users"], queryFn: () => listOrgUsersFn() });
+  const expensesQuery = useQuery({ queryKey: ["expenses"], queryFn: () => listExpensesFn() });
+  const allDepartments = departmentsQuery.data ?? [];
   const departments = allDepartments.filter((d) =>
-    matchesBranchFilter(effectiveBranch, d.branchId),
+    matchesBranchFilter(effectiveBranch, d.branchId ?? undefined),
   );
-  const users =
-    useLiveQuery(
-      () =>
-        db.users
-          .filter(
-            (u) =>
-              u.role === "leader" ||
-              u.role === "pastor" ||
-              u.role === "admin" ||
-              u.role === "cell_leader",
-          )
-          .toArray(),
-      [],
-    ) ?? [];
-  const expenses = useLiveQuery(() => db.expenses.toArray(), []) ?? [];
-  const [editing, setEditing] = useState<Department | null>(null);
+  const users = (usersQuery.data ?? []).filter(
+    (u) =>
+      u.role === "leader" || u.role === "pastor" || u.role === "admin" || u.role === "cell_leader",
+  );
+  const expenses = expensesQuery.data ?? [];
+  const [editing, setEditing] = useState<OrgDepartment | null>(null);
   const [open, setOpen] = useState(false);
 
-  // A Cell Leader the Admin has assigned to lead a department also needs
-  // access here, even though their primary role isn't "leader".
+  const seedMutation = useMutation({
+    mutationFn: () => seedDefaultDepartmentsFn(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["departments"] });
+      toast.success("Common departments added");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to add departments"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteDepartmentFn({ data: { id } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["departments"] });
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      toast.success("Department deleted");
+    },
+  });
+
+  const canManage = session ? canManageDepartments(session.role) : false;
   const roleAllows = session ? canAccessDepartments(session.role) : false;
-  const isAssignedDeptLeader = session
-    ? allDepartments.some((d) => d.leaderId === session.userId)
-    : false;
-  // Don't redirect away before the departments query has actually resolved —
-  // otherwise someone whose only access is via assignment gets bounced on
-  // the first render, before we know whether they're assigned.
-  const dataPending = !roleAllows && allDepartmentsRaw === undefined;
-  const canAccess = session ? canAccessDepartments(session.role, isAssignedDeptLeader) : false;
+  const dataPending = !roleAllows && departmentsQuery.isLoading;
+  const canAccess = session ? canAccessDepartments(session.role, session.leadsDepartment) : false;
 
   useEffect(() => {
     if (session && !dataPending && !canAccess) {
@@ -102,14 +120,8 @@ function DepartmentsPage() {
             <div className="flex gap-2">
               <Button
                 variant="outline"
-                onClick={async () => {
-                  try {
-                    await seedDefaultDepartments();
-                    toast.success("Common departments added");
-                  } catch (e) {
-                    toast.error(e instanceof Error ? e.message : "Failed to add departments");
-                  }
-                }}
+                disabled={seedMutation.isPending}
+                onClick={() => seedMutation.mutate()}
               >
                 <Sparkles className="mr-2 h-4 w-4" /> Add common departments
               </Button>
@@ -142,7 +154,7 @@ function DepartmentsPage() {
           const leader = users.find((u) => u.id === d.leaderId);
           const isMine = session?.userId === d.leaderId;
           const expenseTotal = expenses
-            .filter((e) => e.departmentId === d.id)
+            .filter((e) => e.departmentId === d.id && e.status !== "rejected")
             .reduce((sum, e) => sum + e.amount, 0);
           return (
             <Card key={d.id} className={isMine ? "border-primary" : undefined}>
@@ -172,11 +184,10 @@ function DepartmentsPage() {
                       <DeleteButton
                         label={`Delete ${d.name}`}
                         title={`Delete department "${d.name}"?`}
-                        description="This also removes its recorded expenses. This can't be undone."
+                        description="This also removes its recorded expenses and requisitions. This can't be undone."
                         onConfirm={async () => {
                           try {
-                            await deleteDepartmentCascade(d.id);
-                            toast.success("Department deleted");
+                            await deleteMutation.mutateAsync(d.id);
                           } catch (e) {
                             toast.error(
                               e instanceof Error ? e.message : "Failed to delete department",
@@ -187,7 +198,7 @@ function DepartmentsPage() {
                     </div>
                   )}
                 </div>
-                <div className="mt-4 flex items-center gap-2 text-sm">
+                <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
                   {leader ? (
                     <Badge variant="secondary">{leader.fullName}</Badge>
                   ) : (
@@ -198,6 +209,11 @@ function DepartmentsPage() {
                       You lead this
                     </Badge>
                   )}
+                  {d.allowedModules.map((m) => (
+                    <Badge key={m} variant="outline" className="text-xs capitalize">
+                      {m}
+                    </Badge>
+                  ))}
                 </div>
                 {expenseTotal > 0 && (
                   <p className="mt-2 text-xs text-muted-foreground">
@@ -227,34 +243,50 @@ function DepartmentDialog({
   users,
   onClose,
 }: {
-  dept: Department | null;
+  dept: OrgDepartment | null;
   users: { id: string; fullName: string; role: string }[];
   onClose: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [name, setName] = useState(dept?.name ?? "");
   const [description, setDescription] = useState(dept?.description ?? "");
   const [leaderId, setLeaderId] = useState(dept?.leaderId ?? "");
   const [branchId, setBranchId] = useState(dept?.branchId ?? "");
+  const [allowedModules, setAllowedModules] = useState<DepartmentModule[]>(
+    dept?.allowedModules ?? [],
+  );
 
-  async function save() {
-    if (!name.trim()) return toast.error("Name is required");
-    try {
-      const id = dept?.id ?? uid();
-      // Keep leadership 1:1 — clear this leader from any other department first.
-      if (leaderId) await unassignDepartmentLeader(leaderId);
-      await db.departments.put({
-        id,
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const input = {
         name: name.trim(),
         description: description || undefined,
         leaderId: leaderId || undefined,
+        allowedModules,
         branchId: branchId || undefined,
-        createdAt: dept?.createdAt ?? Date.now(),
-      });
+      };
+      return dept
+        ? updateDepartmentFn({ data: { id: dept.id, ...input } })
+        : createDepartmentFn({ data: input });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["departments"] });
       toast.success(dept ? "Department updated" : "Department created");
       onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save department");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to save department"),
+  });
+
+  function toggleModule(m: DepartmentModule) {
+    setAllowedModules((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]));
+  }
+
+  function save() {
+    if (!name.trim()) {
+      toast.error("Name is required");
+      return;
     }
+    saveMutation.mutate();
   }
 
   return (
@@ -297,13 +329,36 @@ function DepartmentDialog({
           <Label>Description</Label>
           <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
         </div>
+        <div className="space-y-1.5">
+          <Label>Module access</Label>
+          <p className="text-xs text-muted-foreground">
+            Extra screens this department's leader can see, on top of whatever their account role
+            already grants.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {MODULE_OPTIONS.map((m) => (
+              <label
+                key={m.value}
+                className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"
+              >
+                <Checkbox
+                  checked={allowedModules.includes(m.value)}
+                  onCheckedChange={() => toggleModule(m.value)}
+                />
+                {m.label}
+              </label>
+            ))}
+          </div>
+        </div>
         <BranchField value={branchId} onChange={setBranchId} />
       </div>
       <DialogFooter>
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button onClick={save}>{dept ? "Save changes" : "Create department"}</Button>
+        <Button onClick={save} disabled={saveMutation.isPending}>
+          {dept ? "Save changes" : "Create department"}
+        </Button>
       </DialogFooter>
     </DialogContent>
   );

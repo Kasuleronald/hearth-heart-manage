@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { db, uid, type Department } from "@/lib/db";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { createRequisitionFn } from "@/server/requisitions";
 import { useBaseCurrency } from "@/lib/currency";
-import { notifyRequisitionSubmitted } from "@/lib/notifications";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,48 +18,43 @@ import { toast } from "sonner";
 
 export function RequisitionDialog({
   departments,
-  currentUserId,
   onClose,
 }: {
-  departments: Department[];
-  currentUserId: string;
+  departments: { id: string; name: string }[];
   onClose: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [departmentId, setDepartmentId] = useState("");
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
   const baseCurrency = useBaseCurrency();
 
-  async function save() {
-    if (!departmentId) return toast.error("Select a department");
-    const numericAmount = Number(amount);
-    if (!amount || Number.isNaN(numericAmount) || numericAmount <= 0) {
-      return toast.error("Enter a valid amount");
-    }
-    if (!reason.trim()) return toast.error("Enter a reason");
-    try {
-      const requisition = {
-        id: uid(),
-        requestedBy: currentUserId,
-        departmentId,
-        amount: numericAmount,
-        reason: reason.trim(),
-        status: "pending" as const,
-        createdAt: Date.now(),
-      };
-      await db.transaction(
-        "rw",
-        [db.requisitions, db.users, db.departments, db.notifications],
-        async () => {
-          await db.requisitions.add(requisition);
-          await notifyRequisitionSubmitted(requisition);
-        },
-      );
+  const createMutation = useMutation({
+    mutationFn: (input: { departmentId: string; amount: number; reason: string }) =>
+      createRequisitionFn({ data: input }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["requisitions"] });
       toast.success("Requisition submitted");
       onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to submit requisition");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to submit requisition"),
+  });
+
+  function save() {
+    if (!departmentId) {
+      toast.error("Select a department");
+      return;
     }
+    const numericAmount = Number(amount);
+    if (!amount || Number.isNaN(numericAmount) || numericAmount <= 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    if (!reason.trim()) {
+      toast.error("Enter a reason");
+      return;
+    }
+    createMutation.mutate({ departmentId, amount: numericAmount, reason: reason.trim() });
   }
 
   return (
@@ -106,7 +101,9 @@ export function RequisitionDialog({
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button onClick={save}>Submit requisition</Button>
+        <Button onClick={save} disabled={createMutation.isPending}>
+          Submit requisition
+        </Button>
       </DialogFooter>
     </DialogContent>
   );

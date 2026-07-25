@@ -1,8 +1,18 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Plus, Pencil, Receipt } from "lucide-react";
-import { db, uid, type Department, type Expense } from "@/lib/db";
+import { Plus, Pencil, Receipt, Check, X, HandCoins } from "lucide-react";
+import {
+  listExpensesFn,
+  createExpenseFn,
+  updateExpenseFn,
+  deleteExpenseFn,
+  listMyAccountableRequisitionsFn,
+  submitAccountabilityExpenseFn,
+  decideExpenseFn,
+} from "@/server/expenses";
+import { listDepartmentsFn } from "@/server/departments";
+import { listOrgUsersFn } from "@/server/users";
 import { useBaseCurrency } from "@/lib/currency";
 import { useDisplayCurrency } from "@/lib/currency-toggle";
 import { ExportMenu } from "@/components/export-menu";
@@ -22,6 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { DeleteButton } from "@/components/delete-button";
 import {
   Dialog,
@@ -38,7 +49,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useSession, canEnterExpenses, canToggleCurrency } from "@/lib/auth";
+import { useSession, canEnterExpenses, canDecideRequisitions, canToggleCurrency } from "@/lib/auth";
 import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -47,29 +58,65 @@ export const Route = createFileRoute("/_authenticated/expenses")({
   component: ExpensesPage,
 });
 
+type OrgExpense = Awaited<ReturnType<typeof listExpensesFn>>[number];
+
+const STATUS_STYLE: Record<string, string> = {
+  pending: "bg-secondary text-secondary-foreground",
+  approved: "bg-primary/15 text-primary",
+  rejected: "bg-destructive/15 text-destructive",
+};
+
 function ExpensesPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { session } = useSession();
-  const expenses =
-    useLiveQuery(
-      () => db.expenses.toArray().then((rows) => rows.sort((a, b) => b.createdAt - a.createdAt)),
-      [],
-    ) ?? [];
-  const departments = useLiveQuery(() => db.departments.orderBy("name").toArray(), []) ?? [];
-  const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
-  const [editing, setEditing] = useState<Expense | null>(null);
+  const canManage = session ? canEnterExpenses(session.role) : false;
+  const canDecide = session ? canDecideRequisitions(session.role) : false;
+  const canAccessPage = canManage || (session?.leadsDepartment ?? false);
+
+  const expensesQuery = useQuery({ queryKey: ["expenses"], queryFn: () => listExpensesFn() });
+  const departmentsQuery = useQuery({
+    queryKey: ["departments"],
+    queryFn: () => listDepartmentsFn(),
+  });
+  const usersQuery = useQuery({ queryKey: ["org-users"], queryFn: () => listOrgUsersFn() });
+  const expenses = expensesQuery.data ?? [];
+  const departments = departmentsQuery.data ?? [];
+  const users = usersQuery.data ?? [];
+  const [editing, setEditing] = useState<OrgExpense | null>(null);
   const [open, setOpen] = useState(false);
+  const [accountabilityOpen, setAccountabilityOpen] = useState(false);
   const effectiveBranch = useEffectiveBranch(session?.branchId);
   const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
   const { format: formatAmount, convert, displayCode, base } = useDisplayCurrency(canToggle);
 
+  const decideMutation = useMutation({
+    mutationFn: (vars: { id: string; status: "approved" | "rejected" }) =>
+      decideExpenseFn({ data: vars }),
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      toast.success(`Accountability ${vars.status}`);
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to update expense"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteExpenseFn({ data: { id } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      toast.success("Expense deleted");
+    },
+  });
+
   useEffect(() => {
-    if (session && !canEnterExpenses(session.role)) navigate({ to: "/dashboard", replace: true });
-  }, [session, navigate]);
+    if (session && !canAccessPage) navigate({ to: "/dashboard", replace: true });
+  }, [session, canAccessPage, navigate]);
 
-  if (!session || !canEnterExpenses(session.role)) return null;
+  if (!session || !canAccessPage) return null;
 
-  const filtered = expenses.filter((e) => matchesBranchFilter(effectiveBranch, e.branchId));
+  const filtered = (
+    canManage ? expenses : expenses.filter((e) => e.departmentId === session.ledDepartmentId)
+  ).filter((e) => matchesBranchFilter(effectiveBranch, e.branchId ?? undefined));
 
   function departmentName(id: string): string {
     return departments.find((d) => d.id === id)?.name ?? "Unknown department";
@@ -83,47 +130,64 @@ function ExpensesPage() {
         actions={
           <div className="flex gap-2">
             {canToggle && <CurrencyToggle baseCode={base.code} />}
-            <ExportMenu
-              filename="expenses"
-              title="Expenses"
-              headers={[
-                "Date",
-                "Department",
-                `Amount (${displayCode})`,
-                "Description",
-                "Entered by",
-              ]}
-              rows={filtered.map((e) => {
-                const enteredBy = users.find((u) => u.id === e.enteredBy);
-                return [
-                  format(new Date(e.createdAt), "MMM d, yyyy"),
-                  departmentName(e.departmentId),
-                  String(convert(e.amount)),
-                  e.description,
-                  enteredBy?.fullName ?? "",
-                ];
-              })}
-            />
-            <Dialog
-              open={open}
-              onOpenChange={(o) => {
-                setOpen(o);
-                if (!o) setEditing(null);
-              }}
-            >
-              <DialogTrigger asChild>
-                <Button onClick={() => setEditing(null)}>
-                  <Plus className="mr-2 h-4 w-4" /> Record expense
-                </Button>
-              </DialogTrigger>
-              <ExpenseDialog
-                key={editing?.id ?? "new"}
-                expense={editing}
-                departments={departments}
-                currentUserId={session.userId}
-                onClose={() => setOpen(false)}
+            {canManage && (
+              <ExportMenu
+                filename="expenses"
+                title="Expenses"
+                headers={[
+                  "Date",
+                  "Department",
+                  `Amount (${displayCode})`,
+                  "Description",
+                  "Entered by",
+                  "Status",
+                ]}
+                rows={filtered.map((e) => {
+                  const enteredBy = users.find((u) => u.id === e.enteredBy);
+                  return [
+                    format(new Date(e.createdAt), "MMM d, yyyy"),
+                    departmentName(e.departmentId),
+                    String(convert(e.amount)),
+                    e.description,
+                    enteredBy?.fullName ?? "",
+                    e.status ?? "approved",
+                  ];
+                })}
               />
-            </Dialog>
+            )}
+            {session.leadsDepartment && (
+              <Dialog open={accountabilityOpen} onOpenChange={setAccountabilityOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline">
+                    <HandCoins className="mr-2 h-4 w-4" /> Submit accountability
+                  </Button>
+                </DialogTrigger>
+                {accountabilityOpen && (
+                  <AccountabilityDialog onClose={() => setAccountabilityOpen(false)} />
+                )}
+              </Dialog>
+            )}
+            {canManage && (
+              <Dialog
+                open={open}
+                onOpenChange={(o) => {
+                  setOpen(o);
+                  if (!o) setEditing(null);
+                }}
+              >
+                <DialogTrigger asChild>
+                  <Button onClick={() => setEditing(null)}>
+                    <Plus className="mr-2 h-4 w-4" /> Record expense
+                  </Button>
+                </DialogTrigger>
+                <ExpenseDialog
+                  key={editing?.id ?? "new"}
+                  expense={editing}
+                  departments={departments}
+                  onClose={() => setOpen(false)}
+                />
+              </Dialog>
+            )}
           </div>
         }
       />
@@ -138,12 +202,14 @@ function ExpensesPage() {
                 <TableHead>Amount</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Entered by</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead className="w-[100px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.map((e) => {
                 const enteredBy = users.find((u) => u.id === e.enteredBy);
+                const status = e.status ?? "approved";
                 return (
                   <TableRow key={e.id}>
                     <TableCell className="text-muted-foreground">
@@ -156,33 +222,67 @@ function ExpensesPage() {
                       {enteredBy?.fullName ?? "—"}
                     </TableCell>
                     <TableCell>
+                      <Badge className={`border-0 capitalize ${STATUS_STYLE[status] ?? ""}`}>
+                        {status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
                       <div className="flex justify-end gap-1">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          aria-label={`Edit expense from ${e.description}`}
-                          onClick={() => {
-                            setEditing(e);
-                            setOpen(true);
-                          }}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <DeleteButton
-                          label={`Delete expense: ${e.description}`}
-                          title="Delete this expense record?"
-                          description="This can't be undone."
-                          onConfirm={async () => {
-                            try {
-                              await db.expenses.delete(e.id);
-                              toast.success("Expense deleted");
-                            } catch (err) {
-                              toast.error(
-                                err instanceof Error ? err.message : "Failed to delete expense",
-                              );
-                            }
-                          }}
-                        />
+                        {status === "pending" && canDecide && (
+                          <>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              aria-label="Approve accountability"
+                              disabled={decideMutation.isPending}
+                              onClick={() =>
+                                decideMutation.mutate({ id: e.id, status: "approved" })
+                              }
+                            >
+                              <Check className="h-4 w-4 text-primary" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              aria-label="Reject accountability"
+                              disabled={decideMutation.isPending}
+                              onClick={() =>
+                                decideMutation.mutate({ id: e.id, status: "rejected" })
+                              }
+                            >
+                              <X className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </>
+                        )}
+                        {canManage && status !== "pending" && (
+                          <>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              aria-label={`Edit expense from ${e.description}`}
+                              onClick={() => {
+                                setEditing(e);
+                                setOpen(true);
+                              }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <DeleteButton
+                              label={`Delete expense: ${e.description}`}
+                              title="Delete this expense record?"
+                              description="This can't be undone."
+                              onConfirm={async () => {
+                                try {
+                                  await deleteMutation.mutateAsync(e.id);
+                                } catch (err) {
+                                  toast.error(
+                                    err instanceof Error ? err.message : "Failed to delete expense",
+                                  );
+                                }
+                              }}
+                            />
+                          </>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -191,7 +291,7 @@ function ExpensesPage() {
               {filtered.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={7}
                     className="py-10 text-center text-sm text-muted-foreground"
                   >
                     <Receipt className="mx-auto mb-2 h-6 w-6 text-muted-foreground/60" />
@@ -210,21 +310,38 @@ function ExpensesPage() {
 function ExpenseDialog({
   expense,
   departments,
-  currentUserId,
   onClose,
 }: {
-  expense: Expense | null;
-  departments: Department[];
-  currentUserId: string;
+  expense: OrgExpense | null;
+  departments: { id: string; name: string }[];
   onClose: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [departmentId, setDepartmentId] = useState(expense?.departmentId ?? "");
   const [amount, setAmount] = useState(expense ? String(expense.amount) : "");
   const [description, setDescription] = useState(expense?.description ?? "");
   const [branchId, setBranchId] = useState(expense?.branchId ?? "");
   const baseCurrency = useBaseCurrency();
 
-  async function save() {
+  const saveMutation = useMutation({
+    mutationFn: (input: {
+      departmentId: string;
+      amount: number;
+      description: string;
+      branchId?: string;
+    }) =>
+      expense
+        ? updateExpenseFn({ data: { id: expense.id, ...input } })
+        : createExpenseFn({ data: input }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      toast.success(expense ? "Expense updated" : "Expense recorded");
+      onClose();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to save expense"),
+  });
+
+  function save() {
     if (!departmentId) {
       toast.error("Select a department");
       return;
@@ -238,21 +355,12 @@ function ExpenseDialog({
       toast.error("Description is required");
       return;
     }
-    try {
-      await db.expenses.put({
-        id: expense?.id ?? uid(),
-        departmentId,
-        amount: numericAmount,
-        description: description.trim(),
-        branchId: branchId || undefined,
-        enteredBy: expense?.enteredBy ?? currentUserId,
-        createdAt: expense?.createdAt ?? Date.now(),
-      });
-      toast.success(expense ? "Expense updated" : "Expense recorded");
-      onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save expense");
-    }
+    saveMutation.mutate({
+      departmentId,
+      amount: numericAmount,
+      description: description.trim(),
+      branchId: branchId || undefined,
+    });
   }
 
   return (
@@ -302,7 +410,105 @@ function ExpenseDialog({
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button onClick={save}>{expense ? "Save changes" : "Record expense"}</Button>
+        <Button onClick={save} disabled={saveMutation.isPending}>
+          {expense ? "Save changes" : "Record expense"}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  );
+}
+
+function AccountabilityDialog({ onClose }: { onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const accountableQuery = useQuery({
+    queryKey: ["my-accountable-requisitions"],
+    queryFn: () => listMyAccountableRequisitionsFn(),
+  });
+  const requisitions = accountableQuery.data ?? [];
+  const [requisitionId, setRequisitionId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
+  const baseCurrency = useBaseCurrency();
+
+  const submitMutation = useMutation({
+    mutationFn: (input: { requisitionId: string; amount: number; description: string }) =>
+      submitAccountabilityExpenseFn({ data: input }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["my-accountable-requisitions"] });
+      toast.success("Accountability submitted — it'll count once Finance approves it");
+      onClose();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to submit accountability"),
+  });
+
+  function save() {
+    if (!requisitionId) {
+      toast.error("Select which requisition this accounts for");
+      return;
+    }
+    const numericAmount = Number(amount);
+    if (!amount || Number.isNaN(numericAmount) || numericAmount <= 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    if (!description.trim()) {
+      toast.error("Description is required");
+      return;
+    }
+    submitMutation.mutate({
+      requisitionId,
+      amount: numericAmount,
+      description: description.trim(),
+    });
+  }
+
+  return (
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle className="font-display">Submit accountability</DialogTitle>
+      </DialogHeader>
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          What did you spend the money on? This won't count toward department totals until Finance
+          approves it.
+        </p>
+        <div className="space-y-1.5">
+          <Label>Requisition</Label>
+          <Select value={requisitionId} onValueChange={setRequisitionId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select an approved requisition" />
+            </SelectTrigger>
+            <SelectContent>
+              {requisitions.map((r) => (
+                <SelectItem key={r.id} value={r.id}>
+                  {r.reason} ({r.amount})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {requisitions.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              No approved requisitions of yours are waiting for accountability.
+            </p>
+          )}
+        </div>
+        <div className="space-y-1.5">
+          <Label>Amount spent ({baseCurrency.code})</Label>
+          <Input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label>What was it spent on?</Label>
+          <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
+        </div>
+      </div>
+      <DialogFooter>
+        <Button variant="ghost" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button onClick={save} disabled={submitMutation.isPending}>
+          Submit
+        </Button>
       </DialogFooter>
     </DialogContent>
   );

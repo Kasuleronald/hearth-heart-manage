@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { db, uid, type Role, type User } from "./db";
+import { db, uid, type Role, type User, type DepartmentModule } from "./db";
 import { loginFn, logoutFn, getCurrentSessionFn, changeUserPasswordFn } from "@/server/auth";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -19,6 +19,9 @@ export interface Session {
   branchId?: string; // undefined = church-wide access; set = scoped to that branch
   financeTier?: "A"; // elevated finance powers granted to a leader/cell_leader
   needsEmailUpdate?: boolean; // a placeholder email was auto-assigned — see §14
+  allowedModules: DepartmentModule[]; // granted via the department this user leads, if any
+  leadsDepartment: boolean; // true if they lead any department, even one with no modules granted
+  ledDepartmentId?: string;
 }
 
 function toSession(data: Awaited<ReturnType<typeof getCurrentSessionFn>>): Session | null {
@@ -33,6 +36,9 @@ function toSession(data: Awaited<ReturnType<typeof getCurrentSessionFn>>): Sessi
     branchId: data.branchId,
     financeTier: data.financeTier,
     needsEmailUpdate: data.needsEmailUpdate,
+    allowedModules: data.allowedModules,
+    leadsDepartment: data.leadsDepartment,
+    ledDepartmentId: data.ledDepartmentId,
   };
 }
 
@@ -260,8 +266,13 @@ export function canEditClass(role: Role, facilitatorId: string | undefined, user
   if (role === "admin" || role === "pastor") return true;
   return role === "cell_leader" && facilitatorId === userId;
 }
-export function canAccessGivings(role: Role) {
-  return role === "admin" || role === "pastor" || role === "treasurer";
+export function canAccessGivings(role: Role, allowedModules: DepartmentModule[] = []) {
+  return (
+    role === "admin" ||
+    role === "pastor" ||
+    role === "treasurer" ||
+    allowedModules.includes("givings")
+  );
 }
 // A Pastor can view Givings but not record/edit/delete entries — that stays
 // with Admin and Treasurer.
@@ -290,12 +301,17 @@ export function canManageProjects(role: Role) {
 export function isTierAFinanceLeader(role: Role, financeTier: "A" | undefined) {
   return (role === "leader" || role === "cell_leader") && financeTier === "A";
 }
-export function canAccessPartners(role: Role, financeTier?: "A") {
+export function canAccessPartners(
+  role: Role,
+  financeTier?: "A",
+  allowedModules: DepartmentModule[] = [],
+) {
   return (
     role === "admin" ||
     role === "pastor" ||
     role === "treasurer" ||
-    isTierAFinanceLeader(role, financeTier)
+    isTierAFinanceLeader(role, financeTier) ||
+    allowedModules.includes("partners")
   );
 }
 // Departmental leaders, Pastors, and Admin can submit a requisition.
@@ -352,8 +368,17 @@ export function canManageBranding(role: Role) {
 }
 // Pledges: any signed-in user can book one and sees only their own; these
 // three cover the elevated finance-side powers.
-export function canViewAllPledges(role: Role, financeTier?: "A") {
-  return role === "admin" || role === "treasurer" || isTierAFinanceLeader(role, financeTier);
+export function canViewAllPledges(
+  role: Role,
+  financeTier?: "A",
+  allowedModules: DepartmentModule[] = [],
+) {
+  return (
+    role === "admin" ||
+    role === "treasurer" ||
+    isTierAFinanceLeader(role, financeTier) ||
+    allowedModules.includes("pledges")
+  );
 }
 export function canEditAnyPledge(role: Role, financeTier?: "A") {
   return role === "admin" || role === "treasurer" || isTierAFinanceLeader(role, financeTier);

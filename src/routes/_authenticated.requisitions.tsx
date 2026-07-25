@@ -1,8 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Plus, Check, X, ClipboardList } from "lucide-react";
-import { db, type Requisition } from "@/lib/db";
+import { listRequisitionsFn, decideRequisitionFn } from "@/server/requisitions";
+import { listDepartmentsFn } from "@/server/departments";
+import { listOrgUsersFn } from "@/server/users";
 import { useDisplayCurrency } from "@/lib/currency-toggle";
 import { RequisitionDialog } from "@/components/requisition-dialog";
 import { CurrencyToggle } from "@/components/currency-toggle";
@@ -34,7 +36,9 @@ export const Route = createFileRoute("/_authenticated/requisitions")({
   component: RequisitionsPage,
 });
 
-const STATUS_STYLE: Record<Requisition["status"], string> = {
+type OrgRequisition = Awaited<ReturnType<typeof listRequisitionsFn>>[number];
+
+const STATUS_STYLE: Record<OrgRequisition["status"], string> = {
   pending: "bg-secondary text-secondary-foreground",
   approved: "bg-primary/15 text-primary",
   rejected: "bg-destructive/15 text-destructive",
@@ -42,19 +46,34 @@ const STATUS_STYLE: Record<Requisition["status"], string> = {
 
 function RequisitionsPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { session } = useSession();
-  const requisitions =
-    useLiveQuery(
-      () =>
-        db.requisitions.toArray().then((rows) => rows.sort((a, b) => b.createdAt - a.createdAt)),
-      [],
-    ) ?? [];
-  const departments = useLiveQuery(() => db.departments.orderBy("name").toArray(), []) ?? [];
-  const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
+  const requisitionsQuery = useQuery({
+    queryKey: ["requisitions"],
+    queryFn: () => listRequisitionsFn(),
+  });
+  const departmentsQuery = useQuery({
+    queryKey: ["departments"],
+    queryFn: () => listDepartmentsFn(),
+  });
+  const usersQuery = useQuery({ queryKey: ["org-users"], queryFn: () => listOrgUsersFn() });
+  const requisitions = requisitionsQuery.data ?? [];
+  const departments = departmentsQuery.data ?? [];
+  const users = usersQuery.data ?? [];
   const [open, setOpen] = useState(false);
   const effectiveBranch = useEffectiveBranch(session?.branchId);
   const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
   const { format: formatAmount, base } = useDisplayCurrency(canToggle);
+
+  const decideMutation = useMutation({
+    mutationFn: (vars: { id: string; status: "approved" | "rejected" }) =>
+      decideRequisitionFn({ data: vars }),
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["requisitions"] });
+      toast.success(`Requisition ${vars.status}`);
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to update requisition"),
+  });
 
   useEffect(() => {
     if (session && !canViewRequisitions(session.role, session.financeTier)) {
@@ -66,28 +85,16 @@ function RequisitionsPage() {
 
   const canSubmit = canSubmitRequisitions(session.role);
   const canDecide = canDecideRequisitions(session.role);
-  const filtered = requisitions.filter((r) => matchesBranchFilter(effectiveBranch, r.branchId));
+  const filtered = requisitions.filter((r) =>
+    matchesBranchFilter(effectiveBranch, r.branchId ?? undefined),
+  );
 
   function departmentName(id: string): string {
     return departments.find((d) => d.id === id)?.name ?? "Unknown department";
   }
-  function userName(id: string | undefined): string {
+  function userName(id: string | null | undefined): string {
     if (!id) return "—";
     return users.find((u) => u.id === id)?.fullName ?? "Unknown user";
-  }
-
-  async function decide(r: Requisition, status: "approved" | "rejected") {
-    if (!session) return;
-    try {
-      await db.requisitions.update(r.id, {
-        status,
-        decidedBy: session.userId,
-        decidedAt: Date.now(),
-      });
-      toast.success(`Requisition ${status}`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to update requisition");
-    }
   }
 
   return (
@@ -106,11 +113,7 @@ function RequisitionsPage() {
                   </Button>
                 </DialogTrigger>
                 {open && (
-                  <RequisitionDialog
-                    departments={departments}
-                    currentUserId={session.userId}
-                    onClose={() => setOpen(false)}
-                  />
+                  <RequisitionDialog departments={departments} onClose={() => setOpen(false)} />
                 )}
               </Dialog>
             )}
@@ -159,7 +162,8 @@ function RequisitionsPage() {
                             size="icon"
                             variant="ghost"
                             aria-label="Approve requisition"
-                            onClick={() => decide(r, "approved")}
+                            disabled={decideMutation.isPending}
+                            onClick={() => decideMutation.mutate({ id: r.id, status: "approved" })}
                           >
                             <Check className="h-4 w-4 text-primary" />
                           </Button>
@@ -167,7 +171,8 @@ function RequisitionsPage() {
                             size="icon"
                             variant="ghost"
                             aria-label="Reject requisition"
-                            onClick={() => decide(r, "rejected")}
+                            disabled={decideMutation.isPending}
+                            onClick={() => decideMutation.mutate({ id: r.id, status: "rejected" })}
                           >
                             <X className="h-4 w-4 text-destructive" />
                           </Button>

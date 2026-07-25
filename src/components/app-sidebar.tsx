@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db } from "@/lib/db";
+import { db, type DepartmentModule } from "@/lib/db";
 import {
   LayoutDashboard,
   Users,
@@ -107,6 +107,7 @@ function getNav(cellTermPlural: string, givingsPlural: string) {
       url: "/givings",
       icon: HandCoins,
       roles: ["admin", "pastor", "treasurer"] as const,
+      moduleKey: "givings" as const,
     },
     {
       title: "Pledges",
@@ -120,6 +121,7 @@ function getNav(cellTermPlural: string, givingsPlural: string) {
       icon: Handshake,
       roles: ["admin", "pastor", "treasurer"] as const,
       financeTierAllowed: true,
+      moduleKey: "partners" as const,
     },
     {
       title: "Expenses",
@@ -169,11 +171,6 @@ export function AppSidebar() {
       if (!session) return false;
       return (await db.cells.where("leaderId").equals(session.userId).count()) > 0;
     }, [session?.userId]) ?? false;
-  const isAssignedDeptLeader =
-    useLiveQuery(async () => {
-      if (!session) return false;
-      return (await db.departments.where("leaderId").equals(session.userId).count()) > 0;
-    }, [session?.userId]) ?? false;
   const isHeadOfCellFellowships = useIsHeadOfCellFellowships(session?.userId);
 
   if (!session) return null;
@@ -183,8 +180,10 @@ export function AppSidebar() {
       return true;
     }
     if (n.assignedCellLeaderAllowed && isAssignedCellLeader) return true;
-    if (n.assignedDeptLeaderAllowed && isAssignedDeptLeader) return true;
+    if (n.assignedDeptLeaderAllowed && session.leadsDepartment) return true;
     if (n.headOfCellFellowshipsAllowed && isHeadOfCellFellowships) return true;
+    const moduleKey = (n as { moduleKey?: DepartmentModule }).moduleKey;
+    if (moduleKey && session.allowedModules.includes(moduleKey)) return true;
     return false;
   });
 

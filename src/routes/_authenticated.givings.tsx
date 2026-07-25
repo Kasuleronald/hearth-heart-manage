@@ -80,10 +80,12 @@ function GivingsPage() {
   const { singular: givingsSingular, plural: givingsPlural } = useGivingsTerm();
 
   useEffect(() => {
-    if (session && !canAccessGivings(session.role)) navigate({ to: "/dashboard", replace: true });
+    if (session && !canAccessGivings(session.role, session.allowedModules)) {
+      navigate({ to: "/dashboard", replace: true });
+    }
   }, [session, navigate]);
 
-  if (!session || !canAccessGivings(session.role)) return null;
+  if (!session || !canAccessGivings(session.role, session.allowedModules)) return null;
 
   const canManage = canManageGivings(session.role);
 
