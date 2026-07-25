@@ -28,6 +28,7 @@ import {
   listOrganizationsFn,
   createOrganizationFn,
   updateOrganizationFn,
+  updateAdminEmailFn,
   resetOrgAdminPasswordFn,
   suspendOrganizationFn,
   reactivateOrganizationFn,
@@ -260,7 +261,14 @@ function SuperAdminOrgsPage() {
 
       <Dialog open={!!editingOrg} onOpenChange={(o) => !o && setEditingOrg(null)}>
         {editingOrg && (
-          <EditOrganizationDialog org={editingOrg} onClose={() => setEditingOrg(null)} />
+          <EditOrganizationDialog
+            org={editingOrg}
+            onClose={() => setEditingOrg(null)}
+            onResetPassword={(adminUserId, adminEmail) =>
+              resetPasswordMutation.mutate({ adminUserId, adminEmail })
+            }
+            resetPending={resetPasswordMutation.isPending}
+          />
         )}
       </Dialog>
 
@@ -307,7 +315,17 @@ function SuperAdminOrgsPage() {
   );
 }
 
-function EditOrganizationDialog({ org, onClose }: { org: OrgListItem; onClose: () => void }) {
+function EditOrganizationDialog({
+  org,
+  onClose,
+  onResetPassword,
+  resetPending,
+}: {
+  org: OrgListItem;
+  onClose: () => void;
+  onResetPassword: (adminUserId: string, adminEmail: string) => void;
+  resetPending: boolean;
+}) {
   const queryClient = useQueryClient();
   const [name, setName] = useState(org.name);
   const [type, setType] = useState<"church" | "ministry" | "organization">(
@@ -360,6 +378,23 @@ function EditOrganizationDialog({ org, onClose }: { org: OrgListItem; onClose: (
           />
         </div>
       </div>
+
+      {org.admins.length > 0 && (
+        <div className="space-y-3 border-t pt-4">
+          <Label>Admin{org.admins.length > 1 ? "s" : ""}</Label>
+          <div className="space-y-3">
+            {org.admins.map((admin) => (
+              <AdminRow
+                key={admin.id}
+                admin={admin}
+                onResetPassword={() => onResetPassword(admin.id, admin.email)}
+                resetPending={resetPending}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       <DialogFooter>
         <Button variant="ghost" onClick={onClose}>
           Cancel
@@ -373,6 +408,63 @@ function EditOrganizationDialog({ org, onClose }: { org: OrgListItem; onClose: (
         </Button>
       </DialogFooter>
     </DialogContent>
+  );
+}
+
+function AdminRow({
+  admin,
+  onResetPassword,
+  resetPending,
+}: {
+  admin: OrgListItem["admins"][number];
+  onResetPassword: () => void;
+  resetPending: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const [email, setEmail] = useState(admin.email);
+
+  const emailMutation = useMutation({
+    mutationFn: () => updateAdminEmailFn({ data: { adminUserId: admin.id, email } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["organizations"] });
+      toast.success("Email updated");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to update email"),
+  });
+
+  const emailChanged = email.trim().toLowerCase() !== admin.email;
+
+  return (
+    <div className="space-y-1.5 rounded-md border border-border/60 p-3">
+      <div className="text-xs font-medium">{admin.fullName}</div>
+      <div className="flex items-center gap-2">
+        <Input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="h-8"
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!emailChanged || !email.trim() || emailMutation.isPending}
+          onClick={() => emailMutation.mutate()}
+        >
+          {emailMutation.isPending && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+          Save
+        </Button>
+      </div>
+      <Button
+        size="sm"
+        variant="ghost"
+        className="h-7 px-2 text-xs text-muted-foreground"
+        disabled={resetPending}
+        onClick={onResetPassword}
+      >
+        <KeyRound className="mr-1.5 h-3.5 w-3.5" />
+        Send password reset link
+      </Button>
+    </div>
   );
 }
 

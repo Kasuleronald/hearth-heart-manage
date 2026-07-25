@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "./db/client";
+import { db, withTenant } from "./db/client";
 import { organizations, users, userCredentials } from "./db/schema";
 import { requirePlatformSession, createResetToken, AuthError } from "./auth";
 import { sendInviteEmail } from "./email";
@@ -128,6 +128,39 @@ export const updateOrganizationFn = createServerFn({ method: "POST" })
       .returning();
     if (!org) throw new AuthError("Organization not found");
     return { organization: org };
+  });
+
+const updateAdminEmailSchema = z.object({
+  adminUserId: z.string().uuid(),
+  email: z.string().email(),
+});
+
+// The login identity lives in two places that must stay in sync: `users`
+// (RLS-protected, needs app.current_org_id set — see withTenant) and
+// `user_credentials` (not tenant-scoped; email is its primary key, since
+// login has to resolve which org a user belongs to before it knows an
+// org id at all).
+export const updateAdminEmailFn = createServerFn({ method: "POST" })
+  .validator(updateAdminEmailSchema)
+  .handler(async ({ data }) => {
+    await requirePlatformSession();
+    const email = data.email.trim().toLowerCase();
+
+    const admin = await db.query.users.findFirst({ where: eq(users.id, data.adminUserId) });
+    if (!admin) throw new AuthError("Admin not found");
+    if (email === admin.email) return { ok: true as const };
+
+    const existing = await db.query.userCredentials.findFirst({
+      where: eq(userCredentials.email, email),
+    });
+    if (existing) throw new AuthError("A user with this email already exists");
+
+    await withTenant(admin.organizationId, async (tx) => {
+      await tx.update(users).set({ email, needsEmailUpdate: false }).where(eq(users.id, admin.id));
+    });
+    await db.update(userCredentials).set({ email }).where(eq(userCredentials.userId, admin.id));
+
+    return { ok: true as const };
   });
 
 const resetAdminPasswordSchema = z.object({ adminUserId: z.string().uuid() });
