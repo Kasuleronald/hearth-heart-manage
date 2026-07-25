@@ -20,16 +20,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: "22"
+          bun-version: latest
       - name: Install dependencies
-        # `npm ci` requires a committed package-lock.json; this project's
-        # canonical lockfile is bun.lock (gitignores package-lock.json).
-        run: npm install --no-audit --no-fund
+        # Installs from the committed bun.lock (this project's canonical
+        # lockfile) instead of re-resolving the whole dependency tree fresh
+        # on every run — a fresh npm resolve is what broke this workflow
+        # (a newer transitive package's peer-dependency range no longer
+        # matched another transitive package's).
+        run: bun install --frozen-lockfile
       - name: Build
-        run: npm run build:pages
+        run: bun run build:pages
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
