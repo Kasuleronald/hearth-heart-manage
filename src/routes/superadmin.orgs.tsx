@@ -213,6 +213,7 @@ function NewOrganizationDialog({ onClose }: { onClose: () => void }) {
   const [adminFullName, setAdminFullName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [emailSent, setEmailSent] = useState(false);
 
   const createMutation = useMutation({
     mutationFn: () => createOrganizationFn({ data: { name, type, adminFullName, adminEmail } }),
@@ -220,7 +221,8 @@ function NewOrganizationDialog({ onClose }: { onClose: () => void }) {
       queryClient.invalidateQueries({ queryKey: ["organizations"] });
       const link = `${window.location.origin}/accept-invite?token=${result.inviteToken}`;
       setInviteLink(link);
-      toast.success("Organization created");
+      setEmailSent(result.emailSent);
+      toast.success(result.emailSent ? "Organization created — invite emailed" : "Organization created");
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to create"),
   });
@@ -232,9 +234,15 @@ function NewOrganizationDialog({ onClose }: { onClose: () => void }) {
           <DialogTitle className="font-display">Organization created</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Send this link to {adminFullName} so they can set their password and sign in. No email
-          delivery is wired up yet — relay it however works (message, email client, etc.). It
-          expires in 1 hour.
+          {emailSent ? (
+            <>An invite email was sent to {adminEmail}. You can also share the link below.</>
+          ) : (
+            <>
+              Send this link to {adminFullName} so they can set their password and sign in. Email
+              delivery isn't configured — relay it however works (message, email client, etc.).
+            </>
+          )}{" "}
+          It expires in 1 hour.
         </p>
         <div className="flex items-center gap-2">
           <Input readOnly value={inviteLink} />

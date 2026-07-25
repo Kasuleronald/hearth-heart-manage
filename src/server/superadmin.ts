@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "./db/client";
 import { organizations, users, userCredentials } from "./db/schema";
 import { requirePlatformSession, createResetToken, AuthError } from "./auth";
+import { sendInviteEmail } from "./email";
 
 // Every function here is platform-level (spans every church), so none of it
 // goes through withTenant()/RLS — organizations and userCredentials are
@@ -80,10 +81,26 @@ export const createOrganizationFn = createServerFn({ method: "POST" })
     });
 
     const token = await createResetToken(result.admin.id, result.org.id);
-    // Local-mode, no SMTP yet: relayed out-of-band by whoever is running
-    // this, same spirit as the original app's admin-relayed reset code.
-    // The real invite link is /accept-invite?token=<token>.
-    return { organization: result.org, admin: result.admin, inviteToken: token };
+    const baseUrl = (process.env.APP_URL ?? "").replace(/\/$/, "");
+    const inviteLink = `${baseUrl}/accept-invite?token=${token}`;
+    // Degrades gracefully to manual relay if SMTP isn't configured (see
+    // src/server/email.ts) — the link is always returned either way so the
+    // SuperAdmin UI can show/copy it as a fallback.
+    const { sent } = baseUrl
+      ? await sendInviteEmail({
+          to: email,
+          adminName: result.admin.fullName,
+          orgName: result.org.name,
+          inviteLink,
+        })
+      : { sent: false };
+
+    return {
+      organization: result.org,
+      admin: result.admin,
+      inviteToken: token,
+      emailSent: sent,
+    };
   });
 
 const orgIdSchema = z.object({ organizationId: z.string().uuid() });
