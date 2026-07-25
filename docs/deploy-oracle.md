@@ -83,6 +83,12 @@ cp .env.example .env
 # edit .env: DATABASE_URL_MIGRATE, DATABASE_URL (with a real app_user
 # password you choose), SESSION_SECRET (generate via the command in the
 # file), NODE_ENV=production
+#
+# If you don't have a domain + TLS cert yet (section 5), also set
+# COOKIE_SECURE=false for now — otherwise the session cookie is marked
+# Secure, the browser silently drops it over plain HTTP, and login will
+# appear to succeed (URL changes) but no session ever sticks. Remove this
+# once certbot is set up.
 ```
 
 Create the `app_user` role first (edit the password in the script to match

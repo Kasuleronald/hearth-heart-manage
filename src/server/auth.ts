@@ -37,7 +37,11 @@ export class AuthError extends Error {}
 // the same server-only splitting explicitly.
 const cookieOptions = createServerOnlyFn(() => ({
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
+  // Secure by default in production, but overridable via COOKIE_SECURE=false
+  // for a bootstrap window serving plain HTTP before a domain + TLS cert
+  // exist — a Secure cookie is silently dropped by the browser over HTTP,
+  // which otherwise makes login appear to succeed while no session sticks.
+  secure: process.env.NODE_ENV === "production" && process.env.COOKIE_SECURE !== "false",
   sameSite: "lax" as const,
   path: "/",
   maxAge: COOKIE_MAX_AGE_SEC,
