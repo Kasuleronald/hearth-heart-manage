@@ -92,7 +92,6 @@ export interface PlatformSession {
 export const resolveSession = createServerOnlyFn(
   async (): Promise<AuthedSession | PlatformSession | null> => {
     const sessionId = getCookie(SESSION_COOKIE);
-    console.log("[debug] resolveSession cookie:", sessionId ?? "(none)");
     if (!sessionId) return null;
 
     const row = await db.query.sessions.findFirst({ where: eq(sessions.id, sessionId) });
@@ -175,9 +174,7 @@ const createSessionCookie = createServerOnlyFn(
       .insert(sessions)
       .values({ ...fields, expiresAt: new Date(Date.now() + SESSION_IDLE_MS) })
       .returning({ id: sessions.id });
-    const opts = cookieOptions();
-    console.log("[debug] createSessionCookie setting:", row.id, "opts:", opts);
-    setCookie(SESSION_COOKIE, row.id, opts);
+    setCookie(SESSION_COOKIE, row.id, cookieOptions());
   },
 );
 
