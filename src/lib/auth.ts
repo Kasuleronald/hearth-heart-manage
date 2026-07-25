@@ -420,6 +420,9 @@ export function canManageCurrencySettings(role: Role) {
 export function canManageWeekStartSetting(role: Role) {
   return role === "admin";
 }
+export function canManageBranding(role: Role) {
+  return role === "admin";
+}
 // Pledges: any signed-in user can book one and sees only their own; these
 // three cover the elevated finance-side powers.
 export function canViewAllPledges(role: Role, financeTier?: "A") {

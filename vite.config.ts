@@ -6,11 +6,17 @@ import tailwindcss from "@tailwindcss/vite";
 import tsConfigPaths from "vite-tsconfig-paths";
 import { nitro } from "nitro/vite";
 
-// `NITRO_PRESET=github-pages` switches the build to a static SPA output deployable
-// to GitHub Pages (see .github/workflows/deploy.yml); unset defaults to the
-// Cloudflare Workers build this project already used.
-const nitroPreset = process.env.NITRO_PRESET || "cloudflare-module";
+// Default deploy target is a plain Node process (Oracle Cloud VM, see
+// docs/deploy-oracle.md) via Nitro's node-server preset. Override with
+// `NITRO_PRESET=cloudflare-module` to build for Cloudflare Workers/Pages
+// instead (this project's original target — src/server.ts's custom SSR
+// error-wrapper only applies to that preset, since it's written against
+// the Cloudflare Workers fetch(request, env, ctx) module shape), or
+// `NITRO_PRESET=github-pages` for a static SPA build (see
+// .github/workflows/deploy.yml).
+const nitroPreset = process.env.NITRO_PRESET || "node-server";
 const isGithubPages = nitroPreset === "github-pages";
+const isCloudflare = nitroPreset === "cloudflare-module";
 // GitHub Pages project sites are served from /<repo-name>/, not the domain root.
 const base = isGithubPages ? "/hearth-heart-manage/" : "/";
 
@@ -30,12 +36,20 @@ export default defineConfig(({ command }) => ({
     tailwindcss(),
     tsConfigPaths({ projects: ["./tsconfig.json"] }),
     tanstackStart({
-      // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error
-      // wrapper) — only relevant to the deployed-server (Cloudflare) build.
-      ...(isGithubPages ? {} : { server: { entry: "server" } }),
+      // src/server.ts's error-wrapper is written against the Cloudflare
+      // Workers fetch(request, env, ctx) shape — only redirect Start's
+      // server entry to it for that preset. node-server (the default) and
+      // github-pages both use Nitro's own generated entry unmodified.
+      ...(isCloudflare ? { server: { entry: "server" } } : {}),
       importProtection: {
         behavior: "error",
-        client: { files: ["**/server/**"], specifiers: ["server-only"] },
+        // Only the raw DB layer (connection string, Drizzle schema/client) is
+        // blocked from client bundles — src/server/*.ts files outside db/ are
+        // meant to be imported by client route components: they export
+        // createServerFn() functions, which TanStack Start's own compiler
+        // splits into a server-only chunk + a client-side RPC stub. Blocking
+        // the whole **/server/** tree would break that pattern entirely.
+        client: { files: ["**/server/db/**"], specifiers: ["server-only"] },
       },
     }),
     // Nitro packages the deployable server bundle for Cloudflare. The GitHub Pages

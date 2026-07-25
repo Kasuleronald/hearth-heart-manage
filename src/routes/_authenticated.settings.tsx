@@ -1,11 +1,19 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Download, Upload, Database, Tag, Coins, CalendarDays } from "lucide-react";
+import { Download, Upload, Database, Tag, Coins, CalendarDays, Church, X } from "lucide-react";
 import { exportDatabase, importDatabase, type DatabaseBackup } from "@/lib/db";
 import { downloadJson } from "@/lib/download";
 import { TERM_DEFINITIONS, useTerm, setTerm } from "@/lib/terminology";
 import { useBaseCurrency, setBaseCurrency, DEFAULT_BASE_RATE } from "@/lib/currency";
 import { useWeekStartDay, setWeekStartDay, WEEKDAY_OPTIONS } from "@/lib/week";
+import {
+  useChurchBranding,
+  setChurchName,
+  setChurchLogo,
+  clearChurchLogo,
+  readFileAsDataUrl,
+  MAX_LOGO_BYTES,
+} from "@/lib/branding";
 import { CurrencyCombobox } from "@/components/currency-combobox";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -38,7 +46,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { useSession, canManageCurrencySettings, canManageWeekStartSetting } from "@/lib/auth";
+import {
+  useSession,
+  canManageCurrencySettings,
+  canManageWeekStartSetting,
+  canManageBranding,
+} from "@/lib/auth";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -64,6 +77,7 @@ function SettingsPage() {
     <div>
       <PageHeader title="Settings" description="Back up and restore your church's data." />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {canManageBranding(session.role) && <BrandingCard />}
         <TerminologyCard />
         {canManageCurrencySettings(session.role) && <CurrencyCard />}
         {canManageWeekStartSetting(session.role) && <WeekStartCard />}
@@ -256,6 +270,110 @@ function WeekStartCard() {
               ))}
             </SelectContent>
           </Select>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function BrandingCard() {
+  const { name, logoDataUrl } = useChurchBranding();
+  const [editName, setEditName] = useState(name);
+  const [busy, setBusy] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setEditName(name);
+  }, [name]);
+
+  async function saveName() {
+    try {
+      await setChurchName(editName);
+      toast.success("Church name updated");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save");
+    }
+  }
+
+  async function handleLogoFile(file: File) {
+    setBusy(true);
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      await setChurchLogo(dataUrl);
+      toast.success("Logo updated");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save logo");
+    } finally {
+      setBusy(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="font-display flex items-center gap-2">
+          <Church className="h-5 w-5" /> Church branding
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Your church's name and logo appear at the top of the app for every signed-in user.
+        </p>
+        <div className="space-y-1.5">
+          <Label>Church name</Label>
+          <div className="flex gap-2">
+            <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+            <Button variant="outline" onClick={saveName} disabled={!editName.trim()}>
+              Save
+            </Button>
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Logo</Label>
+          <div className="flex items-center gap-3">
+            <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-lg border bg-muted">
+              {logoDataUrl ? (
+                <img src={logoDataUrl} alt="Church logo" className="h-full w-full object-contain" />
+              ) : (
+                <Church className="h-6 w-6 text-muted-foreground" />
+              )}
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleLogoFile(file);
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload className="mr-2 h-4 w-4" /> Upload logo
+            </Button>
+            {logoDataUrl && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  clearChurchLogo();
+                  toast.success("Logo removed");
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Any image, kept under {Math.round(MAX_LOGO_BYTES / 1024)}KB — square logos look best.
+          </p>
         </div>
       </CardContent>
     </Card>

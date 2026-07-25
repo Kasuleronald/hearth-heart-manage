@@ -9,12 +9,14 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SuperadminRouteImport } from './routes/superadmin'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as AcceptInviteRouteImport } from './routes/accept-invite'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SuperadminOrgsRouteImport } from './routes/superadmin.orgs'
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated.users'
 import { Route as AuthenticatedTestimoniesRouteImport } from './routes/_authenticated.testimonies'
-import { Route as AuthenticatedSuperadminPreviewRouteImport } from './routes/_authenticated.superadmin-preview'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated.settings'
 import { Route as AuthenticatedRequisitionsRouteImport } from './routes/_authenticated.requisitions'
 import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated.reports'
@@ -37,9 +39,19 @@ import { Route as AuthenticatedEventsIdRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedClassesIdRouteImport } from './routes/_authenticated.classes.$id'
 import { Route as AuthenticatedCellsIdRouteImport } from './routes/_authenticated.cells.$id'
 
+const SuperadminRoute = SuperadminRouteImport.update({
+  id: '/superadmin',
+  path: '/superadmin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AcceptInviteRoute = AcceptInviteRouteImport.update({
+  id: '/accept-invite',
+  path: '/accept-invite',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
@@ -51,6 +63,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SuperadminOrgsRoute = SuperadminOrgsRouteImport.update({
+  id: '/orgs',
+  path: '/orgs',
+  getParentRoute: () => SuperadminRoute,
+} as any)
 const AuthenticatedUsersRoute = AuthenticatedUsersRouteImport.update({
   id: '/users',
   path: '/users',
@@ -60,12 +77,6 @@ const AuthenticatedTestimoniesRoute =
   AuthenticatedTestimoniesRouteImport.update({
     id: '/testimonies',
     path: '/testimonies',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
-const AuthenticatedSuperadminPreviewRoute =
-  AuthenticatedSuperadminPreviewRouteImport.update({
-    id: '/superadmin-preview',
-    path: '/superadmin-preview',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
@@ -179,7 +190,9 @@ const AuthenticatedCellsIdRoute = AuthenticatedCellsIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/accept-invite': typeof AcceptInviteRoute
   '/login': typeof LoginRoute
+  '/superadmin': typeof SuperadminRouteWithChildren
   '/branches': typeof AuthenticatedBranchesRoute
   '/cell-reports': typeof AuthenticatedCellReportsRoute
   '/cells': typeof AuthenticatedCellsRouteWithChildren
@@ -197,9 +210,9 @@ export interface FileRoutesByFullPath {
   '/reports': typeof AuthenticatedReportsRoute
   '/requisitions': typeof AuthenticatedRequisitionsRoute
   '/settings': typeof AuthenticatedSettingsRoute
-  '/superadmin-preview': typeof AuthenticatedSuperadminPreviewRoute
   '/testimonies': typeof AuthenticatedTestimoniesRoute
   '/users': typeof AuthenticatedUsersRoute
+  '/superadmin/orgs': typeof SuperadminOrgsRoute
   '/cells/$id': typeof AuthenticatedCellsIdRoute
   '/classes/$id': typeof AuthenticatedClassesIdRoute
   '/events/$id': typeof AuthenticatedEventsIdRoute
@@ -207,7 +220,9 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/accept-invite': typeof AcceptInviteRoute
   '/login': typeof LoginRoute
+  '/superadmin': typeof SuperadminRouteWithChildren
   '/branches': typeof AuthenticatedBranchesRoute
   '/cell-reports': typeof AuthenticatedCellReportsRoute
   '/cells': typeof AuthenticatedCellsRouteWithChildren
@@ -225,9 +240,9 @@ export interface FileRoutesByTo {
   '/reports': typeof AuthenticatedReportsRoute
   '/requisitions': typeof AuthenticatedRequisitionsRoute
   '/settings': typeof AuthenticatedSettingsRoute
-  '/superadmin-preview': typeof AuthenticatedSuperadminPreviewRoute
   '/testimonies': typeof AuthenticatedTestimoniesRoute
   '/users': typeof AuthenticatedUsersRoute
+  '/superadmin/orgs': typeof SuperadminOrgsRoute
   '/cells/$id': typeof AuthenticatedCellsIdRoute
   '/classes/$id': typeof AuthenticatedClassesIdRoute
   '/events/$id': typeof AuthenticatedEventsIdRoute
@@ -237,7 +252,9 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
+  '/accept-invite': typeof AcceptInviteRoute
   '/login': typeof LoginRoute
+  '/superadmin': typeof SuperadminRouteWithChildren
   '/_authenticated/branches': typeof AuthenticatedBranchesRoute
   '/_authenticated/cell-reports': typeof AuthenticatedCellReportsRoute
   '/_authenticated/cells': typeof AuthenticatedCellsRouteWithChildren
@@ -255,9 +272,9 @@ export interface FileRoutesById {
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/requisitions': typeof AuthenticatedRequisitionsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
-  '/_authenticated/superadmin-preview': typeof AuthenticatedSuperadminPreviewRoute
   '/_authenticated/testimonies': typeof AuthenticatedTestimoniesRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
+  '/superadmin/orgs': typeof SuperadminOrgsRoute
   '/_authenticated/cells/$id': typeof AuthenticatedCellsIdRoute
   '/_authenticated/classes/$id': typeof AuthenticatedClassesIdRoute
   '/_authenticated/events/$id': typeof AuthenticatedEventsIdRoute
@@ -267,7 +284,9 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/accept-invite'
     | '/login'
+    | '/superadmin'
     | '/branches'
     | '/cell-reports'
     | '/cells'
@@ -285,9 +304,9 @@ export interface FileRouteTypes {
     | '/reports'
     | '/requisitions'
     | '/settings'
-    | '/superadmin-preview'
     | '/testimonies'
     | '/users'
+    | '/superadmin/orgs'
     | '/cells/$id'
     | '/classes/$id'
     | '/events/$id'
@@ -295,7 +314,9 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/accept-invite'
     | '/login'
+    | '/superadmin'
     | '/branches'
     | '/cell-reports'
     | '/cells'
@@ -313,9 +334,9 @@ export interface FileRouteTypes {
     | '/reports'
     | '/requisitions'
     | '/settings'
-    | '/superadmin-preview'
     | '/testimonies'
     | '/users'
+    | '/superadmin/orgs'
     | '/cells/$id'
     | '/classes/$id'
     | '/events/$id'
@@ -324,7 +345,9 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_authenticated'
+    | '/accept-invite'
     | '/login'
+    | '/superadmin'
     | '/_authenticated/branches'
     | '/_authenticated/cell-reports'
     | '/_authenticated/cells'
@@ -342,9 +365,9 @@ export interface FileRouteTypes {
     | '/_authenticated/reports'
     | '/_authenticated/requisitions'
     | '/_authenticated/settings'
-    | '/_authenticated/superadmin-preview'
     | '/_authenticated/testimonies'
     | '/_authenticated/users'
+    | '/superadmin/orgs'
     | '/_authenticated/cells/$id'
     | '/_authenticated/classes/$id'
     | '/_authenticated/events/$id'
@@ -354,16 +377,32 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
+  AcceptInviteRoute: typeof AcceptInviteRoute
   LoginRoute: typeof LoginRoute
+  SuperadminRoute: typeof SuperadminRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/superadmin': {
+      id: '/superadmin'
+      path: '/superadmin'
+      fullPath: '/superadmin'
+      preLoaderRoute: typeof SuperadminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/accept-invite': {
+      id: '/accept-invite'
+      path: '/accept-invite'
+      fullPath: '/accept-invite'
+      preLoaderRoute: typeof AcceptInviteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -380,6 +419,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/superadmin/orgs': {
+      id: '/superadmin/orgs'
+      path: '/orgs'
+      fullPath: '/superadmin/orgs'
+      preLoaderRoute: typeof SuperadminOrgsRouteImport
+      parentRoute: typeof SuperadminRoute
+    }
     '/_authenticated/users': {
       id: '/_authenticated/users'
       path: '/users'
@@ -392,13 +438,6 @@ declare module '@tanstack/react-router' {
       path: '/testimonies'
       fullPath: '/testimonies'
       preLoaderRoute: typeof AuthenticatedTestimoniesRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    '/_authenticated/superadmin-preview': {
-      id: '/_authenticated/superadmin-preview'
-      path: '/superadmin-preview'
-      fullPath: '/superadmin-preview'
-      preLoaderRoute: typeof AuthenticatedSuperadminPreviewRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/settings': {
@@ -613,7 +652,6 @@ interface AuthenticatedRouteChildren {
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedRequisitionsRoute: typeof AuthenticatedRequisitionsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
-  AuthenticatedSuperadminPreviewRoute: typeof AuthenticatedSuperadminPreviewRoute
   AuthenticatedTestimoniesRoute: typeof AuthenticatedTestimoniesRoute
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
 }
@@ -636,7 +674,6 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedRequisitionsRoute: AuthenticatedRequisitionsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
-  AuthenticatedSuperadminPreviewRoute: AuthenticatedSuperadminPreviewRoute,
   AuthenticatedTestimoniesRoute: AuthenticatedTestimoniesRoute,
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,
 }
@@ -645,10 +682,24 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
   AuthenticatedRouteChildren,
 )
 
+interface SuperadminRouteChildren {
+  SuperadminOrgsRoute: typeof SuperadminOrgsRoute
+}
+
+const SuperadminRouteChildren: SuperadminRouteChildren = {
+  SuperadminOrgsRoute: SuperadminOrgsRoute,
+}
+
+const SuperadminRouteWithChildren = SuperadminRoute._addFileChildren(
+  SuperadminRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
+  AcceptInviteRoute: AcceptInviteRoute,
   LoginRoute: LoginRoute,
+  SuperadminRoute: SuperadminRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

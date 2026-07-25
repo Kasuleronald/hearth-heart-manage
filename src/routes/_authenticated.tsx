@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Loader2, Search } from "lucide-react";
+import { Loader2, Search, Church } from "lucide-react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { QuickSearch } from "@/components/quick-search";
@@ -11,6 +11,7 @@ import { useSession } from "@/lib/auth";
 import { useTreasurerTerm } from "@/lib/terminology";
 import { checkBirthdayReminders } from "@/lib/birthdays";
 import { ensureCellFellowshipsDepartment } from "@/lib/cell-fellowships";
+import { useChurchBranding } from "@/lib/branding";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -22,6 +23,7 @@ function AuthenticatedLayout() {
   const { session, ready } = useSession();
   const [searchOpen, setSearchOpen] = useState(false);
   const { singular: treasurerLabel } = useTreasurerTerm();
+  const { name: churchName, logoDataUrl } = useChurchBranding();
 
   useEffect(() => {
     if (ready && !session) navigate({ to: "/login", replace: true });
@@ -72,6 +74,18 @@ function AuthenticatedLayout() {
                 <kbd className="ml-3 rounded border bg-muted px-1.5 py-0.5 text-[10px]">⌘K</kbd>
               </Button>
               <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 border-r pr-3">
+                  {logoDataUrl ? (
+                    <img
+                      src={logoDataUrl}
+                      alt={`${churchName} logo`}
+                      className="h-7 w-7 rounded object-contain"
+                    />
+                  ) : (
+                    <Church className="h-5 w-5 text-muted-foreground" />
+                  )}
+                  <span className="font-display text-sm font-semibold">{churchName}</span>
+                </div>
                 {!session.branchId && <BranchSwitcher />}
                 <NotificationBell userId={session.userId} />
                 <span className="text-sm text-muted-foreground">
