@@ -1,20 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Plus, Search, Pencil, Trash2, Columns3, Hash } from "lucide-react";
+import { formatBirthday, MONTH_NAMES, type MemberCategory, type MemberStatus } from "@/lib/db";
 import {
-  db,
-  deleteMemberCascade,
-  uid,
-  formatBirthday,
-  MONTH_NAMES,
-  type Member,
-  type MemberCategory,
-  type MemberStatus,
-} from "@/lib/db";
+  listMembersFn,
+  listMemberFormOptionsFn,
+  createMemberFn,
+  updateMemberFn,
+  deleteMemberFn,
+} from "@/server/members";
 import { ExportMenu } from "@/components/export-menu";
 import { BranchField } from "@/components/branch-field";
-import { notifyMemberAdded, notifyMemberDeleted } from "@/lib/notifications";
 import { DuplicateEmailAlert } from "@/components/duplicate-email-alert";
 import { findEmailMatches, type DuplicateEmailMatch } from "@/lib/duplicate-contact";
 import { useSession, canEditDeleteMembers } from "@/lib/auth";
@@ -75,6 +72,8 @@ import { format } from "date-fns";
 export const Route = createFileRoute("/_authenticated/members")({
   component: MembersPage,
 });
+
+type Member = Awaited<ReturnType<typeof listMembersFn>>[number];
 
 const STATUSES: MemberStatus[] = [
   "active",
@@ -210,14 +209,31 @@ const OPTIONAL_COLUMNS: {
 ];
 
 function MembersPage() {
+  const queryClient = useQueryClient();
   const { session } = useSession();
   const { singular: cellSingular } = useCellTerm();
   const canEditDelete = session ? canEditDeleteMembers(session.role) : false;
-  const members = useLiveQuery(() => db.members.orderBy("lastName").toArray(), []) ?? [];
-  const households = useLiveQuery(() => db.households.toArray(), []) ?? [];
-  const cells = useLiveQuery(() => db.cells.toArray(), []) ?? [];
-  const classes = useLiveQuery(() => db.classes.toArray(), []) ?? [];
-  const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
+  const membersQuery = useQuery({ queryKey: ["members"], queryFn: () => listMembersFn() });
+  const optionsQuery = useQuery({
+    queryKey: ["member-form-options"],
+    queryFn: () => listMemberFormOptionsFn(),
+  });
+  const members = membersQuery.data ?? [];
+  const households = optionsQuery.data?.households ?? [];
+  const cells = optionsQuery.data?.cells ?? [];
+  const classes = optionsQuery.data?.classes ?? [];
+  const users = optionsQuery.data?.users ?? [];
+
+  // Errors are handled by MemberDeleteDialog's own try/catch around
+  // mutateAsync — no onError here to avoid a duplicate toast.
+  const deleteMutation = useMutation({
+    mutationFn: (vars: { id: string; reason: string }) => deleteMemberFn({ data: vars }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["members"] });
+      toast.success("Member deleted");
+    },
+  });
+
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [joinedFrom, setJoinedFrom] = useState("");
@@ -239,7 +255,7 @@ function MembersPage() {
     if (statusFilter !== "all" && m.status !== statusFilter) return false;
     if (joinedFrom && (!m.joinDate || m.joinDate < joinedFrom)) return false;
     if (joinedTo && (!m.joinDate || m.joinDate > joinedTo)) return false;
-    if (!matchesBranchFilter(effectiveBranch, m.branchId)) return false;
+    if (!matchesBranchFilter(effectiveBranch, m.branchId ?? undefined)) return false;
     return true;
   });
 
@@ -310,11 +326,11 @@ function MembersPage() {
               <MemberDialog
                 key={editing?.id ?? "new"}
                 member={editing}
+                members={members}
                 households={households}
                 cells={cells}
                 classes={classes}
                 cellSingular={cellSingular}
-                currentUserId={session?.userId}
                 onClose={() => setOpen(false)}
               />
             </Dialog>
@@ -428,16 +444,7 @@ function MembersPage() {
                         <MemberDeleteDialog
                           member={m}
                           onConfirm={async (reason) => {
-                            await deleteMemberCascade(m.id);
-                            if (session) {
-                              await notifyMemberDeleted(
-                                `${m.firstName} ${m.lastName}`,
-                                reason,
-                                session.userId,
-                                m.createdBy,
-                              );
-                            }
-                            toast.success("Member deleted");
+                            await deleteMutation.mutateAsync({ id: m.id, reason });
                           }}
                         />
                       </div>
@@ -490,7 +497,7 @@ function DetailRow({
   className,
 }: {
   label: string;
-  value?: string;
+  value?: string | null;
   className?: string;
 }) {
   if (!value) return null;
@@ -654,32 +661,33 @@ function MemberDeleteDialog({
 
 function MemberDialog({
   member,
+  members,
   households,
   cells,
   classes,
   cellSingular,
-  currentUserId,
   onClose,
 }: {
   member: Member | null;
+  members: Member[];
   households: { id: string; name: string }[];
   cells: { id: string; name: string }[];
   classes: { id: string; name: string }[];
   cellSingular: string;
-  currentUserId: string | undefined;
   onClose: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [firstName, setFirstName] = useState(member?.firstName ?? "");
   const [lastName, setLastName] = useState(member?.lastName ?? "");
   const [phone, setPhone] = useState(member?.phone ?? "");
   const [email, setEmail] = useState(member?.email ?? "");
-  const [gender, setGender] = useState<Member["gender"]>(member?.gender);
+  const [gender, setGender] = useState<Member["gender"] | undefined>(member?.gender);
   const [birthMonth, setBirthMonth] = useState(member?.birthMonth ? String(member.birthMonth) : "");
   const [birthDay, setBirthDay] = useState(member?.birthDay ? String(member.birthDay) : "");
   const [birthYear, setBirthYear] = useState(member?.birthYear ? String(member.birthYear) : "");
   const [address, setAddress] = useState(member?.address ?? "");
   const [status, setStatus] = useState<MemberStatus>(member?.status ?? "active");
-  const [category, setCategory] = useState<MemberCategory | undefined>(member?.category);
+  const [category, setCategory] = useState<MemberCategory | null | undefined>(member?.category);
   const [categoryOther, setCategoryOther] = useState(member?.categoryOther ?? "");
   const [joinDate, setJoinDate] = useState(member?.joinDate ?? "");
   const [householdId, setHouseholdId] = useState(member?.householdId ?? "");
@@ -691,45 +699,47 @@ function MemberDialog({
   const categoryDescription = CATEGORIES.find((c) => c.value === category)?.description;
   const [duplicateMatches, setDuplicateMatches] = useState<DuplicateEmailMatch[]>([]);
 
-  async function doSave(data: Member) {
-    try {
-      await db.transaction("rw", [db.members, db.users, db.notifications], async () => {
-        await db.members.put(data);
-        if (!member && currentUserId) {
-          await notifyMemberAdded(data, currentUserId);
-        }
-      });
+  const saveMutation = useMutation({
+    mutationFn: (input: ReturnType<typeof buildInput>) =>
+      member
+        ? updateMemberFn({ data: { id: member.id, ...input } })
+        : createMemberFn({ data: input }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["members"] });
       toast.success(member ? "Member updated" : "Member added");
       onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save member");
-    }
-  }
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to save member"),
+  });
 
-  function buildData(): Member {
+  function buildInput() {
     return {
-      id: member?.id ?? uid(),
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       phone: phone || undefined,
       email: email || undefined,
-      gender,
+      gender: gender ?? undefined,
       birthMonth: birthMonth ? Number(birthMonth) : undefined,
       birthDay: birthDay ? Number(birthDay) : undefined,
       birthYear: birthYear ? Number(birthYear) : undefined,
       address: address || undefined,
       status,
-      category,
+      // The two legacy values ("new_member"/"convert") only ever exist on
+      // records already in the database — the picker below never offers
+      // them, so this is only reachable by re-saving an old record
+      // unchanged, and the server schema (memberInputSchema) doesn't accept
+      // them either. Not reachable on a fresh Postgres-backed org.
+      category: (category ?? undefined) as
+        | Exclude<MemberCategory, "new_member" | "convert">
+        | undefined,
       categoryOther: category === "other" ? categoryOther || undefined : undefined,
-      number: member?.number,
+      number: member?.number ?? undefined,
       joinDate: joinDate || undefined,
       householdId: householdId || undefined,
       cellId: cellId || undefined,
       classId: classId || undefined,
       notes: notes || undefined,
       branchId: branchId || undefined,
-      createdBy: member?.createdBy ?? currentUserId,
-      createdAt: member?.createdAt ?? Date.now(),
     };
   }
 
@@ -742,15 +752,19 @@ function MemberDialog({
       toast.error("Enter both a birth month and day, or leave both blank");
       return;
     }
-    const data = buildData();
-    if (data.email && data.email !== member?.email) {
-      const matches = await findEmailMatches(data.email, { memberId: member?.id });
+    const input = buildInput();
+    if (input.email && input.email !== member?.email) {
+      const matches = await findEmailMatches(input.email, { memberId: member?.id }, members);
       if (matches.length > 0) {
         setDuplicateMatches(matches);
         return;
       }
     }
-    await doSave(data);
+    try {
+      await saveMutation.mutateAsync(input);
+    } catch {
+      // surfaced via the mutation's onError above
+    }
   }
 
   return (
@@ -764,7 +778,7 @@ function MemberDialog({
         subject="member"
         onContinue={() => {
           setDuplicateMatches([]);
-          doSave(buildData());
+          saveMutation.mutate(buildInput());
         }}
       />
       <DialogContent className="max-w-2xl">

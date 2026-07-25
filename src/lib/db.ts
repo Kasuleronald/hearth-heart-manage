@@ -39,7 +39,13 @@ export interface PasswordResetToken {
 }
 
 export type MemberStatus =
-  "active" | "inactive" | "leader" | "deacon" | "elder" | "pastor" | "minister";
+  | "active"
+  | "inactive"
+  | "leader"
+  | "deacon"
+  | "elder"
+  | "pastor"
+  | "minister";
 // "new_member" and "convert" are older values kept only so existing records
 // still render (via a label fallback) — new records use the set below.
 export type MemberCategory =
@@ -614,9 +620,11 @@ export const MONTH_NAMES = [
 ];
 
 // "March 14" — or "March 14, 1990" only if a birth year was shared.
-export function formatBirthday(
-  m: Pick<Member, "birthMonth" | "birthDay" | "birthYear">,
-): string | undefined {
+export function formatBirthday(m: {
+  birthMonth?: number | null;
+  birthDay?: number | null;
+  birthYear?: number | null;
+}): string | undefined {
   if (!m.birthMonth || !m.birthDay) return undefined;
   const monthName = MONTH_NAMES[m.birthMonth - 1];
   return m.birthYear ? `${monthName} ${m.birthDay}, ${m.birthYear}` : `${monthName} ${m.birthDay}`;

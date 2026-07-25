@@ -1,8 +1,14 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { ArrowLeft, Hash } from "lucide-react";
-import { db, getNextMemberNumber, formatBirthday } from "@/lib/db";
+import { formatBirthday } from "@/lib/db";
+import {
+  getMemberFn,
+  listMemberFormOptionsFn,
+  nextMemberNumberFn,
+  assignMemberNumberFn,
+} from "@/server/members";
 import { useSession, canEditDeleteMembers, canAccessRecordBranch } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { PageHeader } from "@/components/page-header";
@@ -34,19 +40,25 @@ function MemberDetail() {
   const { id } = Route.useParams();
   const { session } = useSession();
   const { singular: cellSingular } = useCellTerm();
-  const member = useLiveQuery(() => db.members.get(id), [id]);
-  const household = useLiveQuery(
-    () => (member?.householdId ? db.households.get(member.householdId) : undefined),
-    [member?.householdId],
-  );
-  const cell = useLiveQuery(
-    () => (member?.cellId ? db.cells.get(member.cellId) : undefined),
-    [member?.cellId],
-  );
+  const memberQuery = useQuery({
+    queryKey: ["member", id],
+    queryFn: () => getMemberFn({ data: { id } }),
+    retry: false,
+  });
+  const optionsQuery = useQuery({
+    queryKey: ["member-form-options"],
+    queryFn: () => listMemberFormOptionsFn(),
+  });
 
-  if (member === undefined) return null;
-  if (!member) throw notFound();
-  if (session && !canAccessRecordBranch(session.branchId, member.branchId)) throw notFound();
+  if (memberQuery.isLoading || optionsQuery.isLoading) return null;
+  if (memberQuery.isError || !memberQuery.data) throw notFound();
+  const member = memberQuery.data;
+  const household = optionsQuery.data?.households.find((h) => h.id === member.householdId);
+  const cell = optionsQuery.data?.cells.find((c) => c.id === member.cellId);
+
+  if (session && !canAccessRecordBranch(session.branchId, member.branchId ?? undefined)) {
+    throw notFound();
+  }
 
   const canAssignNumber = session ? canEditDeleteMembers(session.role) : false;
 
@@ -67,7 +79,9 @@ function MemberDetail() {
               {member.number ?? "Unnumbered"}
             </Badge>
             <StatusBadge status={member.status} />
-            {canAssignNumber && <AssignNumberDialog memberId={member.id} current={member.number} />}
+            {canAssignNumber && (
+              <AssignNumberDialog memberId={member.id} current={member.number ?? undefined} />
+            )}
           </div>
         }
       />
@@ -125,32 +139,33 @@ function MemberDetail() {
 }
 
 function AssignNumberDialog({ memberId, current }: { memberId: string; current?: string }) {
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [number, setNumber] = useState("");
 
+  const assignMutation = useMutation({
+    mutationFn: (num: string) => assignMemberNumberFn({ data: { id: memberId, number: num } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["member", memberId] });
+      queryClient.invalidateQueries({ queryKey: ["members"] });
+      toast.success("Member number assigned");
+      setOpen(false);
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to assign number"),
+  });
+
   async function openDialog() {
-    setNumber(current ?? (await getNextMemberNumber()));
+    setNumber(current ?? (await nextMemberNumberFn()));
     setOpen(true);
   }
 
-  async function save() {
+  function save() {
     const trimmed = number.trim();
     if (!/^\d{3,}$/.test(trimmed)) {
       toast.error("Number must be at least 3 digits");
       return;
     }
-    try {
-      const existing = await db.members.where("number").equals(trimmed).first();
-      if (existing && existing.id !== memberId) {
-        toast.error(`Number ${trimmed} is already assigned to another member`);
-        return;
-      }
-      await db.members.update(memberId, { number: trimmed });
-      toast.success("Member number assigned");
-      setOpen(false);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to assign number");
-    }
+    assignMutation.mutate(trimmed);
   }
 
   return (

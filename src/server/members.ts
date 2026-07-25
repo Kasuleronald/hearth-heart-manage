@@ -3,7 +3,7 @@ import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "./db/client";
 import { members, households, cells, classes, users, notifications } from "./db/schema";
-import { requireSession } from "./auth";
+import { requireSession, AuthError } from "./auth";
 
 const memberStatusValues = [
   "active",
@@ -52,6 +52,58 @@ export const listMembersFn = createServerFn({ method: "GET" }).handler(async () 
     tx.select().from(members).orderBy(asc(members.lastName)),
   );
 });
+
+export const getMemberFn = createServerFn({ method: "GET" })
+  .validator(z.object({ id: z.string().uuid() }))
+  .handler(async ({ data }) => {
+    const session = await requireSession();
+    const member = await withTenant(session.organizationId, (tx) =>
+      tx.query.members.findFirst({ where: eq(members.id, data.id) }),
+    );
+    if (!member) throw new AuthError("Member not found");
+    return member;
+  });
+
+// Highest existing numeric member number + 1, zero-padded to 3 digits —
+// just a suggestion; assignMemberNumberFn re-checks uniqueness at save time.
+export const nextMemberNumberFn = createServerFn({ method: "GET" }).handler(async () => {
+  const session = await requireSession();
+  const rows = await withTenant(session.organizationId, (tx) =>
+    tx.select({ number: members.number }).from(members),
+  );
+  const highest = rows.reduce((max, r) => {
+    const n = r.number ? parseInt(r.number, 10) : NaN;
+    return Number.isNaN(n) ? max : Math.max(max, n);
+  }, 0);
+  return String(highest + 1).padStart(3, "0");
+});
+
+const assignMemberNumberSchema = z.object({
+  id: z.string().uuid(),
+  number: z.string().regex(/^\d{3,}$/, "Number must be at least 3 digits"),
+});
+
+export const assignMemberNumberFn = createServerFn({ method: "POST" })
+  .validator(assignMemberNumberSchema)
+  .handler(async ({ data }) => {
+    const session = await requireSession();
+    return withTenant(session.organizationId, async (tx) => {
+      const clashing = await tx
+        .select({ id: members.id })
+        .from(members)
+        .where(eq(members.number, data.number));
+      if (clashing.some((m) => m.id !== data.id)) {
+        throw new AuthError(`Number ${data.number} is already assigned to another member`);
+      }
+      const [member] = await tx
+        .update(members)
+        .set({ number: data.number })
+        .where(eq(members.id, data.id))
+        .returning();
+      if (!member) throw new AuthError("Member not found");
+      return member;
+    });
+  });
 
 const memberInputSchema = z.object({
   firstName: z.string().min(1),

@@ -10,9 +10,16 @@ export interface DuplicateEmailMatch {
 // Case-insensitive lookup for an email already in use by another User or
 // Member — used to prompt "is this the same person?" before saving, rather
 // than silently allowing (or bluntly rejecting) a duplicate.
+//
+// Members now live on the real backend (src/server/members.ts), not Dexie —
+// pass the caller's already-fetched member list via `members` so this checks
+// real data. Callers that don't (Users page, not yet migrated) only get the
+// user-side check; checking Dexie's `members` table here would silently
+// match against data that's no longer kept in sync.
 export async function findEmailMatches(
   email: string,
   exclude: { userId?: string; memberId?: string } = {},
+  members: { id: string; firstName: string; lastName: string; email?: string | null }[] = [],
 ): Promise<DuplicateEmailMatch[]> {
   const normalized = email.trim().toLowerCase();
   if (!normalized) return [];
@@ -32,7 +39,6 @@ export async function findEmailMatches(
     }
   }
 
-  const members = await db.members.toArray();
   for (const m of members) {
     if (m.id === exclude.memberId) continue;
     if (m.email && m.email.toLowerCase() === normalized) {
