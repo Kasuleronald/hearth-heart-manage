@@ -14,6 +14,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AcceptInviteRouteImport } from './routes/accept-invite'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SuperadminIndexRouteImport } from './routes/superadmin.index'
 import { Route as SuperadminOrgsRouteImport } from './routes/superadmin.orgs'
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated.users'
 import { Route as AuthenticatedTestimoniesRouteImport } from './routes/_authenticated.testimonies'
@@ -62,6 +63,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const SuperadminIndexRoute = SuperadminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SuperadminRoute,
 } as any)
 const SuperadminOrgsRoute = SuperadminOrgsRouteImport.update({
   id: '/orgs',
@@ -213,6 +219,7 @@ export interface FileRoutesByFullPath {
   '/testimonies': typeof AuthenticatedTestimoniesRoute
   '/users': typeof AuthenticatedUsersRoute
   '/superadmin/orgs': typeof SuperadminOrgsRoute
+  '/superadmin/': typeof SuperadminIndexRoute
   '/cells/$id': typeof AuthenticatedCellsIdRoute
   '/classes/$id': typeof AuthenticatedClassesIdRoute
   '/events/$id': typeof AuthenticatedEventsIdRoute
@@ -222,7 +229,6 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/accept-invite': typeof AcceptInviteRoute
   '/login': typeof LoginRoute
-  '/superadmin': typeof SuperadminRouteWithChildren
   '/branches': typeof AuthenticatedBranchesRoute
   '/cell-reports': typeof AuthenticatedCellReportsRoute
   '/cells': typeof AuthenticatedCellsRouteWithChildren
@@ -243,6 +249,7 @@ export interface FileRoutesByTo {
   '/testimonies': typeof AuthenticatedTestimoniesRoute
   '/users': typeof AuthenticatedUsersRoute
   '/superadmin/orgs': typeof SuperadminOrgsRoute
+  '/superadmin': typeof SuperadminIndexRoute
   '/cells/$id': typeof AuthenticatedCellsIdRoute
   '/classes/$id': typeof AuthenticatedClassesIdRoute
   '/events/$id': typeof AuthenticatedEventsIdRoute
@@ -275,6 +282,7 @@ export interface FileRoutesById {
   '/_authenticated/testimonies': typeof AuthenticatedTestimoniesRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
   '/superadmin/orgs': typeof SuperadminOrgsRoute
+  '/superadmin/': typeof SuperadminIndexRoute
   '/_authenticated/cells/$id': typeof AuthenticatedCellsIdRoute
   '/_authenticated/classes/$id': typeof AuthenticatedClassesIdRoute
   '/_authenticated/events/$id': typeof AuthenticatedEventsIdRoute
@@ -307,6 +315,7 @@ export interface FileRouteTypes {
     | '/testimonies'
     | '/users'
     | '/superadmin/orgs'
+    | '/superadmin/'
     | '/cells/$id'
     | '/classes/$id'
     | '/events/$id'
@@ -316,7 +325,6 @@ export interface FileRouteTypes {
     | '/'
     | '/accept-invite'
     | '/login'
-    | '/superadmin'
     | '/branches'
     | '/cell-reports'
     | '/cells'
@@ -337,6 +345,7 @@ export interface FileRouteTypes {
     | '/testimonies'
     | '/users'
     | '/superadmin/orgs'
+    | '/superadmin'
     | '/cells/$id'
     | '/classes/$id'
     | '/events/$id'
@@ -368,6 +377,7 @@ export interface FileRouteTypes {
     | '/_authenticated/testimonies'
     | '/_authenticated/users'
     | '/superadmin/orgs'
+    | '/superadmin/'
     | '/_authenticated/cells/$id'
     | '/_authenticated/classes/$id'
     | '/_authenticated/events/$id'
@@ -418,6 +428,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/superadmin/': {
+      id: '/superadmin/'
+      path: '/'
+      fullPath: '/superadmin/'
+      preLoaderRoute: typeof SuperadminIndexRouteImport
+      parentRoute: typeof SuperadminRoute
     }
     '/superadmin/orgs': {
       id: '/superadmin/orgs'
@@ -684,10 +701,12 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 
 interface SuperadminRouteChildren {
   SuperadminOrgsRoute: typeof SuperadminOrgsRoute
+  SuperadminIndexRoute: typeof SuperadminIndexRoute
 }
 
 const SuperadminRouteChildren: SuperadminRouteChildren = {
   SuperadminOrgsRoute: SuperadminOrgsRoute,
+  SuperadminIndexRoute: SuperadminIndexRoute,
 }
 
 const SuperadminRouteWithChildren = SuperadminRoute._addFileChildren(
