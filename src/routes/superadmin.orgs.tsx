@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { getCurrentSessionFn, logoutFn } from "@/server/auth";
+import { ChangePlatformPasswordDialog } from "@/components/change-platform-password-dialog";
 import {
   listOrganizationsFn,
   createOrganizationFn,
@@ -125,6 +126,7 @@ function SuperAdminOrgsPage() {
               </DialogTrigger>
               <NewOrganizationDialog onClose={() => setOpen(false)} />
             </Dialog>
+            <ChangePlatformPasswordDialog />
             <Button variant="ghost" size="icon" onClick={() => logoutMutation.mutate()}>
               <LogOut className="h-4 w-4" />
             </Button>

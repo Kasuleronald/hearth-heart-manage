@@ -223,6 +223,27 @@ export const platformLoginFn = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
+const changePlatformAdminPasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8),
+});
+
+export const changePlatformAdminPasswordFn = createServerFn({ method: "POST" })
+  .validator(changePlatformAdminPasswordSchema)
+  .handler(async ({ data }) => {
+    const session = await requirePlatformSession();
+    const admin = await db.query.platformAdmins.findFirst({
+      where: eq(platformAdmins.id, session.platformAdminId),
+    });
+    if (!admin) throw new AuthError("Account not found");
+    const ok = await verifyPassword(admin.passwordHash, data.currentPassword);
+    if (!ok) throw new AuthError("Current password is incorrect");
+
+    const passwordHash = await hashPassword(data.newPassword);
+    await db.update(platformAdmins).set({ passwordHash }).where(eq(platformAdmins.id, admin.id));
+    return { ok: true as const };
+  });
+
 export const logoutFn = createServerFn({ method: "POST" }).handler(async () => {
   const sessionId = getCookie(SESSION_COOKIE);
   if (sessionId) await db.delete(sessions).where(eq(sessions.id, sessionId));
