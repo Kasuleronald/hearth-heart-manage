@@ -29,14 +29,23 @@ In the OCI console: **Compute → Instances → Create Instance**.
 
 SSH in: `ssh ubuntu@<your-vm-public-ip>`
 
-## 2. Install Node, Postgres, Nginx
+## 2. Install Node, Bun, Postgres, Nginx
 
 ```bash
 sudo apt update && sudo apt upgrade -y
 
-# Node LTS
+# Node LTS (needed at runtime; bun is only used for install/build below)
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
+
+# Bun — this project's canonical package manager (bun.lock is the committed
+# lockfile; a plain `npm install` has no lockfile to pin against and will
+# ERESOLVE-fail re-resolving the tree fresh, e.g. @hookform/resolvers's
+# optional valibot peer conflicting with a different transitive valibot)
+sudo apt install -y unzip
+curl -fsSL https://bun.sh/install | bash
+# adds ~/.bun/bin to PATH via ~/.bashrc — `source ~/.bashrc` or start a new
+# shell before using `bun` below
 
 # Postgres
 sudo apt install -y postgresql postgresql-contrib
@@ -51,10 +60,10 @@ sudo apt install -y nginx
 sudo -u postgres psql -c "CREATE DATABASE mychurch;"
 ```
 
-Clone/copy this repo onto the VM, `npm install`, then set up `.env` (see
-`.env.example`) — for local-box Postgres, `DATABASE_URL_MIGRATE` uses the
-`postgres` superuser, `DATABASE_URL` uses the `app_user` role you're about
-to create:
+Clone/copy this repo onto the VM, `bun install --frozen-lockfile`, then set
+up `.env` (see `.env.example`) — for local-box Postgres,
+`DATABASE_URL_MIGRATE` uses the `postgres` superuser, `DATABASE_URL` uses
+the `app_user` role you're about to create:
 
 ```bash
 cp .env.example .env
@@ -63,20 +72,20 @@ cp .env.example .env
 # file), NODE_ENV=production
 ```
 
-Run migrations (creates every table, RLS policy, and — since `app_user` is
-declared `.existing()` in the schema — expects you to create that role
-yourself next):
-
-```bash
-npm run db:migrate
-```
-
-Then create the `app_user` role and grant it DML-only access (edit the
-password in the script first, matching what you put in `.env`'s
-`DATABASE_URL`):
+Create the `app_user` role first (edit the password in the script to match
+what you put in `.env`'s `DATABASE_URL`) — the migration below creates RLS
+policies scoped `TO "app_user"`, which requires the role to already exist:
 
 ```bash
 sudo -u postgres psql -d mychurch -f scripts/db-setup.sql
+```
+
+Then run migrations (creates every table and RLS policy; also re-grants
+DML access on the newly created tables — safe to run `db-setup.sql` again
+after this if you ever want to double check grants):
+
+```bash
+bun run db:migrate
 ```
 
 Create the first SuperAdmin account (platform-level — the person who can
@@ -86,13 +95,13 @@ onboard churches; separate from any church's own Admin):
 PLATFORM_ADMIN_EMAIL=you@example.com \
 PLATFORM_ADMIN_PASSWORD='choose-a-strong-one' \
 PLATFORM_ADMIN_NAME="Your Name" \
-npm run db:seed-admin
+bun run db:seed-admin
 ```
 
 ## 4. Build and run the app
 
 ```bash
-npm run build
+bun run build
 ```
 
 This defaults to the `node-server` Nitro preset (no `NITRO_PRESET` env var
@@ -167,9 +176,9 @@ a systemd timer it installs.
 
 ```bash
 git pull
-npm install
-npm run build
-npm run db:migrate   # only if the schema changed
+bun install --frozen-lockfile
+bun run build
+bun run db:migrate   # only if the schema changed
 sudo systemctl restart mychurch
 ```
 
