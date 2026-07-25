@@ -20,12 +20,25 @@ In the OCI console: **Compute → Instances → Create Instance**.
 - Image: **Ubuntu 24.04** (or 22.04) — most mainstream Node/Postgres
   package/documentation support.
 - Add your SSH public key during creation.
-- **Networking — the classic Oracle gotcha**: Oracle's cloud-level firewall
-  (the VM's attached Security List / Network Security Group) blocks ports
-  80 and 443 by default, *even once the OS-level firewall inside the VM is
-  open*. In the console: your VNIC's subnet → Security Lists → Add Ingress
-  Rules for `0.0.0.0/0` → TCP destination port `80`, and again for `443`.
-  Without this, Nginx will be listening but nothing external can reach it.
+- **Networking — two separate firewalls, both default-closed for 80/443**:
+  1. Oracle's cloud-level firewall (the VM's attached Security List /
+     Network Security Group). In the console: your VNIC's subnet →
+     Security Lists → Add Ingress Rules for `0.0.0.0/0` → TCP destination
+     port `80`, and again for `443`.
+  2. **Also** the VM's own `iptables`, which on Oracle's stock Ubuntu image
+     only `ACCEPT`s new inbound connections on port 22 by default and
+     `REJECT`s everything else — opening the Security List alone is not
+     enough. On the VM:
+     ```bash
+     sudo iptables -I INPUT 5 -p tcp -m state --state NEW -m tcp --dport 80 -j ACCEPT
+     sudo iptables -I INPUT 6 -p tcp -m state --state NEW -m tcp --dport 443 -j ACCEPT
+     sudo apt install -y iptables-persistent   # persists the rules across reboot
+     ```
+     (Insert position `5`/`6` assumes the stock rule order — run
+     `sudo iptables -L INPUT -n --line-numbers` first and insert just above
+     the final `REJECT` line if it differs.)
+  Both must be open — Nginx can be listening correctly and still be
+  completely unreachable from outside if either layer blocks it.
 
 SSH in: `ssh ubuntu@<your-vm-public-ip>`
 
