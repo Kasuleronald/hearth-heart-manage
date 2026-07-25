@@ -37,8 +37,8 @@ In the OCI console: **Compute → Instances → Create Instance**.
      (Insert position `5`/`6` assumes the stock rule order — run
      `sudo iptables -L INPUT -n --line-numbers` first and insert just above
      the final `REJECT` line if it differs.)
-  Both must be open — Nginx can be listening correctly and still be
-  completely unreachable from outside if either layer blocks it.
+     Both must be open — Nginx can be listening correctly and still be
+     completely unreachable from outside if either layer blocks it.
 
 SSH in: `ssh ubuntu@<your-vm-public-ip>`
 
@@ -89,6 +89,11 @@ cp .env.example .env
 # Secure, the browser silently drops it over plain HTTP, and login will
 # appear to succeed (URL changes) but no session ever sticks. Remove this
 # once certbot is set up.
+#
+# Also set APP_URL (your site's public base URL) and, optionally, the
+# SMTP_* vars so invite/reset emails actually get sent instead of just
+# showing as a copyable link in the SuperAdmin UI — see the comments in
+# .env.example for Gmail App Password setup.
 ```
 
 Create the `app_user` role first (edit the password in the script to match
@@ -203,9 +208,11 @@ sudo systemctl restart mychurch
 
 ## What's NOT wired up yet
 
-- **Email delivery**: invite links and password-reset tokens are generated
-  server-side but not emailed — relay them out-of-band for now (shown
-  directly in the SuperAdmin UI after creating an organization).
+- **Email delivery**: SuperAdmin invite/reset links are emailed via SMTP if
+  `APP_URL` and the `SMTP_*` vars are set (see `.env.example`); otherwise
+  they just show as a copyable link in the SuperAdmin UI. There's no email
+  delivery for in-church users yet (e.g. an Admin resetting another user's
+  password) — that flow still relies on relaying a code out-of-band.
 - **The in-church app itself** (dashboard, members, cells, givings, …)
   still runs on browser-local IndexedDB — only the platform-level SuperAdmin
   flow (`/superadmin`) and the Members module's server-side data layer are

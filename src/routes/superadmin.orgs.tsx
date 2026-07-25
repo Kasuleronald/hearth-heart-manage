@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Shield, Plus, LogOut, Copy } from "lucide-react";
+import { Loader2, Shield, Plus, LogOut, Copy, Pencil, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +27,8 @@ import { ChangePlatformPasswordDialog } from "@/components/change-platform-passw
 import {
   listOrganizationsFn,
   createOrganizationFn,
+  updateOrganizationFn,
+  resetOrgAdminPasswordFn,
   suspendOrganizationFn,
   reactivateOrganizationFn,
   disableOrganizationFn,
@@ -44,10 +46,18 @@ const STATUS_STYLE: Record<string, string> = {
   disabled: "bg-destructive/15 text-destructive",
 };
 
+type OrgListItem = Awaited<ReturnType<typeof listOrganizationsFn>>[number];
+
 function SuperAdminOrgsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [editingOrg, setEditingOrg] = useState<OrgListItem | null>(null);
+  const [resetResult, setResetResult] = useState<{
+    link: string;
+    emailSent: boolean;
+    adminEmail: string;
+  } | null>(null);
 
   const sessionQuery = useQuery({
     queryKey: ["platform-session"],
@@ -85,6 +95,17 @@ function SuperAdminOrgsPage() {
       toast.success("Status updated");
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to update status"),
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: (vars: { adminUserId: string; adminEmail: string }) =>
+      resetOrgAdminPasswordFn({ data: { adminUserId: vars.adminUserId } }),
+    onSuccess: (result, vars) => {
+      const link = `${window.location.origin}/accept-invite?token=${result.resetToken}`;
+      setResetResult({ link, emailSent: result.emailSent, adminEmail: vars.adminEmail });
+      toast.success(result.emailSent ? "Reset link emailed" : "Reset link generated");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to reset password"),
   });
 
   if (
@@ -142,15 +163,49 @@ function SuperAdminOrgsPage() {
                     <h3 className="font-display text-lg font-semibold">{org.name}</h3>
                     <p className="mt-1 text-xs capitalize text-muted-foreground">{org.type}</p>
                   </div>
-                  <Badge className={`border-0 capitalize ${STATUS_STYLE[org.status] ?? ""}`}>
-                    {org.status}
-                  </Badge>
+                  <div className="flex items-center gap-1">
+                    <Badge className={`border-0 capitalize ${STATUS_STYLE[org.status] ?? ""}`}>
+                      {org.status}
+                    </Badge>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      title="Edit organization"
+                      aria-label="Edit organization"
+                      onClick={() => setEditingOrg(org)}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
                 <div className="mt-3 text-xs text-muted-foreground">
                   {org.admins.length === 0 ? (
                     "No admin yet"
                   ) : (
-                    <>Admin: {org.admins.map((a) => a.fullName).join(", ")}</>
+                    <ul className="space-y-1">
+                      {org.admins.map((a) => (
+                        <li key={a.id} className="flex items-center justify-between gap-2">
+                          <span className="truncate">Admin: {a.fullName}</span>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6 shrink-0"
+                            title="Reset password"
+                            aria-label={`Reset password for ${a.fullName}`}
+                            disabled={resetPasswordMutation.isPending}
+                            onClick={() =>
+                              resetPasswordMutation.mutate({
+                                adminUserId: a.id,
+                                adminEmail: a.email,
+                              })
+                            }
+                          >
+                            <KeyRound className="h-3.5 w-3.5" />
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
                 <div className="mt-4 flex gap-2">
@@ -202,7 +257,122 @@ function SuperAdminOrgsPage() {
           )}
         </div>
       </div>
+
+      <Dialog open={!!editingOrg} onOpenChange={(o) => !o && setEditingOrg(null)}>
+        {editingOrg && (
+          <EditOrganizationDialog org={editingOrg} onClose={() => setEditingOrg(null)} />
+        )}
+      </Dialog>
+
+      <Dialog open={!!resetResult} onOpenChange={(o) => !o && setResetResult(null)}>
+        {resetResult && (
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="font-display">Password reset</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              {resetResult.emailSent ? (
+                <>
+                  An email was sent to {resetResult.adminEmail}. You can also share the link below.
+                </>
+              ) : (
+                <>
+                  Send this link to {resetResult.adminEmail} so they can set a new password. Email
+                  delivery isn't configured — relay it however works.
+                </>
+              )}{" "}
+              It expires in 1 hour.
+            </p>
+            <div className="flex items-center gap-2">
+              <Input readOnly value={resetResult.link} />
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                onClick={() => {
+                  navigator.clipboard.writeText(resetResult.link);
+                  toast.success("Copied");
+                }}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setResetResult(null)}>Done</Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
+      </Dialog>
     </div>
+  );
+}
+
+function EditOrganizationDialog({ org, onClose }: { org: OrgListItem; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState(org.name);
+  const [type, setType] = useState<"church" | "ministry" | "organization">(
+    org.type as "church" | "ministry" | "organization",
+  );
+  const [timezone, setTimezone] = useState(org.timezone ?? "");
+
+  const updateMutation = useMutation({
+    mutationFn: () =>
+      updateOrganizationFn({
+        data: { organizationId: org.id, name, type, timezone: timezone || undefined },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["organizations"] });
+      toast.success("Organization updated");
+      onClose();
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to update"),
+  });
+
+  return (
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle className="font-display">Edit organization</DialogTitle>
+      </DialogHeader>
+      <div className="space-y-4">
+        <div className="space-y-1.5">
+          <Label>Name</Label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Type</Label>
+          <Select value={type} onValueChange={(v) => setType(v as typeof type)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="church">Church</SelectItem>
+              <SelectItem value="ministry">Ministry</SelectItem>
+              <SelectItem value="organization">Organization</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Timezone</Label>
+          <Input
+            value={timezone}
+            onChange={(e) => setTimezone(e.target.value)}
+            placeholder="Africa/Kampala"
+          />
+        </div>
+      </div>
+      <DialogFooter>
+        <Button variant="ghost" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          disabled={!name.trim() || updateMutation.isPending}
+          onClick={() => updateMutation.mutate()}
+        >
+          {updateMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Save
+        </Button>
+      </DialogFooter>
+    </DialogContent>
   );
 }
 
@@ -222,7 +392,9 @@ function NewOrganizationDialog({ onClose }: { onClose: () => void }) {
       const link = `${window.location.origin}/accept-invite?token=${result.inviteToken}`;
       setInviteLink(link);
       setEmailSent(result.emailSent);
-      toast.success(result.emailSent ? "Organization created — invite emailed" : "Organization created");
+      toast.success(
+        result.emailSent ? "Organization created — invite emailed" : "Organization created",
+      );
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to create"),
   });

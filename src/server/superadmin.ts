@@ -110,6 +110,59 @@ export const createOrganizationFn = createServerFn({ method: "POST" })
     };
   });
 
+const updateOrganizationSchema = z.object({
+  organizationId: z.string().uuid(),
+  name: z.string().min(2),
+  type: z.enum(["church", "ministry", "organization"]),
+  timezone: z.string().optional(),
+});
+
+export const updateOrganizationFn = createServerFn({ method: "POST" })
+  .validator(updateOrganizationSchema)
+  .handler(async ({ data }) => {
+    await requirePlatformSession();
+    const [org] = await db
+      .update(organizations)
+      .set({ name: data.name.trim(), type: data.type, timezone: data.timezone || null })
+      .where(eq(organizations.id, data.organizationId))
+      .returning();
+    if (!org) throw new AuthError("Organization not found");
+    return { organization: org };
+  });
+
+const resetAdminPasswordSchema = z.object({ adminUserId: z.string().uuid() });
+
+// Lets a SuperAdmin get a locked-out org Admin back in, without needing to
+// know their current password — generates a fresh set-password token via
+// the same mechanism as a brand-new org's first invite (createResetToken),
+// and emails it the same way if SMTP is configured.
+export const resetOrgAdminPasswordFn = createServerFn({ method: "POST" })
+  .validator(resetAdminPasswordSchema)
+  .handler(async ({ data }) => {
+    await requirePlatformSession();
+    const admin = await db.query.users.findFirst({ where: eq(users.id, data.adminUserId) });
+    if (!admin) throw new AuthError("Admin not found");
+    const org = await db.query.organizations.findFirst({
+      where: eq(organizations.id, admin.organizationId),
+    });
+    if (!org) throw new AuthError("Organization not found");
+
+    const token = await createResetToken(admin.id, admin.organizationId);
+    const baseUrl = (process.env.APP_URL ?? "").replace(/\/$/, "");
+    const resetLink = `${baseUrl}/accept-invite?token=${token}`;
+    const { sent } = baseUrl
+      ? await sendInviteEmail({
+          to: admin.email,
+          adminName: admin.fullName,
+          orgName: org.name,
+          inviteLink: resetLink,
+          kind: "reset",
+        })
+      : { sent: false };
+
+    return { resetToken: token, emailSent: sent };
+  });
+
 const orgIdSchema = z.object({ organizationId: z.string().uuid() });
 
 export const suspendOrganizationFn = createServerFn({ method: "POST" })

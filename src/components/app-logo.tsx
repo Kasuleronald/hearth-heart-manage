@@ -6,11 +6,7 @@ export function AppLogo({ className }: { className?: string }) {
   return (
     <>
       <img src="/logo-light.png" alt="My Church" className={`${className} dark:hidden`} />
-      <img
-        src="/logo-dark.png"
-        alt="My Church"
-        className={`${className} hidden dark:block`}
-      />
+      <img src="/logo-dark.png" alt="My Church" className={`${className} hidden dark:block`} />
     </>
   );
 }

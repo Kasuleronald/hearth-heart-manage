@@ -15,12 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  consumePasswordResetToken,
-  getLoginLockoutMs,
-  getSession,
-  login,
-} from "@/lib/auth";
+import { consumePasswordResetToken, getLoginLockoutMs, getSession, login } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { toast } from "sonner";
 

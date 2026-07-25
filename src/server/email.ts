@@ -27,27 +27,42 @@ export const sendInviteEmail = createServerOnlyFn(
     adminName: string;
     orgName: string;
     inviteLink: string;
+    kind?: "invite" | "reset";
   }): Promise<{ sent: boolean }> => {
     const transport = getTransport();
+    const label = params.kind === "reset" ? "password reset" : "invite";
     if (!transport) {
       console.warn(
-        `[email] SMTP not configured — invite link for ${params.to} was not emailed: ${params.inviteLink}`,
+        `[email] SMTP not configured — ${label} link for ${params.to} was not emailed: ${params.inviteLink}`,
       );
       return { sent: false };
     }
 
     const from = process.env.SMTP_FROM || process.env.SMTP_USER!;
+    const subject =
+      params.kind === "reset"
+        ? `Reset your My Church password for ${params.orgName}`
+        : `You've been added as Admin of ${params.orgName} on My Church`;
+    const intro =
+      params.kind === "reset"
+        ? `A password reset was requested for your account on <strong>${params.orgName}</strong>.`
+        : `You've been set up as the Administrator for <strong>${params.orgName}</strong> on My Church.`;
+    const introText =
+      params.kind === "reset"
+        ? `A password reset was requested for your account on ${params.orgName}.`
+        : `You've been set up as the Administrator for ${params.orgName} on My Church.`;
+    const cta = params.kind === "reset" ? "Set a new password" : "Set your password to get started";
     try {
       await transport.sendMail({
         from,
         to: params.to,
-        subject: `You've been added as Admin of ${params.orgName} on My Church`,
-        text: `Hi ${params.adminName},\n\nYou've been set up as the Administrator for ${params.orgName} on My Church.\n\nSet your password to get started: ${params.inviteLink}\n\nThis link expires in 1 hour.`,
-        html: `<p>Hi ${params.adminName},</p><p>You've been set up as the Administrator for <strong>${params.orgName}</strong> on My Church.</p><p><a href="${params.inviteLink}">Set your password to get started</a></p><p>This link expires in 1 hour.</p>`,
+        subject,
+        text: `Hi ${params.adminName},\n\n${introText}\n\n${cta}: ${params.inviteLink}\n\nThis link expires in 1 hour. If you didn't request this, you can ignore this email.`,
+        html: `<p>Hi ${params.adminName},</p><p>${intro}</p><p><a href="${params.inviteLink}">${cta}</a></p><p>This link expires in 1 hour. If you didn't request this, you can ignore this email.</p>`,
       });
       return { sent: true };
     } catch (err) {
-      console.error(`[email] Failed to send invite email to ${params.to}:`, err);
+      console.error(`[email] Failed to send ${label} email to ${params.to}:`, err);
       return { sent: false };
     }
   },
