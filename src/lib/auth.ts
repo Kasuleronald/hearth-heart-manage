@@ -1,20 +1,39 @@
-import { useEffect, useState, useCallback } from "react";
+import { useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { db, uid, type Role, type User } from "./db";
+import { loginFn, logoutFn, getCurrentSessionFn, changeUserPasswordFn } from "@/server/auth";
 
-const SESSION_KEY = "mychurch.session";
-const IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
-const TOUCH_THROTTLE_MS = 60 * 1000; // don't rewrite storage more than once a minute
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
+// Real, server-side session (see src/server/auth.ts) — idle-timeout and
+// expiry are enforced there now, not client-side. Shape kept close to the
+// old local-only Session so the ~25 files reading session.role/branchId/
+// etc. didn't need individual changes when this stopped being localStorage.
 export interface Session {
   userId: string;
+  organizationId: string;
+  organizationName: string;
   email: string;
   fullName: string;
   role: Role;
   branchId?: string; // undefined = church-wide access; set = scoped to that branch
   financeTier?: "A"; // elevated finance powers granted to a leader/cell_leader
   needsEmailUpdate?: boolean; // a placeholder email was auto-assigned — see §14
-  expiresAt: number;
+}
+
+function toSession(data: Awaited<ReturnType<typeof getCurrentSessionFn>>): Session | null {
+  if (!data || data.kind !== "user") return null;
+  return {
+    userId: data.userId,
+    organizationId: data.organizationId,
+    organizationName: data.organizationName,
+    email: data.email,
+    fullName: data.fullName,
+    role: data.role,
+    branchId: data.branchId,
+    financeTier: data.financeTier,
+    needsEmailUpdate: data.needsEmailUpdate,
+  };
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -64,48 +83,6 @@ export async function verifyPassword(password: string, stored: string): Promise<
   if (!saltHex || !hash) return false;
   const check = await pbkdf2(password, saltHex);
   return check === hash;
-}
-
-// ---- Session storage ----
-export function getSession(): Session | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    const s = JSON.parse(raw) as Session;
-    if (!s.expiresAt || s.expiresAt < Date.now()) {
-      localStorage.removeItem(SESSION_KEY);
-      return null;
-    }
-    return s;
-  } catch {
-    return null;
-  }
-}
-export function setSession(s: Session | null) {
-  if (typeof window === "undefined") return;
-  if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s));
-  else localStorage.removeItem(SESSION_KEY);
-  window.dispatchEvent(new Event("mychurch:session"));
-}
-
-let lastTouch = 0;
-// Extends the session's idle-timeout window; called on user activity.
-export function touchSession() {
-  if (typeof window === "undefined") return;
-  const now = Date.now();
-  if (now - lastTouch < TOUCH_THROTTLE_MS) return;
-  const raw = localStorage.getItem(SESSION_KEY);
-  if (!raw) return;
-  try {
-    const s = JSON.parse(raw) as Session;
-    if (!s.expiresAt || s.expiresAt < now) return;
-    lastTouch = now;
-    s.expiresAt = now + IDLE_TIMEOUT_MS;
-    localStorage.setItem(SESSION_KEY, JSON.stringify(s));
-  } catch {
-    // ignore malformed session
-  }
 }
 
 // ---- Login throttling ----
@@ -197,51 +174,34 @@ export async function createUser(input: {
   return user;
 }
 
+// Real, server-side login against Postgres (src/server/auth.ts's loginFn) —
+// the client-side throttle above still wraps it as a defense-in-depth layer
+// the server doesn't have yet.
 export async function login(email: string, password: string): Promise<Session> {
   const lockoutMs = getLoginLockoutMs(email);
   if (lockoutMs > 0) {
     throw new Error(`Too many attempts. Try again in ${Math.ceil(lockoutMs / 1000)}s.`);
   }
-  const u = await db.users.where("email").equals(email.trim().toLowerCase()).first();
-  if (!u) {
+  try {
+    await loginFn({ data: { email, password } });
+  } catch (err) {
     recordFailedLogin(email);
-    throw new Error("Invalid credentials");
-  }
-  const ok = await verifyPassword(password, u.passwordHash);
-  if (!ok) {
-    recordFailedLogin(email);
-    throw new Error("Invalid credentials");
+    throw err;
   }
   clearFailedLogins(email);
-  const s: Session = {
-    userId: u.id,
-    email: u.email,
-    fullName: u.fullName,
-    role: u.role,
-    branchId: u.branchId,
-    financeTier: u.financeTier,
-    needsEmailUpdate: u.needsEmailUpdate,
-    expiresAt: Date.now() + IDLE_TIMEOUT_MS,
-  };
-  setSession(s);
-  return s;
+  const session = toSession(await getCurrentSessionFn());
+  if (!session) throw new Error("Signed in, but couldn't load your session — try reloading");
+  return session;
 }
 
-export function logout() {
-  setSession(null);
-}
-
+// `userId` is kept (unused) so callers don't need to change — the real
+// backend identifies the account from the session cookie instead.
 export async function changePassword(
-  userId: string,
+  _userId: string,
   currentPassword: string,
   newPassword: string,
 ): Promise<void> {
-  const u = await db.users.get(userId);
-  if (!u) throw new Error("User not found");
-  const ok = await verifyPassword(currentPassword, u.passwordHash);
-  if (!ok) throw new Error("Current password is incorrect");
-  if (newPassword.length < 8) throw new Error("Password must be at least 8 characters");
-  await db.users.update(userId, { passwordHash: await hashPassword(newPassword) });
+  await changeUserPasswordFn({ data: { currentPassword, newPassword } });
 }
 
 // Admin-only: reset another user's password without knowing the old one.
@@ -271,51 +231,18 @@ export async function createPasswordResetToken(
   return { token, user: u };
 }
 
-export async function consumePasswordResetToken(token: string, newPassword: string): Promise<void> {
-  const rec = await db.passwordResetTokens.get(token.trim());
-  if (!rec || rec.used || rec.expiresAt < Date.now()) {
-    throw new Error("This reset code is invalid or has expired");
-  }
-  if (newPassword.length < 8) throw new Error("Password must be at least 8 characters");
-  // Hash outside the transaction — WebCrypto isn't Dexie-tracked, so awaiting
-  // it mid-transaction risks the transaction auto-committing early.
-  const passwordHash = await hashPassword(newPassword);
-  await db.transaction("rw", [db.users, db.passwordResetTokens], async () => {
-    await db.users.update(rec.userId, { passwordHash });
-    await db.passwordResetTokens.update(token, { used: true });
-  });
-}
-
 // ---- React hook ----
 export function useSession() {
-  const [session, setState] = useState<Session | null>(null);
-  const [ready, setReady] = useState(false);
+  const queryClient = useQueryClient();
+  const query = useQuery({ queryKey: ["session"], queryFn: () => getCurrentSessionFn() });
 
-  useEffect(() => {
-    setState(getSession());
-    setReady(true);
-    const on = () => setState(getSession());
-    window.addEventListener("mychurch:session", on);
-    window.addEventListener("storage", on);
+  const signOut = useCallback(async () => {
+    await logoutFn();
+    queryClient.setQueryData(["session"], null);
+    queryClient.invalidateQueries({ queryKey: ["session"] });
+  }, [queryClient]);
 
-    // Idle timeout: any activity extends the session; a periodic check
-    // notices expiry even if the tab sits untouched.
-    const onActivity = () => touchSession();
-    window.addEventListener("pointerdown", onActivity);
-    window.addEventListener("keydown", onActivity);
-    const expiryCheck = window.setInterval(on, 10_000);
-
-    return () => {
-      window.removeEventListener("mychurch:session", on);
-      window.removeEventListener("storage", on);
-      window.removeEventListener("pointerdown", onActivity);
-      window.removeEventListener("keydown", onActivity);
-      window.clearInterval(expiryCheck);
-    };
-  }, []);
-
-  const signOut = useCallback(() => logout(), []);
-  return { session, ready, signOut };
+  return { session: toSession(query.data ?? null), ready: !query.isLoading, signOut };
 }
 
 export function canManageUsers(role: Role) {

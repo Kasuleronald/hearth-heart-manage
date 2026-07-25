@@ -244,6 +244,32 @@ export const changePlatformAdminPasswordFn = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
+const changeUserPasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8),
+});
+
+// user_credentials isn't RLS-protected (see schema.ts), so this doesn't need
+// withTenant() — requireSession() alone is enough to know which account.
+export const changeUserPasswordFn = createServerFn({ method: "POST" })
+  .validator(changeUserPasswordSchema)
+  .handler(async ({ data }) => {
+    const session = await requireSession();
+    const cred = await db.query.userCredentials.findFirst({
+      where: eq(userCredentials.userId, session.userId),
+    });
+    if (!cred || !cred.passwordHash) throw new AuthError("Account not found");
+    const ok = await verifyPassword(cred.passwordHash, data.currentPassword);
+    if (!ok) throw new AuthError("Current password is incorrect");
+
+    const passwordHash = await hashPassword(data.newPassword);
+    await db
+      .update(userCredentials)
+      .set({ passwordHash })
+      .where(eq(userCredentials.userId, session.userId));
+    return { ok: true as const };
+  });
+
 export const logoutFn = createServerFn({ method: "POST" }).handler(async () => {
   const sessionId = getCookie(SESSION_COOKIE);
   if (sessionId) await db.delete(sessions).where(eq(sessions.id, sessionId));
