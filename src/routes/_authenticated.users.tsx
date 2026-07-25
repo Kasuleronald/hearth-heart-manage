@@ -1,21 +1,20 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useState } from "react";
 import { Plus, Pencil, KeyRound, Copy } from "lucide-react";
+import { db, unassignDepartmentLeader, uid, type Department, type Role } from "@/lib/db";
 import {
-  db,
-  deleteUserCascade,
-  unassignDepartmentLeader,
-  uid,
-  type Department,
-  type Member,
-  type Role,
-  type User,
-} from "@/lib/db";
+  listOrgUsersFn,
+  createOrgUserFn,
+  updateOrgUserFn,
+  deleteOrgUserFn,
+  resetOrgUserPasswordFn,
+} from "@/server/users";
+import { listMembersFn } from "@/server/members";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PasswordInput } from "@/components/password-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -40,18 +39,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  createUser,
-  resetPassword,
-  createPasswordResetToken,
-  isValidEmail,
-  useSession,
-  canManageUsers,
-} from "@/lib/auth";
+import { isValidEmail, useSession, canManageUsers } from "@/lib/auth";
 import { useCellTerm, useTreasurerTerm } from "@/lib/terminology";
 import { toast } from "sonner";
 
-const MIN_PASSWORD_LENGTH = 8;
+type OrgUser = Awaited<ReturnType<typeof listOrgUsersFn>>[number];
+type OrgMember = Awaited<ReturnType<typeof listMembersFn>>[number];
 
 function getRoles(leaderLabel: string, treasurerLabel: string): { value: Role; label: string }[] {
   return [
@@ -65,6 +58,9 @@ function getRoles(leaderLabel: string, treasurerLabel: string): { value: Role; l
 
 // Assigns (or clears) this user's department leadership based on their role and
 // the picked department. "Other" creates a brand-new department on the fly.
+// Departments are still Dexie-local (not migrated yet) — this just stores the
+// real backend's user id as the local leaderId string, which Dexie doesn't
+// validate against anything.
 async function resolveDepartmentAssignment(
   userId: string,
   role: Role,
@@ -88,6 +84,7 @@ export const Route = createFileRoute("/_authenticated/users")({
 
 function UsersPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { session } = useSession();
   const { leaderLabel } = useCellTerm();
   const { singular: treasurerLabel } = useTreasurerTerm();
@@ -96,11 +93,21 @@ function UsersPage() {
     Role,
     string
   >;
-  const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
+  const usersQuery = useQuery({ queryKey: ["org-users"], queryFn: () => listOrgUsersFn() });
+  const membersQuery = useQuery({ queryKey: ["members"], queryFn: () => listMembersFn() });
+  const users = usersQuery.data ?? [];
+  const members = membersQuery.data ?? [];
   const departments = useLiveQuery(() => db.departments.orderBy("name").toArray(), []) ?? [];
-  const members = useLiveQuery(() => db.members.orderBy("lastName").toArray(), []) ?? [];
   const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<User | null>(null);
+  const [editing, setEditing] = useState<OrgUser | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteOrgUserFn({ data: { id } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["org-users"] });
+      toast.success("User deleted");
+    },
+  });
 
   useEffect(() => {
     if (session && !canManageUsers(session.role)) navigate({ to: "/dashboard", replace: true });
@@ -149,7 +156,7 @@ function UsersPage() {
                     <Badge variant="secondary" className="capitalize">
                       {roleLabel[u.role] ?? u.role.replace("_", " ")}
                     </Badge>
-                    <ResetCodeButton user={u} />
+                    <ResetPasswordButton user={u} />
                     <Button
                       size="icon"
                       variant="ghost"
@@ -165,8 +172,7 @@ function UsersPage() {
                         description="They will no longer be able to sign in, and any department they lead will show as unassigned. This can't be undone."
                         onConfirm={async () => {
                           try {
-                            await deleteUserCascade(u.id);
-                            toast.success("User deleted");
+                            await deleteMutation.mutateAsync(u.id);
                           } catch (e) {
                             toast.error(e instanceof Error ? e.message : "Failed to delete user");
                           }
@@ -196,60 +202,65 @@ function UsersPage() {
   );
 }
 
-function ResetCodeButton({ user }: { user: User }) {
+function ResetPasswordButton({ user }: { user: OrgUser }) {
   const [open, setOpen] = useState(false);
-  const [token, setToken] = useState("");
+  const [result, setResult] = useState<{ link: string; emailSent: boolean } | null>(null);
 
-  async function generate() {
-    try {
-      const { token } = await createPasswordResetToken(user.email);
-      setToken(token);
+  const resetMutation = useMutation({
+    mutationFn: () => resetOrgUserPasswordFn({ data: { id: user.id } }),
+    onSuccess: (res) => {
+      const link = `${window.location.origin}/accept-invite?token=${res.resetToken}`;
+      setResult({ link, emailSent: res.emailSent });
       setOpen(true);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to generate reset code");
-    }
-  }
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to reset password"),
+  });
 
   return (
     <>
       <Button
         size="icon"
         variant="ghost"
-        aria-label={`Generate password reset code for ${user.fullName}`}
-        title="Generate password reset code"
-        onClick={generate}
+        aria-label={`Reset password for ${user.fullName}`}
+        title="Reset password"
+        disabled={resetMutation.isPending}
+        onClick={() => resetMutation.mutate()}
       >
         <KeyRound className="h-4 w-4" />
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="font-display">Reset code for {user.fullName}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Share this code with {user.fullName} directly (in person, chat, etc.) — it isn't
-            emailed. It expires in 1 hour and can only be used once, on the login screen's "Forgot
-            password?" link.
-          </p>
-          <div className="flex items-center gap-2">
-            <Input readOnly value={token} className="font-mono" />
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              aria-label="Copy reset code"
-              onClick={() => {
-                navigator.clipboard.writeText(token);
-                toast.success("Copied");
-              }}
-            >
-              <Copy className="h-4 w-4" />
-            </Button>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setOpen(false)}>Done</Button>
-          </DialogFooter>
-        </DialogContent>
+        {result && (
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="font-display">Password reset for {user.fullName}</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              {result.emailSent ? (
+                <>An email was sent to {user.email}. You can also share the link below.</>
+              ) : (
+                <>Send this link to {user.fullName} so they can set a new password.</>
+              )}{" "}
+              It expires in 1 hour.
+            </p>
+            <div className="flex items-center gap-2">
+              <Input readOnly value={result.link} />
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                onClick={() => {
+                  navigator.clipboard.writeText(result.link);
+                  toast.success("Copied");
+                }}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setOpen(false)}>Done</Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
       </Dialog>
     </>
   );
@@ -327,7 +338,7 @@ function MemberLinkField({
   memberId,
   onMemberIdChange,
 }: {
-  members: Member[];
+  members: OrgMember[];
   isMember: boolean;
   onIsMemberChange: (v: boolean) => void;
   memberId: string;
@@ -380,13 +391,12 @@ function NewUserDialog({
 }: {
   departments: Department[];
   roles: { value: Role; label: string }[];
-  members: Member[];
+  members: OrgMember[];
   onClose: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [role, setRole] = useState<Role>("cell_leader");
   const [departmentChoice, setDepartmentChoice] = useState("none");
   const [otherDeptName, setOtherDeptName] = useState("");
@@ -395,43 +405,78 @@ function NewUserDialog({
   const [branchId, setBranchId] = useState("");
   const [financeTierA, setFinanceTierA] = useState(false);
   const [duplicateMatches, setDuplicateMatches] = useState<DuplicateEmailMatch[]>([]);
+  const [inviteResult, setInviteResult] = useState<{ link: string; emailSent: boolean } | null>(
+    null,
+  );
 
-  async function doCreate() {
-    try {
-      const user = await createUser({
-        fullName,
-        email,
-        password,
-        role,
-        memberId: isMember ? memberId || undefined : undefined,
-        branchId: branchId || undefined,
-        financeTier:
-          financeTierA && (role === "leader" || role === "cell_leader") ? "A" : undefined,
-      });
-      await resolveDepartmentAssignment(user.id, role, departmentChoice, otherDeptName);
-      toast.success("User created");
-      onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed");
-    }
-  }
+  const createMutation = useMutation({
+    mutationFn: () =>
+      createOrgUserFn({
+        data: {
+          fullName: fullName.trim(),
+          email: email.trim().toLowerCase(),
+          role,
+          memberId: isMember ? memberId || undefined : undefined,
+          branchId: branchId || undefined,
+          financeTier:
+            financeTierA && (role === "leader" || role === "cell_leader") ? "A" : undefined,
+        },
+      }),
+    onSuccess: async (result) => {
+      await resolveDepartmentAssignment(result.user.id, role, departmentChoice, otherDeptName);
+      queryClient.invalidateQueries({ queryKey: ["org-users"] });
+      const link = `${window.location.origin}/accept-invite?token=${result.inviteToken}`;
+      setInviteResult({ link, emailSent: result.emailSent });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to create user"),
+  });
 
   async function save() {
-    try {
-      if (!isValidEmail(email)) throw new Error("Enter a valid email address");
-      if (password.length < MIN_PASSWORD_LENGTH) {
-        throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
-      }
-      if (password !== confirmPassword) throw new Error("Passwords don't match");
-      const matches = await findEmailMatches(email);
-      if (matches.length > 0) {
-        setDuplicateMatches(matches);
-        return;
-      }
-      await doCreate();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed");
+    if (!isValidEmail(email)) {
+      toast.error("Enter a valid email address");
+      return;
     }
+    const matches = await findEmailMatches(email, {}, members);
+    if (matches.length > 0) {
+      setDuplicateMatches(matches);
+      return;
+    }
+    createMutation.mutate();
+  }
+
+  if (inviteResult) {
+    return (
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="font-display">User created</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          {inviteResult.emailSent ? (
+            <>An invite email was sent to {email}. You can also share the link below.</>
+          ) : (
+            <>Send this link to {fullName} so they can set their password and sign in.</>
+          )}{" "}
+          It expires in 1 hour.
+        </p>
+        <div className="flex items-center gap-2">
+          <Input readOnly value={inviteResult.link} />
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            onClick={() => {
+              navigator.clipboard.writeText(inviteResult.link);
+              toast.success("Copied");
+            }}
+          >
+            <Copy className="h-4 w-4" />
+          </Button>
+        </div>
+        <DialogFooter>
+          <Button onClick={onClose}>Done</Button>
+        </DialogFooter>
+      </DialogContent>
+    );
   }
 
   return (
@@ -445,7 +490,7 @@ function NewUserDialog({
         subject="user"
         onContinue={() => {
           setDuplicateMatches([]);
-          doCreate();
+          createMutation.mutate();
         }}
       />
       <DialogContent>
@@ -503,30 +548,17 @@ function NewUserDialog({
             onMemberIdChange={setMemberId}
           />
           <BranchField value={branchId} onChange={setBranchId} />
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label>Password</Label>
-              <PasswordInput
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                minLength={MIN_PASSWORD_LENGTH}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Confirm password</Label>
-              <PasswordInput
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                minLength={MIN_PASSWORD_LENGTH}
-              />
-            </div>
-          </div>
+          <p className="text-xs text-muted-foreground">
+            They'll set their own password via an emailed invite link — not typed here.
+          </p>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={save}>Create user</Button>
+          <Button onClick={save} disabled={createMutation.isPending}>
+            Create user
+          </Button>
         </DialogFooter>
       </DialogContent>
     </>
@@ -540,70 +572,66 @@ function EditUserDialog({
   members,
   onClose,
 }: {
-  user: User;
+  user: OrgUser;
   departments: Department[];
   roles: { value: Role; label: string }[];
-  members: Member[];
+  members: OrgMember[];
   onClose: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [fullName, setFullName] = useState(user.fullName);
   const [email, setEmail] = useState(user.email);
   const [role, setRole] = useState<Role>(user.role);
   const currentDept = departments.find((d) => d.leaderId === user.id);
   const [departmentChoice, setDepartmentChoice] = useState(currentDept?.id ?? "none");
   const [otherDeptName, setOtherDeptName] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [isMember, setIsMember] = useState(!!user.memberId);
   const [memberId, setMemberId] = useState(user.memberId ?? "");
   const [branchId, setBranchId] = useState(user.branchId ?? "");
   const [financeTierA, setFinanceTierA] = useState(user.financeTier === "A");
   const [duplicateMatches, setDuplicateMatches] = useState<DuplicateEmailMatch[]>([]);
 
-  async function doUpdate(trimmedEmail: string) {
-    try {
-      if (newPassword || confirmPassword) {
-        if (newPassword.length < MIN_PASSWORD_LENGTH) {
-          throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
-        }
-        if (newPassword !== confirmPassword) throw new Error("Passwords don't match");
-        await resetPassword(user.id, newPassword);
-      }
-      await db.users.update(user.id, {
-        fullName: fullName.trim(),
-        email: trimmedEmail,
-        role,
-        memberId: isMember ? memberId || undefined : undefined,
-        branchId: branchId || undefined,
-        // A real email was just set, so the §14 placeholder-email prompt is done.
-        needsEmailUpdate: trimmedEmail !== user.email ? false : user.needsEmailUpdate,
-        financeTier:
-          financeTierA && (role === "leader" || role === "cell_leader") ? "A" : undefined,
-      });
+  const updateMutation = useMutation({
+    mutationFn: (trimmedEmail: string) =>
+      updateOrgUserFn({
+        data: {
+          id: user.id,
+          fullName: fullName.trim(),
+          email: trimmedEmail,
+          role,
+          memberId: isMember ? memberId || undefined : undefined,
+          branchId: branchId || undefined,
+          financeTier:
+            financeTierA && (role === "leader" || role === "cell_leader") ? "A" : undefined,
+        },
+      }),
+    onSuccess: async () => {
       await resolveDepartmentAssignment(user.id, role, departmentChoice, otherDeptName);
+      queryClient.invalidateQueries({ queryKey: ["org-users"] });
       toast.success("User updated");
       onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to update user");
-    }
-  }
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to update user"),
+  });
 
   async function save() {
-    try {
-      if (!fullName.trim()) throw new Error("Full name is required");
-      const trimmedEmail = email.trim().toLowerCase();
-      if (!isValidEmail(trimmedEmail)) throw new Error("Enter a valid email address");
-      if (trimmedEmail !== user.email) {
-        const matches = await findEmailMatches(trimmedEmail, { userId: user.id });
-        if (matches.length > 0) {
-          setDuplicateMatches(matches);
-          return;
-        }
-      }
-      await doUpdate(trimmedEmail);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to update user");
+    if (!fullName.trim()) {
+      toast.error("Full name is required");
+      return;
     }
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!isValidEmail(trimmedEmail)) {
+      toast.error("Enter a valid email address");
+      return;
+    }
+    if (trimmedEmail !== user.email) {
+      const matches = await findEmailMatches(trimmedEmail, { userId: user.id }, members);
+      if (matches.length > 0) {
+        setDuplicateMatches(matches);
+        return;
+      }
+    }
+    updateMutation.mutate(trimmedEmail);
   }
 
   return (
@@ -618,7 +646,7 @@ function EditUserDialog({
         onContinue={() => {
           const trimmedEmail = email.trim().toLowerCase();
           setDuplicateMatches([]);
-          doUpdate(trimmedEmail);
+          updateMutation.mutate(trimmedEmail);
         }}
       />
       <DialogContent>
@@ -669,31 +697,18 @@ function EditUserDialog({
             onMemberIdChange={setMemberId}
           />
           <BranchField value={branchId} onChange={setBranchId} />
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label>New password</Label>
-              <PasswordInput
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                minLength={MIN_PASSWORD_LENGTH}
-                placeholder="Leave blank to keep current"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Confirm new password</Label>
-              <PasswordInput
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                minLength={MIN_PASSWORD_LENGTH}
-              />
-            </div>
-          </div>
+          <p className="text-xs text-muted-foreground">
+            Use the key icon on the Users list to send a password reset link — there's no direct
+            password field here.
+          </p>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={save}>Save changes</Button>
+          <Button onClick={save} disabled={updateMutation.isPending}>
+            Save changes
+          </Button>
         </DialogFooter>
       </DialogContent>
     </>

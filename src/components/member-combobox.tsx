@@ -10,9 +10,9 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import type { Member } from "@/lib/db";
+type ComboboxMember = { id: string; firstName: string; lastName: string };
 
-export function MemberCombobox({
+export function MemberCombobox<T extends ComboboxMember>({
   members,
   excludeIds,
   onSelect,
@@ -20,9 +20,9 @@ export function MemberCombobox({
   allowGuestAdd = false,
   onAddGuest,
 }: {
-  members: Member[];
+  members: T[];
   excludeIds: Set<string>;
-  onSelect: (member: Member) => void;
+  onSelect: (member: T) => void;
   label?: string;
   allowGuestAdd?: boolean;
   onAddGuest?: (name: string) => void;
