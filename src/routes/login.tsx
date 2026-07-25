@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Church, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { AppLogo } from "@/components/app-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/password-input";
@@ -136,9 +137,7 @@ function LoginPage() {
     <div className="grid min-h-screen grid-cols-1 lg:grid-cols-2">
       <div className="hidden lg:flex flex-col justify-between p-12 gradient-sidebar text-sidebar-foreground">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl gradient-primary shadow-lg">
-            <Church className="h-6 w-6" />
-          </div>
+          <AppLogo className="h-11 w-11 rounded-xl object-contain shadow-lg" />
           <span className="font-display text-2xl font-semibold">My Church</span>
         </div>
         <div>
@@ -159,9 +158,7 @@ function LoginPage() {
         <Card className="w-full max-w-md border-border/60 shadow-xl">
           <CardContent className="p-8">
             <div className="mb-6 lg:hidden flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg gradient-primary text-primary-foreground">
-                <Church className="h-5 w-5" />
-              </div>
+              <AppLogo className="h-10 w-10 rounded-lg object-contain" />
               <span className="font-display text-xl font-semibold">My Church</span>
             </div>
             <h1 className="font-display text-2xl font-semibold">

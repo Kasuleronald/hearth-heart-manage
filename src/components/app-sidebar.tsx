@@ -8,7 +8,6 @@ import {
   Users2,
   CalendarDays,
   UserCog,
-  Church,
   LogOut,
   Settings,
   GraduationCap,
@@ -25,6 +24,7 @@ import {
   PiggyBank,
 } from "lucide-react";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
+import { AppLogo } from "@/components/app-logo";
 import {
   Sidebar,
   SidebarContent,
@@ -192,9 +192,7 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-3 px-2 py-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg gradient-primary text-primary-foreground shadow-md">
-            <Church className="h-5 w-5" />
-          </div>
+          <AppLogo className="h-9 w-9 rounded-lg object-contain shadow-md" />
           <div className="flex flex-col leading-tight group-data-[collapsible=icon]:hidden">
             <span className="font-display text-base font-semibold">My Church</span>
             <span className="text-xs text-sidebar-foreground/70">Administration</span>

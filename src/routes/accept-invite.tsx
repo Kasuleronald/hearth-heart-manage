@@ -1,12 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Church, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/password-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { AppLogo } from "@/components/app-logo";
 import { acceptInviteFn } from "@/server/auth";
 import { toast } from "sonner";
 
@@ -56,9 +57,7 @@ function AcceptInvitePage() {
       <Card className="w-full max-w-md border-border/60 shadow-xl">
         <CardContent className="p-8">
           <div className="mb-6 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg gradient-primary text-primary-foreground">
-              <Church className="h-5 w-5" />
-            </div>
+            <AppLogo className="h-10 w-10 rounded-lg object-contain" />
             <span className="font-display text-xl font-semibold">Set your password</span>
           </div>
           <form
