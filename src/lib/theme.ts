@@ -27,16 +27,22 @@ export function setTheme(theme: Theme) {
   window.dispatchEvent(new Event("mychurch:theme"));
 }
 
-// The anti-flash inline script in __root.tsx already applies the right class
-// before hydration, so read the live DOM rather than defaulting to "light"
-// and flashing the toggle icon on mount.
 function currentDomTheme(): Theme {
   if (typeof document === "undefined") return "light";
   return document.documentElement.classList.contains("dark") ? "dark" : "light";
 }
 
 export function useTheme() {
-  const [theme, setThemeState] = useState<Theme>(currentDomTheme);
+  // Must match the server's render deterministically ("light", since there's
+  // no `document` there) — reading the live DOM here instead (as an earlier
+  // version did, to dodge an icon flash) made the client's first render
+  // diverge from the server's whenever the effective theme was "dark",
+  // which is a hard React hydration failure (error #418), not just a
+  // cosmetic mismatch. The effect below corrects the icon immediately after
+  // mount; the page's actual background/text already render correctly from
+  // the anti-flash inline script in __root.tsx, so only the toggle icon
+  // itself is ever briefly wrong, never the page.
+  const [theme, setThemeState] = useState<Theme>("light");
 
   useEffect(() => {
     setThemeState(getEffectiveTheme());
