@@ -8,7 +8,6 @@ import { NotificationBell } from "@/components/notification-bell";
 import { BranchSwitcher } from "@/components/branch-switcher";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth";
-import { useTreasurerTerm } from "@/lib/terminology";
 import { checkBirthdayReminders } from "@/lib/birthdays";
 import { ensureCellFellowshipsDepartment } from "@/lib/cell-fellowships";
 import { useChurchBranding } from "@/lib/branding";
@@ -22,7 +21,6 @@ function AuthenticatedLayout() {
   const navigate = useNavigate();
   const { session, ready } = useSession();
   const [searchOpen, setSearchOpen] = useState(false);
-  const { singular: treasurerLabel } = useTreasurerTerm();
   const { name: churchName, logoDataUrl } = useChurchBranding();
 
   useEffect(() => {
@@ -88,13 +86,6 @@ function AuthenticatedLayout() {
                 </div>
                 {!session.branchId && <BranchSwitcher />}
                 <NotificationBell userId={session.userId} />
-                <span className="text-sm text-muted-foreground">
-                  Signed in as{" "}
-                  <span className="font-medium text-foreground">{session.fullName}</span>
-                </span>
-                <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium capitalize text-secondary-foreground">
-                  {session.role === "treasurer" ? treasurerLabel : session.role.replace("_", " ")}
-                </span>
               </div>
             </div>
           </header>

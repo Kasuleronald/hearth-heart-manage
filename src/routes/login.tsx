@@ -17,6 +17,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { getLoginLockoutMs, login, useSession } from "@/lib/auth";
+import { requestPasswordResetFn } from "@/server/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { toast } from "sonner";
 
@@ -158,9 +159,38 @@ function LoginPage() {
 
 function ForgotPasswordDialog() {
   const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  async function submit() {
+    setBusy(true);
+    try {
+      await requestPasswordResetFn({ data: { email } });
+      setSent(true);
+    } catch {
+      // requestPasswordResetFn never throws on a real error path that
+      // should reach the user (see its comment) — this is just a network
+      // hiccup. Show the same generic message either way.
+      setSent(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function reset() {
+    setEmail("");
+    setSent(false);
+  }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) reset();
+      }}
+    >
       <DialogTrigger asChild>
         <button type="button" className="text-sm text-muted-foreground hover:text-foreground">
           Forgot password?
@@ -170,13 +200,42 @@ function ForgotPasswordDialog() {
         <DialogHeader>
           <DialogTitle className="font-display">Reset your password</DialogTitle>
         </DialogHeader>
-        <p className="text-sm text-muted-foreground">
-          There's no self-service password reset yet. Ask your organization's Admin for help — if
-          you are the Admin, your platform administrator can reset your password from the SuperAdmin
-          console.
-        </p>
+        {sent ? (
+          <p className="text-sm text-muted-foreground">
+            If an account exists for {email}, a password reset link has been sent — it expires in 1
+            hour.
+          </p>
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground">
+              Enter your account email and we'll send you a link to set a new password.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="resetEmail">Email</Label>
+              <Input
+                id="resetEmail"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@church.org"
+              />
+            </div>
+          </>
+        )}
         <DialogFooter>
-          <Button onClick={() => setOpen(false)}>Done</Button>
+          {sent ? (
+            <Button onClick={() => setOpen(false)}>Done</Button>
+          ) : (
+            <>
+              <Button variant="ghost" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={submit} disabled={busy || !email.trim()}>
+                {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Send reset link
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -13,6 +13,7 @@ import {
   passwordResetTokens,
 } from "./db/schema";
 import type { Role } from "@/lib/db";
+import { sendInviteEmail } from "./email";
 
 const SESSION_COOKIE = "mychurch_session";
 // Matches the original client-only app's 10-minute idle timeout — enforced
@@ -301,6 +302,43 @@ export const createResetToken = createServerOnlyFn(
     return row.token;
   },
 );
+
+const requestPasswordResetSchema = z.object({ email: z.string().email() });
+
+// Public, unauthenticated self-service entry point — always returns
+// { ok: true } regardless of whether the email matches a real account, so
+// this can't be used to enumerate which emails have accounts. Silently
+// no-ops (still returns ok) if SMTP/APP_URL aren't configured — there's no
+// UI fallback here like there is for SuperAdmin's admin-facing flows,
+// since the requester by definition can't sign in to see one.
+export const requestPasswordResetFn = createServerFn({ method: "POST" })
+  .validator(requestPasswordResetSchema)
+  .handler(async ({ data }) => {
+    const email = data.email.trim().toLowerCase();
+    const cred = await db.query.userCredentials.findFirst({
+      where: eq(userCredentials.email, email),
+    });
+    const baseUrl = (process.env.APP_URL ?? "").replace(/\/$/, "");
+    if (cred && baseUrl) {
+      const [user, org] = await Promise.all([
+        withTenant(cred.organizationId, (tx) =>
+          tx.query.users.findFirst({ where: eq(users.id, cred.userId) }),
+        ),
+        db.query.organizations.findFirst({ where: eq(organizations.id, cred.organizationId) }),
+      ]);
+      if (user && org) {
+        const token = await createResetToken(user.id, cred.organizationId);
+        await sendInviteEmail({
+          to: email,
+          adminName: user.fullName,
+          orgName: org.name,
+          inviteLink: `${baseUrl}/accept-invite?token=${token}`,
+          kind: "reset",
+        });
+      }
+    }
+    return { ok: true as const };
+  });
 
 const acceptInviteSchema = z.object({
   token: z.string().uuid(),

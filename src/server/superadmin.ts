@@ -8,29 +8,27 @@ import { sendInviteEmail } from "./email";
 
 // Most of this file is platform-level (spans every church) and doesn't touch
 // RLS-protected tables at all — organizations and userCredentials are
-// deliberately not tenant-scoped (see schema.ts). createOrganizationFn is the
-// exception: it also inserts into `users`, which IS RLS-protected, so that
-// one insert needs app.current_org_id set for the brand-new org, same as
-// withTenant() does elsewhere — see the set_config call below.
+// deliberately not tenant-scoped (see schema.ts). Reading/writing `users`,
+// though, IS RLS-protected, and RLS applies to every operation (not just
+// inserts) — a plain `db.select().from(users)` outside a withTenant() call
+// always returns zero rows for the app_user role, since
+// app.current_org_id is never set for a platform-level request. So each
+// org's admins have to be fetched one org at a time, through withTenant().
 
 export const listOrganizationsFn = createServerFn({ method: "GET" }).handler(async () => {
   await requirePlatformSession();
   const orgs = await db.select().from(organizations).orderBy(desc(organizations.createdAt));
-  const admins = await db.select().from(users).where(eq(users.role, "admin"));
-  const adminsByOrg = new Map<string, typeof admins>();
-  for (const admin of admins) {
-    const arr = adminsByOrg.get(admin.organizationId) ?? [];
-    arr.push(admin);
-    adminsByOrg.set(admin.organizationId, arr);
-  }
-  return orgs.map((org) => ({
-    ...org,
-    admins: (adminsByOrg.get(org.id) ?? []).map((a) => ({
-      id: a.id,
-      fullName: a.fullName,
-      email: a.email,
-    })),
-  }));
+  return Promise.all(
+    orgs.map(async (org) => {
+      const admins = await withTenant(org.id, (tx) =>
+        tx
+          .select({ id: users.id, fullName: users.fullName, email: users.email })
+          .from(users)
+          .where(eq(users.role, "admin")),
+      );
+      return { ...org, admins };
+    }),
+  );
 });
 
 const createOrganizationSchema = z.object({
@@ -139,14 +137,23 @@ const updateAdminEmailSchema = z.object({
 // (RLS-protected, needs app.current_org_id set — see withTenant) and
 // `user_credentials` (not tenant-scoped; email is its primary key, since
 // login has to resolve which org a user belongs to before it knows an
-// org id at all).
+// org id at all). Looking up the admin by id alone hits the same
+// chicken-and-egg problem as listOrganizationsFn: we don't know their org
+// yet, so we can't call withTenant() yet either — resolve the org from
+// user_credentials (unprotected) first, then re-fetch through withTenant().
 export const updateAdminEmailFn = createServerFn({ method: "POST" })
   .validator(updateAdminEmailSchema)
   .handler(async ({ data }) => {
     await requirePlatformSession();
     const email = data.email.trim().toLowerCase();
 
-    const admin = await db.query.users.findFirst({ where: eq(users.id, data.adminUserId) });
+    const cred = await db.query.userCredentials.findFirst({
+      where: eq(userCredentials.userId, data.adminUserId),
+    });
+    if (!cred) throw new AuthError("Admin not found");
+    const admin = await withTenant(cred.organizationId, (tx) =>
+      tx.query.users.findFirst({ where: eq(users.id, data.adminUserId) }),
+    );
     if (!admin) throw new AuthError("Admin not found");
     if (email === admin.email) return { ok: true as const };
 
@@ -173,7 +180,13 @@ export const resetOrgAdminPasswordFn = createServerFn({ method: "POST" })
   .validator(resetAdminPasswordSchema)
   .handler(async ({ data }) => {
     await requirePlatformSession();
-    const admin = await db.query.users.findFirst({ where: eq(users.id, data.adminUserId) });
+    const cred = await db.query.userCredentials.findFirst({
+      where: eq(userCredentials.userId, data.adminUserId),
+    });
+    if (!cred) throw new AuthError("Admin not found");
+    const admin = await withTenant(cred.organizationId, (tx) =>
+      tx.query.users.findFirst({ where: eq(users.id, data.adminUserId) }),
+    );
     if (!admin) throw new AuthError("Admin not found");
     const org = await db.query.organizations.findFirst({
       where: eq(organizations.id, admin.organizationId),
