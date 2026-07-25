@@ -192,7 +192,7 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-3 px-2 py-3">
-          <AppLogo className="h-9 w-9 rounded-lg object-contain shadow-md" />
+          <AppLogo className="h-9 w-9 rounded-2xl object-contain shadow-md" />
           <div className="flex flex-col leading-tight group-data-[collapsible=icon]:hidden">
             <span className="font-display text-base font-semibold">My Church</span>
             <span className="text-xs text-sidebar-foreground/70">Administration</span>

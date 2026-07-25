@@ -57,7 +57,7 @@ function AcceptInvitePage() {
       <Card className="w-full max-w-md border-border/60 shadow-xl">
         <CardContent className="p-8">
           <div className="mb-6 flex items-center gap-3">
-            <AppLogo className="h-10 w-10 rounded-lg object-contain" />
+            <AppLogo className="h-10 w-10 rounded-2xl object-contain" />
             <span className="font-display text-xl font-semibold">Set your password</span>
           </div>
           <form

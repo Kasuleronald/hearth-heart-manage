@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Shield } from "lucide-react";
+import { AppLogo } from "@/components/app-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/password-input";
@@ -56,10 +57,11 @@ function SuperAdminLoginPage() {
       <Card className="w-full max-w-sm border-border/60 shadow-xl">
         <CardContent className="p-8">
           <div className="mb-6 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-foreground text-background">
-              <Shield className="h-5 w-5" />
+            <AppLogo className="h-10 w-10 rounded-2xl object-contain" />
+            <div className="flex items-center gap-1.5">
+              <Shield className="h-4 w-4 text-muted-foreground" />
+              <span className="font-display text-xl font-semibold">SuperAdmin</span>
             </div>
-            <span className="font-display text-xl font-semibold">SuperAdmin</span>
           </div>
           <p className="mb-6 text-sm text-muted-foreground">
             Platform-level access — onboard and manage every organization. This is separate from any

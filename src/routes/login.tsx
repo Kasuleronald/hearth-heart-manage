@@ -77,7 +77,7 @@ function LoginPage() {
     <div className="grid min-h-screen grid-cols-1 lg:grid-cols-2">
       <div className="hidden lg:flex flex-col justify-between p-12 gradient-sidebar text-sidebar-foreground">
         <div className="flex items-center gap-3">
-          <AppLogo className="h-11 w-11 rounded-xl object-contain shadow-lg" />
+          <AppLogo className="h-11 w-11 rounded-2xl object-contain shadow-lg" />
           <span className="font-display text-2xl font-semibold">My Church</span>
         </div>
         <div>
@@ -98,7 +98,7 @@ function LoginPage() {
         <Card className="w-full max-w-md border-border/60 shadow-xl">
           <CardContent className="p-8">
             <div className="mb-6 lg:hidden flex items-center gap-3">
-              <AppLogo className="h-10 w-10 rounded-lg object-contain" />
+              <AppLogo className="h-10 w-10 rounded-2xl object-contain" />
               <span className="font-display text-xl font-semibold">My Church</span>
             </div>
             <h1 className="font-display text-2xl font-semibold">Welcome back</h1>
