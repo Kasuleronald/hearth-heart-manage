@@ -38,12 +38,3 @@ export async function setChurchLogo(dataUrl: string): Promise<void> {
 export async function clearChurchLogo(): Promise<void> {
   await db.settings.delete(CHURCH_LOGO_KEY);
 }
-
-export function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
-    reader.readAsDataURL(file);
-  });
-}

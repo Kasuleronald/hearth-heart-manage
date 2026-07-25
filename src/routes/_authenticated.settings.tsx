@@ -11,9 +11,9 @@ import {
   setChurchName,
   setChurchLogo,
   clearChurchLogo,
-  readFileAsDataUrl,
   MAX_LOGO_BYTES,
 } from "@/lib/branding";
+import { compressImageToDataUrl } from "@/lib/image-compress";
 import { CurrencyCombobox } from "@/components/currency-combobox";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -298,7 +298,7 @@ function BrandingCard() {
   async function handleLogoFile(file: File) {
     setBusy(true);
     try {
-      const dataUrl = await readFileAsDataUrl(file);
+      const dataUrl = await compressImageToDataUrl(file, { maxBytes: MAX_LOGO_BYTES });
       await setChurchLogo(dataUrl);
       toast.success("Logo updated");
     } catch (e) {
@@ -372,7 +372,7 @@ function BrandingCard() {
             )}
           </div>
           <p className="text-xs text-muted-foreground">
-            Any image, kept under {Math.round(MAX_LOGO_BYTES / 1024)}KB — square logos look best.
+            Any image — automatically resized and compressed to fit; square logos look best.
           </p>
         </div>
       </CardContent>
