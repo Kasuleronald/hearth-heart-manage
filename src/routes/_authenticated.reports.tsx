@@ -1,11 +1,16 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { format, subDays } from "date-fns";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
-import { db, type ChurchEvent } from "@/lib/db";
 import { listEventsFn, listAllEventAttendanceFn } from "@/server/events";
+import { listMembersFn } from "@/server/members";
+import { listCellsFn, listAllCellMeetingsFn, listAllCellAttendanceFn } from "@/server/cells";
+import { listClassesFn, listAllClassSessionsFn, listAllClassAttendanceFn } from "@/server/classes";
+import { listGivingsFn } from "@/server/givings";
+import { listOrgUsersFn } from "@/server/users";
+import { listProjectsFn } from "@/server/projects";
+import { listBranchesFn } from "@/server/branches";
 import { useSession, canAccessGivings, canToggleCurrency } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
@@ -66,34 +71,29 @@ function ReportsPage() {
     if (session && !canAccessGivings(session.role)) navigate({ to: "/dashboard", replace: true });
   }, [session, navigate]);
 
-  const members = useLiveQuery(() => db.members.toArray(), []) ?? [];
-  const eventsQuery = useQuery({ queryKey: ["events"], queryFn: () => listEventsFn() });
-  const events: ChurchEvent[] = (eventsQuery.data ?? []).map((e) => ({
-    ...e,
-    startTime: e.startTime ?? undefined,
-    endTime: e.endTime ?? undefined,
-    notes: e.notes ?? undefined,
-    offertoryAmount: e.offertoryAmount ?? undefined,
-    branchId: e.branchId ?? undefined,
-    recurrenceId: e.recurrenceId ?? undefined,
-    recurrence: e.recurrence ?? undefined,
-    createdAt: e.createdAt.getTime(),
-  }));
-  const eventAttendanceQuery = useQuery({
-    queryKey: ["event-attendance-all"],
-    queryFn: () => listAllEventAttendanceFn(),
-  });
-  const eventAttendance = eventAttendanceQuery.data ?? [];
-  const cells = useLiveQuery(() => db.cells.toArray(), []) ?? [];
-  const cellMeetings = useLiveQuery(() => db.cellMeetings.toArray(), []) ?? [];
-  const cellAttendance = useLiveQuery(() => db.cellAttendance.toArray(), []) ?? [];
-  const classes = useLiveQuery(() => db.classes.toArray(), []) ?? [];
-  const classSessions = useLiveQuery(() => db.classSessions.toArray(), []) ?? [];
-  const classAttendance = useLiveQuery(() => db.classAttendance.toArray(), []) ?? [];
-  const givings = useLiveQuery(() => db.givings.toArray(), []) ?? [];
-  const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
-  const projects = useLiveQuery(() => db.projects.toArray(), []) ?? [];
-  const branches = useLiveQuery(() => db.branches.orderBy("name").toArray(), []) ?? [];
+  const members = useQuery({ queryKey: ["members"], queryFn: () => listMembersFn() }).data ?? [];
+  const events = useQuery({ queryKey: ["events"], queryFn: () => listEventsFn() }).data ?? [];
+  const eventAttendance =
+    useQuery({ queryKey: ["event-attendance-all"], queryFn: () => listAllEventAttendanceFn() })
+      .data ?? [];
+  const cells = useQuery({ queryKey: ["cells"], queryFn: () => listCellsFn() }).data ?? [];
+  const cellMeetings =
+    useQuery({ queryKey: ["cell-meetings-all"], queryFn: () => listAllCellMeetingsFn() }).data ??
+    [];
+  const cellAttendance =
+    useQuery({ queryKey: ["cell-attendance-all"], queryFn: () => listAllCellAttendanceFn() })
+      .data ?? [];
+  const classes = useQuery({ queryKey: ["classes"], queryFn: () => listClassesFn() }).data ?? [];
+  const classSessions =
+    useQuery({ queryKey: ["class-sessions-all"], queryFn: () => listAllClassSessionsFn() }).data ??
+    [];
+  const classAttendance =
+    useQuery({ queryKey: ["class-attendance-all"], queryFn: () => listAllClassAttendanceFn() })
+      .data ?? [];
+  const givings = useQuery({ queryKey: ["givings"], queryFn: () => listGivingsFn() }).data ?? [];
+  const users = useQuery({ queryKey: ["org-users"], queryFn: () => listOrgUsersFn() }).data ?? [];
+  const projects = useQuery({ queryKey: ["projects"], queryFn: () => listProjectsFn() }).data ?? [];
+  const branches = useQuery({ queryKey: ["branches"], queryFn: () => listBranchesFn() }).data ?? [];
   const effectiveBranch = useEffectiveBranch(session?.branchId);
   const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
   const { convert, displayCode, base } = useDisplayCurrency(canToggle);
@@ -101,18 +101,30 @@ function ReportsPage() {
   // Scope every input to the current branch filter before handing it to the
   // (branch-agnostic) report builders — church-wide records still show
   // everywhere, same rule as every other list page.
-  const scopedMembers = members.filter((m) => matchesBranchFilter(effectiveBranch, m.branchId));
-  const scopedEvents = events.filter((e) => matchesBranchFilter(effectiveBranch, e.branchId));
-  const scopedCells = cells.filter((c) => matchesBranchFilter(effectiveBranch, c.branchId));
+  const scopedMembers = members.filter((m) =>
+    matchesBranchFilter(effectiveBranch, m.branchId ?? undefined),
+  );
+  const scopedEvents = events.filter((e) =>
+    matchesBranchFilter(effectiveBranch, e.branchId ?? undefined),
+  );
+  const scopedCells = cells.filter((c) =>
+    matchesBranchFilter(effectiveBranch, c.branchId ?? undefined),
+  );
   const scopedCellMeetings = cellMeetings.filter((m) =>
-    matchesBranchFilter(effectiveBranch, m.branchId),
+    matchesBranchFilter(effectiveBranch, m.branchId ?? undefined),
   );
-  const scopedClasses = classes.filter((c) => matchesBranchFilter(effectiveBranch, c.branchId));
+  const scopedClasses = classes.filter((c) =>
+    matchesBranchFilter(effectiveBranch, c.branchId ?? undefined),
+  );
   const scopedClassSessions = classSessions.filter((s) =>
-    matchesBranchFilter(effectiveBranch, s.branchId),
+    matchesBranchFilter(effectiveBranch, s.branchId ?? undefined),
   );
-  const scopedGivings = givings.filter((g) => matchesBranchFilter(effectiveBranch, g.branchId));
-  const scopedProjects = projects.filter((p) => matchesBranchFilter(effectiveBranch, p.branchId));
+  const scopedGivings = givings.filter((g) =>
+    matchesBranchFilter(effectiveBranch, g.branchId ?? undefined),
+  );
+  const scopedProjects = projects.filter((p) =>
+    matchesBranchFilter(effectiveBranch, p.branchId ?? undefined),
+  );
 
   const report: ReportResult = useMemo(() => {
     switch (reportType) {
@@ -201,7 +213,7 @@ function ReportsPage() {
       return r.chartData.reduce((sum, d) => sum + (Number(d[key]) || 0), 0);
     }
     return buckets.map(({ id, name }) => {
-      const inBucket = (branchId: string | undefined) => (branchId ?? undefined) === id;
+      const inBucket = (branchId: string | null | undefined) => (branchId ?? undefined) === id;
       const bMembers = members.filter((m) => inBucket(m.branchId));
       const bEvents = events.filter((e) => inBucket(e.branchId));
       const bCells = cells.filter((c) => inBucket(c.branchId));

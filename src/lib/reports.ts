@@ -1,18 +1,75 @@
-import type {
-  Cell,
-  CellAttendance,
-  CellMeeting,
-  ChurchEvent,
-  ClassAttendance,
-  ClassSession,
-  DiscipleshipClass,
-  EventAttendance,
-  Giving,
-  Member,
-  MemberCategory,
-  Project,
-  User,
-} from "@/lib/db";
+// Structural types capturing exactly the fields these report builders read —
+// deliberately decoupled from both the old Dexie interfaces and the real
+// Postgres row shapes (which differ on nullability: Dexie uses `field?: T`,
+// Postgres returns `field: T | null`) so either can be passed in directly.
+interface ReportGiving {
+  date: string;
+  category: string;
+  amount: number;
+  projectId?: string | null;
+  projectName?: string | null;
+}
+interface ReportCell {
+  id: string;
+  name: string;
+}
+interface ReportCellMeeting {
+  id: string;
+  cellId: string;
+  date: string;
+  offertoryReceived: number;
+  expenseApproved?: number | null;
+}
+interface ReportCellAttendance {
+  meetingId: string;
+  memberId?: string | null;
+  present: boolean;
+}
+interface ReportClass {
+  id: string;
+  name: string;
+}
+interface ReportClassSession {
+  id: string;
+  classId: string;
+  date: string;
+  offertoryAmount?: number | null;
+}
+interface ReportClassAttendance {
+  sessionId: string;
+  memberId: string;
+  present: boolean;
+}
+interface ReportEvent {
+  id: string;
+  date: string;
+  title: string;
+  offertoryAmount?: number | null;
+}
+interface ReportEventAttendance {
+  eventId: string;
+  memberId: string;
+  present: boolean;
+}
+interface ReportMember {
+  id: string;
+  firstName: string;
+  lastName: string;
+  status: string;
+  category?: string | null;
+  cellId?: string | null;
+  classId?: string | null;
+  joinDate?: string | null;
+  createdBy?: string | null;
+}
+interface ReportProject {
+  id: string;
+  name: string;
+}
+interface ReportUser {
+  id: string;
+  fullName: string;
+}
 
 export interface ReportResult {
   chartData: Record<string, string | number>[];
@@ -44,13 +101,13 @@ export const GIVING_CATEGORY_LABELS: Record<string, string> = {
 };
 
 export function collectGivingEntries(data: {
-  givings: Giving[];
-  cellMeetings: CellMeeting[];
-  cells: Cell[];
-  classSessions: ClassSession[];
-  classes: DiscipleshipClass[];
-  events: ChurchEvent[];
-  projects?: Project[];
+  givings: ReportGiving[];
+  cellMeetings: ReportCellMeeting[];
+  cells: ReportCell[];
+  classSessions: ReportClassSession[];
+  classes: ReportClass[];
+  events: ReportEvent[];
+  projects?: ReportProject[];
 }): GivingEntry[] {
   const projectById = new Map((data.projects ?? []).map((p) => [p.id, p]));
   const entries: GivingEntry[] = data.givings.map((g) => {
@@ -147,7 +204,7 @@ export function buildGivingsReport(
 
 // ---- Attendance ----
 
-const CATEGORY_KEYS: (MemberCategory | "uncategorized")[] = [
+const CATEGORY_KEYS: string[] = [
   "pastor",
   "leader",
   "member",
@@ -166,15 +223,15 @@ const CATEGORY_COLUMN_LABELS: Record<string, string> = {
 
 export function buildAttendanceReport(
   data: {
-    events: ChurchEvent[];
-    eventAttendance: EventAttendance[];
-    cellMeetings: CellMeeting[];
-    cellAttendance: CellAttendance[];
-    cells: Cell[];
-    classSessions: ClassSession[];
-    classAttendance: ClassAttendance[];
-    classes: DiscipleshipClass[];
-    members: Member[];
+    events: ReportEvent[];
+    eventAttendance: ReportEventAttendance[];
+    cellMeetings: ReportCellMeeting[];
+    cellAttendance: ReportCellAttendance[];
+    cells: ReportCell[];
+    classSessions: ReportClassSession[];
+    classAttendance: ReportClassAttendance[];
+    classes: ReportClass[];
+    members: ReportMember[];
   },
   from: string,
   to: string,
@@ -280,8 +337,8 @@ export function buildAttendanceReport(
 // ---- Membership & growth ----
 
 export function buildMembershipReport(
-  members: Member[],
-  users: Pick<User, "id" | "fullName">[],
+  members: ReportMember[],
+  users: ReportUser[],
   from: string,
   to: string,
 ): ReportResult {
@@ -320,13 +377,13 @@ export function buildMembershipReport(
 
 export function buildGroupPerformanceReport(
   data: {
-    cells: Cell[];
-    cellMeetings: CellMeeting[];
-    cellAttendance: CellAttendance[];
-    classes: DiscipleshipClass[];
-    classSessions: ClassSession[];
-    classAttendance: ClassAttendance[];
-    members: Member[];
+    cells: ReportCell[];
+    cellMeetings: ReportCellMeeting[];
+    cellAttendance: ReportCellAttendance[];
+    classes: ReportClass[];
+    classSessions: ReportClassSession[];
+    classAttendance: ReportClassAttendance[];
+    members: ReportMember[];
   },
   from: string,
   to: string,
