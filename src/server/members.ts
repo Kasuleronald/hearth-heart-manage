@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant, type Tx } from "./db/client";
-import { members, households, cells, classes, users, notifications } from "./db/schema";
+import { members, households, cells, classes, branches, users, notifications } from "./db/schema";
 import { requireSession, AuthError } from "./auth";
 
 const memberStatusValues = [
@@ -26,6 +26,31 @@ const memberCategoryValues = [
   "fellowship_member",
   "other",
 ] as const;
+
+// Mirrors the display labels in _authenticated.members.tsx (STATUS_LABELS /
+// CATEGORIES) — the import template shows these human labels, not the raw
+// enum values, so matchEnum needs to recognize both.
+const MEMBER_STATUS_LABELS: Record<(typeof memberStatusValues)[number], string> = {
+  active: "Active Member",
+  inactive: "Inactive Member",
+  leader: "Leader",
+  deacon: "Deacon",
+  elder: "Elder",
+  pastor: "Pastor",
+  minister: "Minister",
+};
+const MEMBER_CATEGORY_LABELS: Record<(typeof memberCategoryValues)[number], string> = {
+  member: "Member",
+  committed: "Committed",
+  pastor: "Pastor",
+  leader: "Leader",
+  new_recruit: "New Recruit",
+  new_convert: "New Convert",
+  visitor: "Visitor",
+  uncommitted: "Uncommitted",
+  fellowship_member: "Fellowship Member",
+  other: "Other",
+};
 
 // ---- Lookups the Members page needs for its relation pickers/columns.
 // Lightweight, read-only — full CRUD for these modules is Phase 2+.
@@ -245,5 +270,227 @@ export const deleteMemberFn = createServerFn({ method: "POST" })
         );
       }
       return { ok: true as const };
+    });
+  });
+
+// One raw string per template column — every field is optional at the zod
+// level because bad data should skip *that row*, not reject the whole
+// upload; the handler below applies the real (per-row) validation rules.
+const memberImportRowSchema = z.object({
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  address: z.string().optional(),
+  phone: z.string().optional(),
+  email: z.string().optional(),
+  gender: z.string().optional(),
+  birthMonth: z.string().optional(),
+  birthDay: z.string().optional(),
+  birthYear: z.string().optional(),
+  status: z.string().optional(),
+  category: z.string().optional(),
+  joinDate: z.string().optional(),
+  household: z.string().optional(),
+  cell: z.string().optional(),
+  class: z.string().optional(),
+  branch: z.string().optional(),
+  notes: z.string().optional(),
+  number: z.string().optional(),
+});
+
+const importMembersSchema = z.object({
+  rows: z.array(memberImportRowSchema).min(1).max(2000),
+});
+
+// Case/whitespace-insensitive match against a fixed enum list — template
+// values are hand-typed, so "New Recruit" and "new_recruit" should both work.
+function matchEnum<T extends string>(
+  raw: string | undefined,
+  allowed: readonly T[],
+  labels?: Record<T, string>,
+): T | undefined {
+  if (!raw) return undefined;
+  const normalized = raw.trim().toLowerCase();
+  const direct = allowed.find((v) => v === normalized.replace(/\s+/g, "_"));
+  if (direct) return direct;
+  if (!labels) return undefined;
+  return allowed.find((v) => labels[v].toLowerCase() === normalized);
+}
+
+function matchByName<T extends { id: string; name: string }>(
+  raw: string | undefined,
+  options: T[],
+): T | undefined {
+  if (!raw?.trim()) return undefined;
+  const normalized = raw.trim().toLowerCase();
+  return options.find((o) => o.name.trim().toLowerCase() === normalized);
+}
+
+export const importMembersFn = createServerFn({ method: "POST" })
+  .validator(importMembersSchema)
+  .handler(async ({ data }) => {
+    const session = await requireSession();
+    if (session.role !== "admin" && session.role !== "pastor") {
+      throw new AuthError("Only an Admin or Pastor can import members");
+    }
+
+    return withTenant(session.organizationId, async (tx) => {
+      const [householdRows, cellRows, classRows, branchRows, existingMembers] = await Promise.all([
+        tx.select({ id: households.id, name: households.name }).from(households),
+        tx.select({ id: cells.id, name: cells.name }).from(cells),
+        tx.select({ id: classes.id, name: classes.name }).from(classes),
+        tx.select({ id: branches.id, name: branches.name }).from(branches),
+        tx.select({ number: members.number }).from(members),
+      ]);
+      const takenNumbers = new Set(
+        existingMembers.map((m) => m.number).filter((n): n is string => !!n),
+      );
+
+      const toInsert: (typeof members.$inferInsert)[] = [];
+      const skipped: { row: number; reason: string }[] = [];
+      const warnings: { row: number; note: string }[] = [];
+
+      data.rows.forEach((raw, i) => {
+        const rowNum = i + 2; // header is row 1
+        const firstName = raw.firstName?.trim() ?? "";
+        const lastName = raw.lastName?.trim() ?? "";
+        const address = raw.address?.trim() ?? "";
+        if (!firstName || !lastName || !address) {
+          skipped.push({
+            row: rowNum,
+            reason: "First name, last name, and address are all required",
+          });
+          return;
+        }
+
+        const gender = matchEnum(raw.gender, ["male", "female", "other"] as const);
+        if (raw.gender?.trim() && !gender) {
+          warnings.push({
+            row: rowNum,
+            note: `Gender "${raw.gender}" not recognized — left blank`,
+          });
+        }
+        const status = matchEnum(raw.status, memberStatusValues, MEMBER_STATUS_LABELS) ?? "active";
+        if (
+          raw.status?.trim() &&
+          !matchEnum(raw.status, memberStatusValues, MEMBER_STATUS_LABELS)
+        ) {
+          warnings.push({
+            row: rowNum,
+            note: `Status "${raw.status}" not recognized — set to Active`,
+          });
+        }
+        const category = matchEnum(raw.category, memberCategoryValues, MEMBER_CATEGORY_LABELS);
+        if (raw.category?.trim() && !category) {
+          warnings.push({
+            row: rowNum,
+            note: `Category "${raw.category}" not recognized — left blank`,
+          });
+        }
+
+        const household = matchByName(raw.household, householdRows);
+        if (raw.household?.trim() && !household) {
+          warnings.push({ row: rowNum, note: `Household "${raw.household}" not found` });
+        }
+        const cell = matchByName(raw.cell, cellRows);
+        if (raw.cell?.trim() && !cell) {
+          warnings.push({ row: rowNum, note: `Cell "${raw.cell}" not found` });
+        }
+        const cls = matchByName(raw.class, classRows);
+        if (raw.class?.trim() && !cls) {
+          warnings.push({ row: rowNum, note: `Class "${raw.class}" not found` });
+        }
+        const branch = matchByName(raw.branch, branchRows);
+        if (raw.branch?.trim() && !branch) {
+          warnings.push({ row: rowNum, note: `Branch "${raw.branch}" not found` });
+        }
+
+        let number = raw.number?.trim() || undefined;
+        if (number) {
+          if (takenNumbers.has(number)) {
+            warnings.push({
+              row: rowNum,
+              note: `Number "${number}" is already in use — left blank`,
+            });
+            number = undefined;
+          } else {
+            takenNumbers.add(number);
+          }
+        }
+
+        let birthMonth = raw.birthMonth ? parseInt(raw.birthMonth, 10) : undefined;
+        if (
+          birthMonth !== undefined &&
+          (!Number.isFinite(birthMonth) || birthMonth < 1 || birthMonth > 12)
+        ) {
+          warnings.push({
+            row: rowNum,
+            note: `Birth month "${raw.birthMonth}" is invalid — left blank`,
+          });
+          birthMonth = undefined;
+        }
+        let birthDay = raw.birthDay ? parseInt(raw.birthDay, 10) : undefined;
+        if (
+          birthDay !== undefined &&
+          (!Number.isFinite(birthDay) || birthDay < 1 || birthDay > 31)
+        ) {
+          warnings.push({
+            row: rowNum,
+            note: `Birth day "${raw.birthDay}" is invalid — left blank`,
+          });
+          birthDay = undefined;
+        }
+        let birthYear = raw.birthYear ? parseInt(raw.birthYear, 10) : undefined;
+        if (birthYear !== undefined && (!Number.isFinite(birthYear) || birthYear < 1900)) {
+          warnings.push({
+            row: rowNum,
+            note: `Birth year "${raw.birthYear}" is invalid — left blank`,
+          });
+          birthYear = undefined;
+        }
+
+        toInsert.push({
+          organizationId: session.organizationId,
+          createdBy: session.userId,
+          firstName,
+          lastName,
+          address,
+          phone: raw.phone?.trim() || undefined,
+          email: raw.email?.trim() || undefined,
+          gender,
+          birthMonth,
+          birthDay,
+          birthYear,
+          status,
+          category,
+          number,
+          joinDate: raw.joinDate?.trim() || undefined,
+          householdId: household?.id,
+          cellId: cell?.id,
+          classId: cls?.id,
+          branchId: branch?.id,
+          notes: raw.notes?.trim() || undefined,
+        });
+      });
+
+      if (toInsert.length > 0) {
+        await tx.insert(members).values(toInsert);
+
+        const roleRows = await tx.select({ id: users.id, role: users.role }).from(users);
+        const toNotify = roleRows
+          .filter((u) => (u.role === "admin" || u.role === "pastor") && u.id !== session.userId)
+          .map((u) => u.id);
+        if (toNotify.length > 0) {
+          await tx.insert(notifications).values(
+            toNotify.map((recipientUserId) => ({
+              organizationId: session.organizationId,
+              recipientUserId,
+              type: "member_added" as const,
+              message: `${session.fullName} imported ${toInsert.length} member${toInsert.length === 1 ? "" : "s"} from a file`,
+            })),
+          );
+        }
+      }
+
+      return { imported: toInsert.length, skipped, warnings };
     });
   });

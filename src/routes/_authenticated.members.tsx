@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Search, Pencil, Trash2, Columns3, Hash } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Columns3, Hash, Upload, Download } from "lucide-react";
 import { formatBirthday, MONTH_NAMES, type MemberCategory, type MemberStatus } from "@/lib/db";
 import {
   listMembersFn,
@@ -10,13 +10,15 @@ import {
   updateMemberFn,
   deleteMemberFn,
   nextMemberNumberFn,
+  importMembersFn,
 } from "@/server/members";
 import { ExportMenu } from "@/components/export-menu";
 import { BranchField } from "@/components/branch-field";
 import { DuplicateEmailAlert } from "@/components/duplicate-email-alert";
 import { findEmailMatches, type DuplicateEmailMatch } from "@/lib/duplicate-contact";
-import { useSession, canEditDeleteMembers } from "@/lib/auth";
-import { useCellTerm } from "@/lib/terminology";
+import { downloadMemberImportTemplate, parseMemberImportFile } from "@/lib/member-import";
+import { useSession, canEditDeleteMembers, canImportMembers } from "@/lib/auth";
+import { useCellTerm, useTerm } from "@/lib/terminology";
 import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -213,7 +215,9 @@ function MembersPage() {
   const queryClient = useQueryClient();
   const { session } = useSession();
   const { singular: cellSingular } = useCellTerm();
+  const { singular: classSingular } = useTerm("class");
   const canEditDelete = session ? canEditDeleteMembers(session.role) : false;
+  const canImport = session ? canImportMembers(session.role) : false;
   const membersQuery = useQuery({ queryKey: ["members"], queryFn: () => listMembersFn() });
   const optionsQuery = useQuery({
     queryKey: ["member-form-options"],
@@ -242,6 +246,7 @@ function MembersPage() {
   const [editing, setEditing] = useState<Member | null>(null);
   const [open, setOpen] = useState(false);
   const [viewing, setViewing] = useState<Member | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [visibleCols, setVisibleCols] = useState<Set<string>>(
     () => new Set(OPTIONAL_COLUMNS.filter((c) => c.defaultVisible).map((c) => c.key)),
   );
@@ -312,6 +317,21 @@ function MembersPage() {
                 ...activeColumns.map((c) => c.csv(m, ctx)),
               ])}
             />
+            {canImport && (
+              <Dialog open={importOpen} onOpenChange={setImportOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline">
+                    <Upload className="mr-2 h-4 w-4" /> Import members
+                  </Button>
+                </DialogTrigger>
+                <ImportMembersDialog
+                  cellLabel={cellSingular}
+                  classLabel={classSingular}
+                  onImported={() => queryClient.invalidateQueries({ queryKey: ["members"] })}
+                  onClose={() => setImportOpen(false)}
+                />
+              </Dialog>
+            )}
             <Dialog
               open={open}
               onOpenChange={(o) => {
@@ -478,6 +498,140 @@ function MembersPage() {
         />
       )}
     </div>
+  );
+}
+
+function ImportMembersDialog({
+  cellLabel,
+  classLabel,
+  onImported,
+  onClose,
+}: {
+  cellLabel: string;
+  classLabel: string;
+  onImported: () => void;
+  onClose: () => void;
+}) {
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState<Awaited<ReturnType<typeof importMembersFn>> | null>(null);
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    try {
+      const rows = await parseMemberImportFile(file, cellLabel, classLabel);
+      if (rows.length === 0) {
+        toast.error("No rows found in that file — is it the right template?");
+        return;
+      }
+      const res = await importMembersFn({ data: { rows } });
+      setResult(res);
+      if (res.imported > 0) onImported();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to import members");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  if (result) {
+    return (
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="font-display">Import complete</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm">
+          Imported <span className="font-medium">{result.imported}</span> member
+          {result.imported === 1 ? "" : "s"}.
+        </p>
+        {result.skipped.length > 0 && (
+          <div>
+            <p className="text-sm font-medium text-destructive">
+              Skipped {result.skipped.length} row{result.skipped.length === 1 ? "" : "s"}:
+            </p>
+            <ul className="mt-1 max-h-40 space-y-1 overflow-y-auto text-xs text-muted-foreground">
+              {result.skipped.map((s, i) => (
+                <li key={i}>
+                  Row {s.row}: {s.reason}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {result.warnings.length > 0 && (
+          <div>
+            <p className="text-sm font-medium">Notes:</p>
+            <ul className="mt-1 max-h-40 space-y-1 overflow-y-auto text-xs text-muted-foreground">
+              {result.warnings.map((w, i) => (
+                <li key={i}>
+                  Row {w.row}: {w.note}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <DialogFooter>
+          <Button onClick={onClose}>Done</Button>
+        </DialogFooter>
+      </DialogContent>
+    );
+  }
+
+  return (
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle className="font-display">Import members</DialogTitle>
+      </DialogHeader>
+      <div className="space-y-4 text-sm">
+        <p className="text-muted-foreground">
+          Bulk-add members from a spreadsheet. Don't have the template yet? Download it, fill it in,
+          then upload it here.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={() =>
+            downloadMemberImportTemplate(
+              cellLabel,
+              classLabel,
+              STATUSES.map((s) => STATUS_LABELS[s]),
+              CATEGORIES.map((c) => c.label),
+            )
+          }
+        >
+          <Download className="mr-2 h-4 w-4" /> Download template
+        </Button>
+        <div>
+          <label>
+            <Button type="button" className="w-full" disabled={importing} asChild>
+              <span>
+                <Upload className="mr-2 h-4 w-4" />
+                {importing ? "Importing…" : "Already have it filled in? Upload it"}
+              </span>
+            </Button>
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+              disabled={importing}
+              onChange={handleFile}
+            />
+          </label>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Whoever uploads the file is recorded as the one who added each member. First name, last
+          name, and address are required for every row — anything else can be left blank.
+        </p>
+      </div>
+      <DialogFooter>
+        <Button variant="ghost" onClick={onClose}>
+          Cancel
+        </Button>
+      </DialogFooter>
+    </DialogContent>
   );
 }
 

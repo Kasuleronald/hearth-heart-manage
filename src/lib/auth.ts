@@ -347,6 +347,12 @@ export function canEditDeleteMembers(role: Role) {
 export function canManageBranches(role: Role) {
   return role === "admin";
 }
+// Bulk member import (spreadsheet template upload) — same elevated tier as
+// every other org-wide administrative action, not the "anyone can add a
+// member" rule that applies to the one-at-a-time form.
+export function canImportMembers(role: Role) {
+  return role === "admin" || role === "pastor";
+}
 export function canEnterExpenses(role: Role) {
   return role === "admin" || role === "treasurer";
 }
