@@ -680,6 +680,22 @@ export const testimonies = pgTable(
   (t) => [index("testimonies_org_idx").on(t.organizationId), tenantPolicy(t.organizationId)],
 ).enableRLS();
 
+// ---- Notices (org-wide announcements) ----
+
+export const notices = pgTable(
+  "notices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    authorId: uuid("author_id").references(() => users.id, { onDelete: "set null" }),
+    message: text("message").notNull(),
+    ...timestamps,
+  },
+  (t) => [index("notices_org_idx").on(t.organizationId), tenantPolicy(t.organizationId)],
+).enableRLS();
+
 // ---- Settings (per-organization key/value) ----
 
 export const settings = pgTable(

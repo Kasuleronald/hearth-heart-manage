@@ -397,7 +397,8 @@ export type NotificationType =
   | "birthday_reminder"
   | "cell_expense_approved"
   | "expense_submitted"
-  | "expense_approved";
+  | "expense_approved"
+  | "notice_posted";
 
 export interface Notification {
   id: string;

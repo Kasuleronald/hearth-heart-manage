@@ -1,17 +1,28 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { listDepartmentsFn } from "@/server/departments";
 import { listEventsFn } from "@/server/events";
 import { listMembersFn } from "@/server/members";
 import { listCellsFn, listAllCellMeetingsFn, listAllCellAttendanceFn } from "@/server/cells";
+import { listNoticesFn, createNoticeFn, deleteNoticeFn } from "@/server/notices";
+import { listOrgUsersFn } from "@/server/users";
 import { useSession, canSubmitRequisitions } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { useWeekStartDay } from "@/lib/week";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogTrigger } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { DeleteButton } from "@/components/delete-button";
 import { RequisitionDialog } from "@/components/requisition-dialog";
 import {
   Users,
@@ -21,9 +32,12 @@ import {
   Cake,
   ClipboardList,
   ArrowRight,
+  Megaphone,
+  Plus,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
-import { format, subDays, startOfWeek, endOfWeek } from "date-fns";
+import { format, subDays, startOfWeek, endOfWeek, formatDistanceToNow } from "date-fns";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -143,6 +157,8 @@ function Dashboard() {
           )
         }
       />
+
+      <NoticesCard />
 
       {ledCells.length > 0 && (
         <Card className="mb-4">
@@ -305,6 +321,115 @@ function Dashboard() {
         </Card>
       </div>
     </div>
+  );
+}
+
+function NoticesCard() {
+  const { session } = useSession();
+  const queryClient = useQueryClient();
+  const noticesQuery = useQuery({ queryKey: ["notices"], queryFn: () => listNoticesFn() });
+  const usersQuery = useQuery({ queryKey: ["org-users"], queryFn: () => listOrgUsersFn() });
+  const notices = noticesQuery.data ?? [];
+  const users = usersQuery.data ?? [];
+  const [open, setOpen] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const postMutation = useMutation({
+    mutationFn: () => createNoticeFn({ data: { message: message.trim() } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notices"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      setMessage("");
+      setOpen(false);
+      toast.success("Notice sent to everyone");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to post notice"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteNoticeFn({ data: { id } }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notices"] }),
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to delete notice"),
+  });
+
+  function post() {
+    if (postMutation.isPending) return;
+    if (!message.trim()) return toast.error("Enter a message");
+    postMutation.mutate();
+  }
+
+  return (
+    <Card className="mb-4">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <CardTitle className="font-display flex items-center gap-2">
+          <Megaphone className="h-4 w-4" /> Notices
+        </CardTitle>
+        <Dialog
+          open={open}
+          onOpenChange={(o) => {
+            setOpen(o);
+            if (!o) setMessage("");
+          }}
+        >
+          <DialogTrigger asChild>
+            <Button size="sm" variant="outline">
+              <Plus className="mr-1 h-4 w-4" /> Post notice
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="font-display">Post a notice</DialogTitle>
+            </DialogHeader>
+            <Textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              rows={4}
+              placeholder="Share an announcement with everyone…"
+            />
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={post} disabled={postMutation.isPending}>
+                Send to everyone
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {notices.slice(0, 5).map((n) => {
+          const author = users.find((u) => u.id === n.authorId);
+          return (
+            <div
+              key={n.id}
+              className="flex items-start justify-between gap-3 border-l-2 border-primary/60 pl-3"
+            >
+              <div className="min-w-0">
+                <p className="whitespace-pre-wrap text-sm">{n.message}</p>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {author?.fullName ?? "Unknown"} ·{" "}
+                  {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
+                </div>
+              </div>
+              {session?.role === "admin" && (
+                <DeleteButton
+                  size="icon"
+                  variant="ghost"
+                  label="Delete notice"
+                  title="Delete this notice?"
+                  description="This can't be undone."
+                  onConfirm={async () => {
+                    await deleteMutation.mutateAsync(n.id);
+                  }}
+                />
+              )}
+            </div>
+          );
+        })}
+        {notices.length === 0 && <p className="text-sm text-muted-foreground">No notices yet.</p>}
+      </CardContent>
+    </Card>
   );
 }
 

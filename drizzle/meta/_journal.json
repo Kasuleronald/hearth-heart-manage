@@ -36,6 +36,13 @@
       "when": 1785078041160,
       "tag": "0004_real_living_lightning",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785081541640,
+      "tag": "0005_productive_zodiak",
+      "breakpoints": true
     }
   ]
 }
