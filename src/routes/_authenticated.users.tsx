@@ -1,9 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useState } from "react";
 import { Plus, Pencil, KeyRound, Copy } from "lucide-react";
-import { db, unassignDepartmentLeader, uid, type Department, type Role } from "@/lib/db";
+import type { Role } from "@/lib/db";
 import {
   listOrgUsersFn,
   createOrgUserFn,
@@ -12,6 +11,7 @@ import {
   resetOrgUserPasswordFn,
 } from "@/server/users";
 import { listMembersFn } from "@/server/members";
+import { listDepartmentsFn, createDepartmentFn, updateDepartmentFn } from "@/server/departments";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +45,7 @@ import { toast } from "sonner";
 
 type OrgUser = Awaited<ReturnType<typeof listOrgUsersFn>>[number];
 type OrgMember = Awaited<ReturnType<typeof listMembersFn>>[number];
+type OrgDepartment = Awaited<ReturnType<typeof listDepartmentsFn>>[number];
 
 function getRoles(leaderLabel: string, treasurerLabel: string): { value: Role; label: string }[] {
   return [
@@ -56,26 +57,52 @@ function getRoles(leaderLabel: string, treasurerLabel: string): { value: Role; l
   ];
 }
 
-// Assigns (or clears) this user's department leadership based on their role and
-// the picked department. "Other" creates a brand-new department on the fly.
-// Departments are still Dexie-local (not migrated yet) — this just stores the
-// real backend's user id as the local leaderId string, which Dexie doesn't
-// validate against anything.
+// Assigns (or clears) this user's department leadership based on their role
+// and the picked department. "Other" creates a brand-new department on the
+// fly. updateDepartmentFn/createDepartmentFn are full-replace, not partial
+// patches, so preserve every other field from the already-fetched list —
+// the server also auto-clears the new leaderId from any *other* department
+// (1:1 enforcement), but that doesn't cover "unassign this user entirely",
+// which is why the explicit clear-current-department step below still runs.
 async function resolveDepartmentAssignment(
   userId: string,
   role: Role,
   departmentChoice: string, // department id, "other", or "none"
   otherDeptName: string,
+  departments: OrgDepartment[],
 ) {
-  await unassignDepartmentLeader(userId);
+  const currentlyLeading = departments.find((d) => d.leaderId === userId);
+  if (currentlyLeading && currentlyLeading.id !== departmentChoice) {
+    await updateDepartmentFn({
+      data: {
+        id: currentlyLeading.id,
+        name: currentlyLeading.name,
+        description: currentlyLeading.description ?? undefined,
+        leaderId: undefined,
+        allowedModules: currentlyLeading.allowedModules,
+        branchId: currentlyLeading.branchId ?? undefined,
+      },
+    });
+  }
   if (role !== "leader" || departmentChoice === "none") return;
   if (departmentChoice === "other") {
     const name = otherDeptName.trim();
     if (!name) throw new Error("Enter a department name");
-    await db.departments.add({ id: uid(), name, leaderId: userId, createdAt: Date.now() });
+    await createDepartmentFn({ data: { name, leaderId: userId, allowedModules: [] } });
     return;
   }
-  await db.departments.update(departmentChoice, { leaderId: userId });
+  const dept = departments.find((d) => d.id === departmentChoice);
+  if (!dept) return;
+  await updateDepartmentFn({
+    data: {
+      id: dept.id,
+      name: dept.name,
+      description: dept.description ?? undefined,
+      leaderId: userId,
+      allowedModules: dept.allowedModules,
+      branchId: dept.branchId ?? undefined,
+    },
+  });
 }
 
 export const Route = createFileRoute("/_authenticated/users")({
@@ -95,9 +122,13 @@ function UsersPage() {
   >;
   const usersQuery = useQuery({ queryKey: ["org-users"], queryFn: () => listOrgUsersFn() });
   const membersQuery = useQuery({ queryKey: ["members"], queryFn: () => listMembersFn() });
+  const departmentsQuery = useQuery({
+    queryKey: ["departments"],
+    queryFn: () => listDepartmentsFn(),
+  });
   const users = usersQuery.data ?? [];
   const members = membersQuery.data ?? [];
-  const departments = useLiveQuery(() => db.departments.orderBy("name").toArray(), []) ?? [];
+  const departments = departmentsQuery.data ?? [];
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<OrgUser | null>(null);
 
@@ -273,7 +304,7 @@ function DepartmentField({
   otherName,
   onOtherNameChange,
 }: {
-  departments: Department[];
+  departments: OrgDepartment[];
   choice: string;
   onChoiceChange: (v: string) => void;
   otherName: string;
@@ -389,7 +420,7 @@ function NewUserDialog({
   members,
   onClose,
 }: {
-  departments: Department[];
+  departments: OrgDepartment[];
   roles: { value: Role; label: string }[];
   members: OrgMember[];
   onClose: () => void;
@@ -423,8 +454,15 @@ function NewUserDialog({
         },
       }),
     onSuccess: async (result) => {
-      await resolveDepartmentAssignment(result.user.id, role, departmentChoice, otherDeptName);
+      await resolveDepartmentAssignment(
+        result.user.id,
+        role,
+        departmentChoice,
+        otherDeptName,
+        departments,
+      );
       queryClient.invalidateQueries({ queryKey: ["org-users"] });
+      queryClient.invalidateQueries({ queryKey: ["departments"] });
       const link = `${window.location.origin}/accept-invite?token=${result.inviteToken}`;
       setInviteResult({ link, emailSent: result.emailSent });
     },
@@ -573,7 +611,7 @@ function EditUserDialog({
   onClose,
 }: {
   user: OrgUser;
-  departments: Department[];
+  departments: OrgDepartment[];
   roles: { value: Role; label: string }[];
   members: OrgMember[];
   onClose: () => void;
@@ -606,8 +644,15 @@ function EditUserDialog({
         },
       }),
     onSuccess: async () => {
-      await resolveDepartmentAssignment(user.id, role, departmentChoice, otherDeptName);
+      await resolveDepartmentAssignment(
+        user.id,
+        role,
+        departmentChoice,
+        otherDeptName,
+        departments,
+      );
       queryClient.invalidateQueries({ queryKey: ["org-users"] });
+      queryClient.invalidateQueries({ queryKey: ["departments"] });
       toast.success("User updated");
       onClose();
     },
