@@ -106,3 +106,43 @@ export const sendEventNotificationEmail = createServerOnlyFn(
     }
   },
 );
+
+export const sendEventReportEmail = createServerOnlyFn(
+  async (params: {
+    to: string;
+    recipientName: string;
+    eventTitle: string;
+    eventDateLabel: string;
+    orgName: string;
+    submittedByName: string;
+    eventLink?: string;
+  }): Promise<{ sent: boolean }> => {
+    const transport = getTransport();
+    if (!transport) {
+      console.warn(
+        `[email] SMTP not configured — event report for ${params.to} was not emailed: ${params.eventTitle}`,
+      );
+      return { sent: false };
+    }
+
+    const from = process.env.SMTP_FROM || process.env.SMTP_USER!;
+    const subject = `Event report: ${params.eventTitle}`;
+    const linkText = params.eventLink ? `\n\nView it here: ${params.eventLink}` : "";
+    const linkHtml = params.eventLink
+      ? `<p><a href="${params.eventLink}">View full report</a></p>`
+      : "";
+    try {
+      await transport.sendMail({
+        from,
+        to: params.to,
+        subject,
+        text: `Hi ${params.recipientName},\n\n${params.submittedByName} submitted a report for ${params.eventTitle} (${params.eventDateLabel}) at ${params.orgName}.${linkText}`,
+        html: `<p>Hi ${params.recipientName},</p><p>${params.submittedByName} submitted a report for <strong>${params.eventTitle}</strong> (${params.eventDateLabel}) at <strong>${params.orgName}</strong>.</p>${linkHtml}`,
+      });
+      return { sent: true };
+    } catch (err) {
+      console.error(`[email] Failed to send event report email to ${params.to}:`, err);
+      return { sent: false };
+    }
+  },
+);

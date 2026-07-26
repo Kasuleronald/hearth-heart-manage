@@ -54,6 +54,7 @@ const MODULE_OPTIONS: { value: DepartmentModule; label: string }[] = [
   { value: "projects", label: "Projects" },
   { value: "pledges", label: "Pledges" },
   { value: "partners", label: "Partners" },
+  { value: "events", label: "Events (submit reports)" },
 ];
 
 function DepartmentsPage() {

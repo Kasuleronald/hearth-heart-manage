@@ -5,7 +5,7 @@ import { withTenant } from "./db/client";
 import { departments, expenses, requisitions } from "./db/schema";
 import { requireSession, AuthError } from "./auth";
 
-const departmentModuleValues = ["givings", "projects", "pledges", "partners"] as const;
+const departmentModuleValues = ["givings", "projects", "pledges", "partners", "events"] as const;
 
 export const listDepartmentsFn = createServerFn({ method: "GET" }).handler(async () => {
   const session = await requireSession();

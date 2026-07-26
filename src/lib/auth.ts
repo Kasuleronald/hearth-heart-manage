@@ -294,6 +294,12 @@ export function canManageDepartments(role: Role) {
 export function canManageEvents(role: Role) {
   return role === "admin" || role === "pastor";
 }
+// Filling in an event's post-event report is a step below full event
+// management — also open to whichever department leader has been granted
+// the "events" module (Departments page), not just Admin/Pastor.
+export function canSubmitEventReport(role: Role, allowedModules: DepartmentModule[] = []) {
+  return canManageEvents(role) || allowedModules.includes("events");
+}
 export function canManageProjects(role: Role) {
   return role === "admin" || role === "pastor";
 }

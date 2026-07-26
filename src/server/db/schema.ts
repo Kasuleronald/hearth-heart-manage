@@ -373,6 +373,21 @@ export const events = pgTable(
     branchId: uuid("branch_id").references(() => branches.id, { onDelete: "set null" }),
     recurrenceId: uuid("recurrence_id"),
     recurrence: jsonb("recurrence").$type<EventRecurrence>(),
+    // Post-event report — filled in after the fact by whoever manages
+    // Events (Admin/Pastor, or a department leader granted the "events"
+    // module), all optional/null until submitted. Submitting notifies
+    // every user, same as event creation.
+    venue: text("venue"),
+    reportAttendance: integer("report_attendance"),
+    ministers: text("ministers"),
+    strengths: text("strengths"),
+    challengesFaced: text("challenges_faced"),
+    recommendations: text("recommendations"),
+    reportNotes: text("report_notes"),
+    reportSubmittedBy: uuid("report_submitted_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    reportSubmittedAt: timestamp("report_submitted_at", { withTimezone: true }),
     ...timestamps,
   },
   (t) => [

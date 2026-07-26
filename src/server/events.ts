@@ -5,7 +5,7 @@ import { z } from "zod";
 import { withTenant, type Tx } from "./db/client";
 import { events, eventAttendance, users, notifications } from "./db/schema";
 import { requireSession, AuthError, type AuthedSession } from "./auth";
-import { sendEventNotificationEmail } from "./email";
+import { sendEventNotificationEmail, sendEventReportEmail } from "./email";
 import { format } from "date-fns";
 
 const eventTypeValues = ["sunday_service", "prayer", "overnight_prayer", "special"] as const;
@@ -197,6 +197,79 @@ export const deleteEventSeriesFn = createServerFn({ method: "POST" })
         .returning({ id: events.id }),
     );
     return { count: deleted.length };
+  });
+
+const eventReportSchema = z.object({
+  eventId: z.string().uuid(),
+  venue: z.string().optional(),
+  reportAttendance: z.number().int().min(0).optional(),
+  ministers: z.string().optional(),
+  strengths: z.string().optional(),
+  challengesFaced: z.string().optional(),
+  offertoryAmount: z.number().int().optional(),
+  recommendations: z.string().optional(),
+  reportNotes: z.string().optional(),
+});
+
+// Post-event report — open to whoever can manage Events, or the leader of a
+// department granted the "events" module (see canSubmitEventReport in
+// lib/auth.ts). Unlike event-creation notifications (which respect the
+// event's audience setting), a submitted report always goes to everyone.
+export const submitEventReportFn = createServerFn({ method: "POST" })
+  .validator(eventReportSchema)
+  .handler(async ({ data }) => {
+    const session = await requireSession();
+    const { eventId, ...rest } = data;
+    const { event, recipients } = await withTenant(session.organizationId, async (tx) => {
+      const [event] = await tx
+        .update(events)
+        .set({ ...rest, reportSubmittedBy: session.userId, reportSubmittedAt: new Date() })
+        .where(eq(events.id, eventId))
+        .returning();
+      if (!event) throw new AuthError("Event not found");
+
+      const orgUsers = await tx
+        .select({
+          id: users.id,
+          fullName: users.fullName,
+          email: users.email,
+          emailNotificationsEnabled: users.emailNotificationsEnabled,
+        })
+        .from(users);
+      const recipients = orgUsers.filter((u) => u.id !== session.userId);
+      if (recipients.length > 0) {
+        await tx.insert(notifications).values(
+          recipients.map((r) => ({
+            organizationId: session.organizationId,
+            recipientUserId: r.id,
+            type: "event_report_submitted" as const,
+            message: `${session.fullName} submitted a report for ${event.title}`,
+            entityType: "event",
+            entityId: event.id,
+          })),
+        );
+      }
+      return { event, recipients };
+    });
+
+    const baseUrl = (process.env.APP_URL ?? "").replace(/\/$/, "");
+    const eventLink = baseUrl ? `${baseUrl}/events/${event.id}` : undefined;
+    const eventDateLabel = format(new Date(`${event.date}T00:00:00`), "PPPP");
+    const toNotify = recipients.filter((r) => r.emailNotificationsEnabled);
+    await Promise.allSettled(
+      toNotify.map((r) =>
+        sendEventReportEmail({
+          to: r.email,
+          recipientName: r.fullName,
+          eventTitle: event.title,
+          eventDateLabel,
+          orgName: session.organizationName,
+          submittedByName: session.fullName,
+          eventLink,
+        }),
+      ),
+    );
+    return event;
   });
 
 export const listEventAttendanceFn = createServerFn({ method: "GET" })

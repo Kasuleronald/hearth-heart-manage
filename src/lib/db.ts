@@ -269,7 +269,7 @@ export interface Partner {
 // Modules a department's leader can additionally be granted view access to,
 // on top of whatever their account role already grants — see
 // canAccessGivings() etc. in lib/auth.ts.
-export type DepartmentModule = "givings" | "projects" | "pledges" | "partners";
+export type DepartmentModule = "givings" | "projects" | "pledges" | "partners" | "events";
 
 // A lightweight leadership directory for non-cell ministries (Ushering, Sound,
 // Worship, etc.) — unlike Cells/Classes this has no roster or meeting tracking,
@@ -389,6 +389,7 @@ export type NotificationType =
   | "member_added"
   | "member_deleted"
   | "event_created"
+  | "event_report_submitted"
   | "requisition_submitted"
   | "cell_report_submitted"
   | "testimony_added"
