@@ -1,8 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
-import { asc, eq, or } from "drizzle-orm";
+import { and, asc, eq, or } from "drizzle-orm";
 import { z } from "zod";
 import { db, withTenant } from "./db/client";
-import { memberRegistrations, members, users, notifications, organizations } from "./db/schema";
+import {
+  memberRegistrations,
+  members,
+  users,
+  notifications,
+  organizations,
+  settings,
+} from "./db/schema";
 import { requireSession, AuthError } from "./auth";
 
 const memberStatusValues = [
@@ -27,7 +34,22 @@ export const getOrgPublicInfoFn = createServerFn({ method: "GET" })
       .from(organizations)
       .where(eq(organizations.id, data.organizationId));
     if (!org || org.status !== "active") return null;
-    return { name: org.name };
+
+    // The org's own uploaded branding (Settings -> Church branding), shown
+    // on the public form instead of the generic My Church logo when set.
+    // settings is RLS-protected, so this must go through withTenant even
+    // though there's no session here — withTenant only needs the org id.
+    const [logoRow] = await withTenant(data.organizationId, (tx) =>
+      tx
+        .select({ value: settings.value })
+        .from(settings)
+        .where(
+          and(eq(settings.organizationId, data.organizationId), eq(settings.key, "churchLogo")),
+        ),
+    );
+    const logoDataUrl = logoRow?.value || undefined;
+
+    return { name: org.name, logoDataUrl };
   });
 
 const registrationSchema = z.object({

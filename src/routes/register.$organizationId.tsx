@@ -127,7 +127,15 @@ function RegisterPage() {
       <Card className="w-full max-w-lg border-border/60 shadow-xl">
         <CardContent className="p-8">
           <div className="mb-6 flex items-center gap-3">
-            <AppLogo className="h-10 w-10 rounded-2xl object-contain" />
+            {orgQuery.data.logoDataUrl ? (
+              <img
+                src={orgQuery.data.logoDataUrl}
+                alt={orgQuery.data.name}
+                className="h-10 w-10 rounded-2xl object-contain"
+              />
+            ) : (
+              <AppLogo className="h-10 w-10 rounded-2xl object-contain" />
+            )}
             <div>
               <div className="font-display text-xl font-semibold">{orgQuery.data.name}</div>
               <div className="text-xs text-muted-foreground">Member registration</div>
