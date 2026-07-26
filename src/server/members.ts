@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { withTenant } from "./db/client";
+import { withTenant, type Tx } from "./db/client";
 import { members, households, cells, classes, users, notifications } from "./db/schema";
 import { requireSession, AuthError } from "./auth";
 
@@ -88,13 +88,7 @@ export const assignMemberNumberFn = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const session = await requireSession();
     return withTenant(session.organizationId, async (tx) => {
-      const clashing = await tx
-        .select({ id: members.id })
-        .from(members)
-        .where(eq(members.number, data.number));
-      if (clashing.some((m) => m.id !== data.id)) {
-        throw new AuthError(`Number ${data.number} is already assigned to another member`);
-      }
+      await assertNumberAvailable(tx, data.number, data.id);
       const [member] = await tx
         .update(members)
         .set({ number: data.number })
@@ -127,6 +121,20 @@ const memberInputSchema = z.object({
   branchId: z.string().uuid().optional().or(z.literal("")),
 });
 
+// Shared by createMemberFn/updateMemberFn (assigning a number right in the
+// member form) and assignMemberNumberFn (the dedicated "change number"
+// action) — a number left blank is always fine, but a non-blank one must be
+// unique within the org.
+async function assertNumberAvailable(tx: Tx, number: string, excludeId?: string) {
+  const clashing = await tx
+    .select({ id: members.id })
+    .from(members)
+    .where(eq(members.number, number));
+  if (clashing.some((m) => m.id !== excludeId)) {
+    throw new AuthError(`Number ${number} is already assigned to another member`);
+  }
+}
+
 function normalizeMemberInput(data: z.infer<typeof memberInputSchema>) {
   return {
     firstName: data.firstName.trim(),
@@ -156,6 +164,7 @@ export const createMemberFn = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const session = await requireSession();
     return withTenant(session.organizationId, async (tx) => {
+      if (data.number) await assertNumberAvailable(tx, data.number);
       const [member] = await tx
         .insert(members)
         .values({
@@ -194,6 +203,7 @@ export const updateMemberFn = createServerFn({ method: "POST" })
     const session = await requireSession();
     const { id, ...rest } = data;
     return withTenant(session.organizationId, async (tx) => {
+      if (rest.number) await assertNumberAvailable(tx, rest.number, id);
       const [member] = await tx
         .update(members)
         .set(normalizeMemberInput(rest))

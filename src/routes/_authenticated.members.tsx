@@ -9,6 +9,7 @@ import {
   createMemberFn,
   updateMemberFn,
   deleteMemberFn,
+  nextMemberNumberFn,
 } from "@/server/members";
 import { ExportMenu } from "@/components/export-menu";
 import { BranchField } from "@/components/branch-field";
@@ -331,6 +332,7 @@ function MembersPage() {
                 cells={cells}
                 classes={classes}
                 cellSingular={cellSingular}
+                canEditNumber={canEditDelete}
                 onClose={() => setOpen(false)}
               />
             </Dialog>
@@ -666,6 +668,7 @@ function MemberDialog({
   cells,
   classes,
   cellSingular,
+  canEditNumber,
   onClose,
 }: {
   member: Member | null;
@@ -674,6 +677,7 @@ function MemberDialog({
   cells: { id: string; name: string }[];
   classes: { id: string; name: string }[];
   cellSingular: string;
+  canEditNumber: boolean;
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -695,9 +699,22 @@ function MemberDialog({
   const [classId, setClassId] = useState(member?.classId ?? "");
   const [notes, setNotes] = useState(member?.notes ?? "");
   const [branchId, setBranchId] = useState(member?.branchId ?? "");
+  const [number, setNumber] = useState(member?.number ?? "");
+  const [suggesting, setSuggesting] = useState(false);
 
   const categoryDescription = CATEGORIES.find((c) => c.value === category)?.description;
   const [duplicateMatches, setDuplicateMatches] = useState<DuplicateEmailMatch[]>([]);
+
+  async function suggestNumber() {
+    setSuggesting(true);
+    try {
+      setNumber(await nextMemberNumberFn());
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to suggest a number");
+    } finally {
+      setSuggesting(false);
+    }
+  }
 
   const saveMutation = useMutation({
     mutationFn: (input: ReturnType<typeof buildInput>) =>
@@ -733,7 +750,7 @@ function MemberDialog({
         | Exclude<MemberCategory, "new_member" | "convert">
         | undefined,
       categoryOther: category === "other" ? categoryOther || undefined : undefined,
-      number: member?.number ?? undefined,
+      number: canEditNumber ? number.trim() || undefined : (member?.number ?? undefined),
       joinDate: joinDate || undefined,
       householdId: householdId || undefined,
       cellId: cellId || undefined,
@@ -794,6 +811,28 @@ function MemberDialog({
           <Field label="Last name">
             <Input value={lastName} onChange={(e) => setLastName(e.target.value)} />
           </Field>
+          {canEditNumber && (
+            <Field label="Member number">
+              <div className="flex gap-2">
+                <Input
+                  value={number}
+                  onChange={(e) => setNumber(e.target.value)}
+                  placeholder="e.g. 0001"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={suggesting}
+                  onClick={suggestNumber}
+                >
+                  <Hash className="mr-1 h-4 w-4" /> Suggest
+                </Button>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Leave blank to add this member as unnumbered for now.
+              </p>
+            </Field>
+          )}
           <Field label="Phone">
             <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
           </Field>
