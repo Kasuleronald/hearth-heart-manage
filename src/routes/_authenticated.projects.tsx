@@ -31,6 +31,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useSession, canManageProjects, canToggleCurrency } from "@/lib/auth";
+import { DuplicateNameAlert } from "@/components/duplicate-name-alert";
+import { findDuplicateByName } from "@/lib/duplicate-name";
 import { toast } from "sonner";
 import { startOfWeek, startOfMonth, format } from "date-fns";
 
@@ -97,6 +99,7 @@ function ProjectsPage() {
                 <ProjectDialog
                   key={editing?.id ?? "new"}
                   project={editing}
+                  projects={projects}
                   onClose={() => setOpen(false)}
                 />
               </Dialog>
@@ -252,7 +255,15 @@ function TargetRow({
   );
 }
 
-function ProjectDialog({ project, onClose }: { project: OrgProject | null; onClose: () => void }) {
+function ProjectDialog({
+  project,
+  projects,
+  onClose,
+}: {
+  project: OrgProject | null;
+  projects: OrgProject[];
+  onClose: () => void;
+}) {
   const queryClient = useQueryClient();
   const [name, setName] = useState(project?.name ?? "");
   const [scope, setScope] = useState(project?.scope ?? "");
@@ -266,6 +277,7 @@ function ProjectDialog({ project, onClose }: { project: OrgProject | null; onClo
     project?.monthlyTarget != null ? String(project.monthlyTarget) : "",
   );
   const [branchId, setBranchId] = useState(project?.branchId ?? "");
+  const [dupMatch, setDupMatch] = useState<OrgProject | null>(null);
   const baseCurrency = useBaseCurrency();
 
   function parseAmount(v: string): number | undefined {
@@ -297,12 +309,28 @@ function ProjectDialog({ project, onClose }: { project: OrgProject | null; onClo
   });
 
   function save() {
+    if (saveMutation.isPending) return;
     if (!name.trim()) return toast.error("Name is required");
+    const dup = findDuplicateByName(projects, name, project?.id);
+    if (dup) {
+      setDupMatch(dup);
+      return;
+    }
     saveMutation.mutate();
   }
 
   return (
     <DialogContent>
+      <DuplicateNameAlert
+        open={!!dupMatch}
+        onOpenChange={(o) => !o && setDupMatch(null)}
+        name={dupMatch?.name ?? ""}
+        kind="project"
+        onContinue={() => {
+          setDupMatch(null);
+          saveMutation.mutate();
+        }}
+      />
       <DialogHeader>
         <DialogTitle className="font-display">
           {project ? "Edit project" : "New project"}
@@ -361,7 +389,9 @@ function ProjectDialog({ project, onClose }: { project: OrgProject | null; onClo
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button onClick={save}>{project ? "Save changes" : "Create project"}</Button>
+        <Button onClick={save} disabled={saveMutation.isPending}>
+          {project ? "Save changes" : "Create project"}
+        </Button>
       </DialogFooter>
     </DialogContent>
   );

@@ -195,7 +195,9 @@ function AssignNumberDialog({ memberId, current }: { memberId: string; current?:
           <Button variant="ghost" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={save}>Save</Button>
+          <Button onClick={save} disabled={assignMutation.isPending}>
+            Save
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

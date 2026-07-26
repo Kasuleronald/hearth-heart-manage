@@ -38,6 +38,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useSession, canAccessPartners, canToggleCurrency } from "@/lib/auth";
+import { DuplicateNameAlert } from "@/components/duplicate-name-alert";
+import { findDuplicateByName } from "@/lib/duplicate-name";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/partners")({
@@ -116,6 +118,7 @@ function PartnersPage() {
               <PartnerDialog
                 key={editing?.id ?? "new"}
                 partner={editing}
+                partners={partners}
                 onClose={() => setOpen(false)}
               />
             </Dialog>
@@ -219,7 +222,15 @@ function PartnersPage() {
   );
 }
 
-function PartnerDialog({ partner, onClose }: { partner: OrgPartner | null; onClose: () => void }) {
+function PartnerDialog({
+  partner,
+  partners,
+  onClose,
+}: {
+  partner: OrgPartner | null;
+  partners: OrgPartner[];
+  onClose: () => void;
+}) {
   const queryClient = useQueryClient();
   const [name, setName] = useState(partner?.name ?? "");
   const [type, setType] = useState<"individual" | "organization" | "church" | undefined>(
@@ -232,6 +243,7 @@ function PartnerDialog({ partner, onClose }: { partner: OrgPartner | null; onClo
   );
   const [notes, setNotes] = useState(partner?.notes ?? "");
   const [branchId, setBranchId] = useState(partner?.branchId ?? "");
+  const [dupMatch, setDupMatch] = useState<OrgPartner | null>(null);
   const baseCurrency = useBaseCurrency();
 
   const saveMutation = useMutation({
@@ -259,12 +271,28 @@ function PartnerDialog({ partner, onClose }: { partner: OrgPartner | null; onClo
   });
 
   function save() {
+    if (saveMutation.isPending) return;
     if (!name.trim()) return toast.error("Name is required");
+    const dup = findDuplicateByName(partners, name, partner?.id);
+    if (dup) {
+      setDupMatch(dup);
+      return;
+    }
     saveMutation.mutate();
   }
 
   return (
     <DialogContent>
+      <DuplicateNameAlert
+        open={!!dupMatch}
+        onOpenChange={(o) => !o && setDupMatch(null)}
+        name={dupMatch?.name ?? ""}
+        kind="partner"
+        onContinue={() => {
+          setDupMatch(null);
+          saveMutation.mutate();
+        }}
+      />
       <DialogHeader>
         <DialogTitle className="font-display">
           {partner ? "Edit partner" : "New partner"}
@@ -328,7 +356,9 @@ function PartnerDialog({ partner, onClose }: { partner: OrgPartner | null; onClo
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button onClick={save}>{partner ? "Save changes" : "Create partner"}</Button>
+        <Button onClick={save} disabled={saveMutation.isPending}>
+          {partner ? "Save changes" : "Create partner"}
+        </Button>
       </DialogFooter>
     </DialogContent>
   );

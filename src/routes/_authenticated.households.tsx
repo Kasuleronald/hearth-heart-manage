@@ -19,6 +19,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { DeleteButton } from "@/components/delete-button";
 import { BranchField } from "@/components/branch-field";
 import { ViewToggle, type CollectionView } from "@/components/view-toggle";
+import { DuplicateNameAlert } from "@/components/duplicate-name-alert";
+import { findDuplicateByName } from "@/lib/duplicate-name";
 import {
   Dialog,
   DialogContent,
@@ -178,6 +180,7 @@ function HouseholdsPage() {
               <HouseholdDialog
                 key={editing?.id ?? "new"}
                 hh={editing}
+                households={households}
                 onClose={() => setOpen(false)}
               />
             </Dialog>
@@ -225,11 +228,20 @@ function HouseholdsPage() {
   );
 }
 
-function HouseholdDialog({ hh, onClose }: { hh: OrgHousehold | null; onClose: () => void }) {
+function HouseholdDialog({
+  hh,
+  households,
+  onClose,
+}: {
+  hh: OrgHousehold | null;
+  households: OrgHousehold[];
+  onClose: () => void;
+}) {
   const queryClient = useQueryClient();
   const [name, setName] = useState(hh?.name ?? "");
   const [address, setAddress] = useState(hh?.address ?? "");
   const [branchId, setBranchId] = useState(hh?.branchId ?? "");
+  const [dupMatch, setDupMatch] = useState<OrgHousehold | null>(null);
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -251,12 +263,28 @@ function HouseholdDialog({ hh, onClose }: { hh: OrgHousehold | null; onClose: ()
   });
 
   function save() {
+    if (saveMutation.isPending) return;
     if (!name.trim()) return toast.error("Name is required");
+    const dup = findDuplicateByName(households, name, hh?.id);
+    if (dup) {
+      setDupMatch(dup);
+      return;
+    }
     saveMutation.mutate();
   }
 
   return (
     <DialogContent>
+      <DuplicateNameAlert
+        open={!!dupMatch}
+        onOpenChange={(o) => !o && setDupMatch(null)}
+        name={dupMatch?.name ?? ""}
+        kind="household"
+        onContinue={() => {
+          setDupMatch(null);
+          saveMutation.mutate();
+        }}
+      />
       <DialogHeader>
         <DialogTitle className="font-display">
           {hh ? "Edit household" : "New household"}
@@ -281,7 +309,9 @@ function HouseholdDialog({ hh, onClose }: { hh: OrgHousehold | null; onClose: ()
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button onClick={save}>{hh ? "Save changes" : "Create"}</Button>
+        <Button onClick={save} disabled={saveMutation.isPending}>
+          {hh ? "Save changes" : "Create"}
+        </Button>
       </DialogFooter>
     </DialogContent>
   );

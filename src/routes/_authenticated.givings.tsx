@@ -511,7 +511,7 @@ function GivingDialog({
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button onClick={save}>
+        <Button onClick={save} disabled={saveMutation.isPending}>
           {giving ? "Save changes" : `Record ${givingsSingular.toLowerCase()}`}
         </Button>
       </DialogFooter>

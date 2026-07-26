@@ -24,6 +24,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DeleteButton } from "@/components/delete-button";
 import { BranchField } from "@/components/branch-field";
 import { ViewToggle, type CollectionView } from "@/components/view-toggle";
+import { DuplicateNameAlert } from "@/components/duplicate-name-alert";
+import { findDuplicateByName } from "@/lib/duplicate-name";
 import {
   Dialog,
   DialogContent,
@@ -228,6 +230,7 @@ function DepartmentsPage() {
                   <DepartmentDialog
                     key={editing?.id ?? "new"}
                     dept={editing}
+                    departments={allDepartments}
                     users={users}
                     singular={singular}
                     leaderLabel={leaderLabel}
@@ -293,12 +296,14 @@ function DepartmentsPage() {
 
 function DepartmentDialog({
   dept,
+  departments,
   users,
   singular,
   leaderLabel,
   onClose,
 }: {
   dept: OrgDepartment | null;
+  departments: OrgDepartment[];
   users: { id: string; fullName: string; role: string }[];
   singular: string;
   leaderLabel: string;
@@ -312,6 +317,7 @@ function DepartmentDialog({
   const [allowedModules, setAllowedModules] = useState<DepartmentModule[]>(
     dept?.allowedModules ?? [],
   );
+  const [dupMatch, setDupMatch] = useState<OrgDepartment | null>(null);
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -340,8 +346,14 @@ function DepartmentDialog({
   }
 
   function save() {
+    if (saveMutation.isPending) return;
     if (!name.trim()) {
       toast.error("Name is required");
+      return;
+    }
+    const dup = findDuplicateByName(departments, name, dept?.id);
+    if (dup) {
+      setDupMatch(dup);
       return;
     }
     saveMutation.mutate();
@@ -349,6 +361,16 @@ function DepartmentDialog({
 
   return (
     <DialogContent>
+      <DuplicateNameAlert
+        open={!!dupMatch}
+        onOpenChange={(o) => !o && setDupMatch(null)}
+        name={dupMatch?.name ?? ""}
+        kind={singular.toLowerCase()}
+        onContinue={() => {
+          setDupMatch(null);
+          saveMutation.mutate();
+        }}
+      />
       <DialogHeader>
         <DialogTitle className="font-display">
           {dept ? `Edit ${singular.toLowerCase()}` : `New ${singular.toLowerCase()}`}

@@ -567,7 +567,9 @@ function MeetingDialog({
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button onClick={save}>{meeting ? "Save changes" : "Create"}</Button>
+        <Button onClick={save} disabled={saveMutation.isPending}>
+          {meeting ? "Save changes" : "Create"}
+        </Button>
       </DialogFooter>
     </DialogContent>
   );
@@ -630,7 +632,9 @@ function RecordReceivedDialog({
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={save}>Save</Button>
+          <Button onClick={save} disabled={saveMutation.isPending}>
+            Save
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -915,7 +919,9 @@ function GuestDialog({
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={save}>Add guest</Button>
+          <Button onClick={save} disabled={saveMutation.isPending}>
+            Add guest
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

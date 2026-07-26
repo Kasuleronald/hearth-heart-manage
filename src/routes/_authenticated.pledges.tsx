@@ -444,7 +444,9 @@ function PledgeDialog({
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button onClick={save}>{pledge ? "Save changes" : "Book pledge"}</Button>
+        <Button onClick={save} disabled={saveMutation.isPending}>
+          {pledge ? "Save changes" : "Book pledge"}
+        </Button>
       </DialogFooter>
     </DialogContent>
   );

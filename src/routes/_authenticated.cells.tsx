@@ -14,6 +14,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { DeleteButton } from "@/components/delete-button";
 import { BranchField } from "@/components/branch-field";
 import { ViewToggle, type CollectionView } from "@/components/view-toggle";
+import { DuplicateNameAlert } from "@/components/duplicate-name-alert";
+import { findDuplicateByName } from "@/lib/duplicate-name";
 import { useSession, canManageUsers, isTierAFinanceLeader } from "@/lib/auth";
 import { useIsHeadOfCellFellowships } from "@/lib/cell-fellowships";
 import { useCellTerm } from "@/lib/terminology";
@@ -176,6 +178,7 @@ function CellsPage() {
                 <CellDialog
                   key={editing?.id ?? "new"}
                   cell={editing}
+                  cells={cells}
                   users={users}
                   singular={singular}
                   leaderLabel={leaderLabel}
@@ -228,12 +231,14 @@ function CellsPage() {
 
 function CellDialog({
   cell,
+  cells,
   users,
   singular,
   leaderLabel,
   onClose,
 }: {
   cell: OrgCell | null;
+  cells: OrgCell[];
   users: { id: string; fullName: string; role: string }[];
   singular: string;
   leaderLabel: string;
@@ -246,6 +251,7 @@ function CellDialog({
   const [leaderId, setLeaderId] = useState(cell?.leaderId ?? "");
   const [description, setDescription] = useState(cell?.description ?? "");
   const [branchId, setBranchId] = useState(cell?.branchId ?? "");
+  const [dupMatch, setDupMatch] = useState<OrgCell | null>(null);
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -271,12 +277,28 @@ function CellDialog({
   });
 
   function save() {
+    if (saveMutation.isPending) return;
     if (!name.trim()) return toast.error("Name is required");
+    const dup = findDuplicateByName(cells, name, cell?.id);
+    if (dup) {
+      setDupMatch(dup);
+      return;
+    }
     saveMutation.mutate();
   }
 
   return (
     <DialogContent>
+      <DuplicateNameAlert
+        open={!!dupMatch}
+        onOpenChange={(o) => !o && setDupMatch(null)}
+        name={dupMatch?.name ?? ""}
+        kind={singular.toLowerCase()}
+        onContinue={() => {
+          setDupMatch(null);
+          saveMutation.mutate();
+        }}
+      />
       <DialogHeader>
         <DialogTitle className="font-display">
           {cell ? `Edit ${singular.toLowerCase()}` : `New ${singular.toLowerCase()}`}
@@ -351,7 +373,9 @@ function CellDialog({
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button onClick={save}>{cell ? "Save changes" : `Create ${singular.toLowerCase()}`}</Button>
+        <Button onClick={save} disabled={saveMutation.isPending}>
+          {cell ? "Save changes" : `Create ${singular.toLowerCase()}`}
+        </Button>
       </DialogFooter>
     </DialogContent>
   );

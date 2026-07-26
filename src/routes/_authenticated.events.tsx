@@ -520,8 +520,10 @@ function EventDialog({
     format(addDays(new Date(`${date}T00:00:00`), 365), "yyyy-MM-dd"),
   );
   const baseCurrency = useBaseCurrency();
+  const [saving, setSaving] = useState(false);
 
   async function save() {
+    if (saving) return;
     if (!title.trim()) return toast.error("Title required");
     if (endTime && startTime && endTime <= startTime) {
       toast.error("End time must be after start time");
@@ -531,6 +533,7 @@ function EventDialog({
       toast.error("Repeat-until date must be on or after the event date");
       return;
     }
+    setSaving(true);
     try {
       const amount = offertoryAmount ? Number(offertoryAmount) : undefined;
       if (offertoryAmount && Number.isNaN(amount)) {
@@ -577,6 +580,8 @@ function EventDialog({
       onClose();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to save event");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -740,7 +745,9 @@ function EventDialog({
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button onClick={save}>{event ? "Save changes" : "Create event"}</Button>
+        <Button onClick={save} disabled={saving}>
+          {event ? "Save changes" : "Create event"}
+        </Button>
       </DialogFooter>
     </DialogContent>
   );

@@ -918,6 +918,7 @@ function MemberDialog({
   }
 
   async function save() {
+    if (saveMutation.isPending) return;
     if (!firstName.trim() || !lastName.trim()) {
       toast.error("First and last name are required");
       return;
@@ -1183,7 +1184,9 @@ function MemberDialog({
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={save}>{member ? "Save changes" : "Create member"}</Button>
+          <Button onClick={save} disabled={saveMutation.isPending}>
+            {member ? "Save changes" : "Create member"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </>

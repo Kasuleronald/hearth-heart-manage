@@ -202,7 +202,9 @@ function TestimonyDialog({ onClose }: { onClose: () => void }) {
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button onClick={save}>Share testimony</Button>
+        <Button onClick={save} disabled={saveMutation.isPending}>
+          Share testimony
+        </Button>
       </DialogFooter>
     </DialogContent>
   );

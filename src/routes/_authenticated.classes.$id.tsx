@@ -366,7 +366,9 @@ function SessionDialog({
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button onClick={save}>{session ? "Save changes" : "Create"}</Button>
+        <Button onClick={save} disabled={saveMutation.isPending}>
+          {session ? "Save changes" : "Create"}
+        </Button>
       </DialogFooter>
     </DialogContent>
   );

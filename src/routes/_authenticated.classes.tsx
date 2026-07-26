@@ -16,6 +16,8 @@ import { BranchField } from "@/components/branch-field";
 import { useSession, canManageUsers } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
+import { DuplicateNameAlert } from "@/components/duplicate-name-alert";
+import { findDuplicateByName } from "@/lib/duplicate-name";
 import {
   Dialog,
   DialogContent,
@@ -104,6 +106,7 @@ function ClassesPage() {
               <ClassDialog
                 key={editing?.id ?? "new"}
                 cls={editing}
+                classes={classes}
                 users={users}
                 leaderLabel={leaderLabel}
                 onClose={() => setOpen(false)}
@@ -194,11 +197,13 @@ function ClassesPage() {
 
 function ClassDialog({
   cls,
+  classes,
   users,
   leaderLabel,
   onClose,
 }: {
   cls: OrgClass | null;
+  classes: OrgClass[];
   users: { id: string; fullName: string; role: string }[];
   leaderLabel: string;
   onClose: () => void;
@@ -210,6 +215,7 @@ function ClassDialog({
   const [facilitatorId, setFacilitatorId] = useState(cls?.facilitatorId ?? "");
   const [description, setDescription] = useState(cls?.description ?? "");
   const [branchId, setBranchId] = useState(cls?.branchId ?? "");
+  const [dupMatch, setDupMatch] = useState<OrgClass | null>(null);
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -234,12 +240,28 @@ function ClassDialog({
   });
 
   function save() {
+    if (saveMutation.isPending) return;
     if (!name.trim()) return toast.error("Name is required");
+    const dup = findDuplicateByName(classes, name, cls?.id);
+    if (dup) {
+      setDupMatch(dup);
+      return;
+    }
     saveMutation.mutate();
   }
 
   return (
     <DialogContent>
+      <DuplicateNameAlert
+        open={!!dupMatch}
+        onOpenChange={(o) => !o && setDupMatch(null)}
+        name={dupMatch?.name ?? ""}
+        kind="class"
+        onContinue={() => {
+          setDupMatch(null);
+          saveMutation.mutate();
+        }}
+      />
       <DialogHeader>
         <DialogTitle className="font-display">
           {cls ? "Edit class" : "New discipleship class"}
@@ -314,7 +336,9 @@ function ClassDialog({
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button onClick={save}>{cls ? "Save changes" : "Create class"}</Button>
+        <Button onClick={save} disabled={saveMutation.isPending}>
+          {cls ? "Save changes" : "Create class"}
+        </Button>
       </DialogFooter>
     </DialogContent>
   );

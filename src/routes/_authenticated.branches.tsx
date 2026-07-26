@@ -27,6 +27,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useSession, canManageBranches } from "@/lib/auth";
+import { DuplicateNameAlert } from "@/components/duplicate-name-alert";
+import { findDuplicateByName } from "@/lib/duplicate-name";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/branches")({
@@ -93,6 +95,7 @@ function BranchesPage() {
             <BranchDialog
               key={editing?.id ?? "new"}
               branch={editing}
+              branches={branches}
               users={users}
               onClose={() => setOpen(false)}
             />
@@ -174,10 +177,12 @@ function BranchesPage() {
 
 function BranchDialog({
   branch,
+  branches,
   users,
   onClose,
 }: {
   branch: OrgBranch | null;
+  branches: OrgBranch[];
   users: { id: string; fullName: string; role: string }[];
   onClose: () => void;
 }) {
@@ -186,6 +191,7 @@ function BranchDialog({
   const [address, setAddress] = useState(branch?.address ?? "");
   const [leadPastorId, setLeadPastorId] = useState(branch?.leadPastorId ?? "");
   const [startDate, setStartDate] = useState(branch?.startDate ?? "");
+  const [dupMatch, setDupMatch] = useState<OrgBranch | null>(null);
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -208,12 +214,28 @@ function BranchDialog({
   });
 
   function save() {
+    if (saveMutation.isPending) return;
     if (!name.trim()) return toast.error("Name is required");
+    const dup = findDuplicateByName(branches, name, branch?.id);
+    if (dup) {
+      setDupMatch(dup);
+      return;
+    }
     saveMutation.mutate();
   }
 
   return (
     <DialogContent>
+      <DuplicateNameAlert
+        open={!!dupMatch}
+        onOpenChange={(o) => !o && setDupMatch(null)}
+        name={dupMatch?.name ?? ""}
+        kind="branch"
+        onContinue={() => {
+          setDupMatch(null);
+          saveMutation.mutate();
+        }}
+      />
       <DialogHeader>
         <DialogTitle className="font-display">{branch ? "Edit branch" : "New branch"}</DialogTitle>
       </DialogHeader>
@@ -254,7 +276,9 @@ function BranchDialog({
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button onClick={save}>{branch ? "Save changes" : "Create branch"}</Button>
+        <Button onClick={save} disabled={saveMutation.isPending}>
+          {branch ? "Save changes" : "Create branch"}
+        </Button>
       </DialogFooter>
     </DialogContent>
   );
