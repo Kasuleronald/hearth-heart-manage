@@ -1,13 +1,29 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { ArrowLeft, Plus, Pencil, Wallet, Check, Receipt, X } from "lucide-react";
-import { db, uid, type CellMeeting, type Member } from "@/lib/db";
+import {
+  getCellFn,
+  listCellMeetingsFn,
+  createCellMeetingFn,
+  updateCellMeetingFn,
+  deleteCellMeetingFn,
+  requestMeetingEditFn,
+  approveMeetingEditFn,
+  recordOffertoryReceivedFn,
+  approveCellExpenseFn,
+  rejectCellExpenseFn,
+  listCellAttendanceFn,
+  setCellAttendanceFn,
+  addGuestAttendanceFn,
+  removeGuestAttendanceFn,
+  setCellMembershipFn,
+} from "@/server/cells";
+import { listMembersFn } from "@/server/members";
+import { listOrgUsersFn } from "@/server/users";
 import { useBaseCurrency, formatCurrency } from "@/lib/currency";
 import { useDisplayCurrency } from "@/lib/currency-toggle";
-import { generateReportRef, getCellBalance } from "@/lib/finance";
-import { notifyCellReportSubmitted, notifyCellExpenseApproved } from "@/lib/notifications";
-import { ensureCellFellowshipsDepartment } from "@/lib/cell-fellowships";
+import { getCellBalance } from "@/lib/finance";
 import { PageHeader } from "@/components/page-header";
 import { CurrencyToggle } from "@/components/currency-toggle";
 import { Button } from "@/components/ui/button";
@@ -44,34 +60,78 @@ export const Route = createFileRoute("/_authenticated/cells/$id")({
   notFoundComponent: () => <div className="p-6 text-sm text-muted-foreground">Not found.</div>,
 });
 
+type OrgCellMeeting = Awaited<ReturnType<typeof listCellMeetingsFn>>[number];
+type OrgMember = Awaited<ReturnType<typeof listMembersFn>>[number];
+
 function CellDetail() {
   const { id } = Route.useParams();
+  const queryClient = useQueryClient();
   const { session } = useSession();
   const { singular, plural } = useCellTerm();
-  const cell = useLiveQuery(() => db.cells.get(id), [id]);
-  const leader = useLiveQuery(
-    () => (cell?.leaderId ? db.users.get(cell.leaderId) : undefined),
-    [cell?.leaderId],
-  );
-  const members = useLiveQuery(() => db.members.where("cellId").equals(id).toArray(), [id]) ?? [];
-  const allMembers = useLiveQuery(() => db.members.toArray(), []) ?? [];
-  const meetings =
-    useLiveQuery(() => db.cellMeetings.where("cellId").equals(id).reverse().sortBy("date"), [id]) ??
-    [];
+  const cellQuery = useQuery({
+    queryKey: ["cells", id],
+    queryFn: () => getCellFn({ data: { id } }),
+    retry: false,
+  });
+  const usersQuery = useQuery({ queryKey: ["org-users"], queryFn: () => listOrgUsersFn() });
+  const allMembersQuery = useQuery({ queryKey: ["members"], queryFn: () => listMembersFn() });
+  const meetingsQuery = useQuery({
+    queryKey: ["cell-meetings", id],
+    queryFn: () => listCellMeetingsFn({ data: { cellId: id } }),
+  });
+  const cell = cellQuery.data;
+  const allMembers = allMembersQuery.data ?? [];
+  const members = allMembers.filter((m) => m.cellId === id);
+  const meetings = meetingsQuery.data ?? [];
+  const leader = (usersQuery.data ?? []).find((u) => u.id === cell?.leaderId);
   const [addingMember, setAddingMember] = useState(false);
   const [meetingDialogOpen, setMeetingDialogOpen] = useState(false);
-  const [editingMeeting, setEditingMeeting] = useState<CellMeeting | null>(null);
-  const [attMeeting, setAttMeeting] = useState<CellMeeting | null>(null);
-  const [recordingMeeting, setRecordingMeeting] = useState<CellMeeting | null>(null);
-  const [approvingExpenseMeeting, setApprovingExpenseMeeting] = useState<CellMeeting | null>(null);
+  const [editingMeeting, setEditingMeeting] = useState<OrgCellMeeting | null>(null);
+  const [attMeeting, setAttMeeting] = useState<OrgCellMeeting | null>(null);
+  const [recordingMeeting, setRecordingMeeting] = useState<OrgCellMeeting | null>(null);
+  const [approvingExpenseMeeting, setApprovingExpenseMeeting] = useState<OrgCellMeeting | null>(
+    null,
+  );
   const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
   const { format: formatAmount, base } = useDisplayCurrency(canToggle);
 
-  if (cell === undefined) return null;
-  if (!cell) throw notFound();
-  if (session && !canAccessRecordBranch(session.branchId, cell.branchId)) throw notFound();
+  const setMembershipMutation = useMutation({
+    mutationFn: (vars: { memberId: string; cellId: string | null }) =>
+      setCellMembershipFn({ data: vars }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["members"] }),
+  });
 
-  const canEdit = session ? canEditCell(session.role, cell.leaderId, session.userId) : false;
+  const requestEditMutation = useMutation({
+    mutationFn: (meetingId: string) => requestMeetingEditFn({ data: { id: meetingId } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cell-meetings", id] });
+      toast.success("Edit requested — an admin or treasurer must approve it.");
+    },
+  });
+
+  const approveEditMutation = useMutation({
+    mutationFn: (meetingId: string) => approveMeetingEditFn({ data: { id: meetingId } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cell-meetings", id] });
+      toast.success("Edit approved");
+    },
+  });
+
+  const deleteMeetingMutation = useMutation({
+    mutationFn: (meetingId: string) => deleteCellMeetingFn({ data: { id: meetingId } }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["cell-meetings", id] }),
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to delete meeting"),
+  });
+
+  if (cellQuery.isLoading) return null;
+  if (cellQuery.isError || !cell) throw notFound();
+  if (session && !canAccessRecordBranch(session.branchId, cell.branchId ?? undefined)) {
+    throw notFound();
+  }
+
+  const canEdit = session
+    ? canEditCell(session.role, cell.leaderId ?? undefined, session.userId)
+    : false;
   const canRecordReceived = session
     ? canRecordOffertoryReceived(session.role, session.financeTier)
     : false;
@@ -145,8 +205,8 @@ function CellDetail() {
                             <li key={m.id}>
                               <button
                                 className="w-full rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
-                                onClick={async () => {
-                                  await db.members.update(m.id, { cellId: cell.id });
+                                onClick={() => {
+                                  setMembershipMutation.mutate({ memberId: m.id, cellId: cell.id });
                                   toast.success(`Added ${m.firstName} to ${cell.name}`);
                                 }}
                               >
@@ -173,9 +233,7 @@ function CellDetail() {
                   {canEdit && (
                     <button
                       className="text-xs text-muted-foreground hover:text-destructive"
-                      onClick={async () => {
-                        await db.members.update(m.id, { cellId: undefined });
-                      }}
+                      onClick={() => setMembershipMutation.mutate({ memberId: m.id, cellId: null })}
                     >
                       Remove
                     </button>
@@ -209,8 +267,7 @@ function CellDetail() {
                   <MeetingDialog
                     key={editingMeeting?.id ?? "new"}
                     cellId={cell.id}
-                    cellName={cell.name}
-                    cellBranchId={cell.branchId}
+                    cellBranchId={cell.branchId ?? undefined}
                     meeting={editingMeeting}
                     singular={singular}
                     onClose={() => setMeetingDialogOpen(false)}
@@ -283,14 +340,7 @@ function CellDetail() {
                             size="sm"
                             variant="outline"
                             className="h-8"
-                            onClick={async () => {
-                              await db.cellMeetings.update(m.id, {
-                                editRequestStatus: "requested",
-                              });
-                              toast.success(
-                                "Edit requested — an admin or treasurer must approve it.",
-                              );
-                            }}
+                            onClick={() => requestEditMutation.mutate(m.id)}
                           >
                             Request edit
                           </Button>
@@ -300,10 +350,7 @@ function CellDetail() {
                             size="sm"
                             variant="outline"
                             className="h-8"
-                            onClick={async () => {
-                              await db.cellMeetings.update(m.id, { editRequestStatus: "approved" });
-                              toast.success("Edit approved");
-                            }}
+                            onClick={() => approveEditMutation.mutate(m.id)}
                           >
                             <Check className="mr-1 h-3.5 w-3.5" /> Approve edit
                           </Button>
@@ -327,14 +374,7 @@ function CellDetail() {
                             title="Delete this meeting?"
                             description="This also removes its attendance records. This can't be undone."
                             onConfirm={async () => {
-                              try {
-                                await db.cellAttendance.where("meetingId").equals(m.id).delete();
-                                await db.cellMeetings.delete(m.id);
-                              } catch (e) {
-                                toast.error(
-                                  e instanceof Error ? e.message : "Failed to delete meeting",
-                                );
-                              }
+                              await deleteMeetingMutation.mutateAsync(m.id);
                             }}
                           />
                         )}
@@ -354,6 +394,7 @@ function CellDetail() {
       {recordingMeeting && (
         <RecordReceivedDialog
           meeting={recordingMeeting}
+          cellId={id}
           onClose={() => setRecordingMeeting(null)}
         />
       )}
@@ -361,9 +402,7 @@ function CellDetail() {
       {approvingExpenseMeeting && session && (
         <ApproveExpenseDialog
           meeting={approvingExpenseMeeting}
-          cellName={cell.name}
-          cellLeaderId={cell.leaderId}
-          approverId={session.userId}
+          cellId={id}
           onClose={() => setApprovingExpenseMeeting(null)}
         />
       )}
@@ -384,19 +423,18 @@ function CellDetail() {
 
 function MeetingDialog({
   cellId,
-  cellName,
   cellBranchId,
   meeting,
   singular,
   onClose,
 }: {
   cellId: string;
-  cellName: string;
   cellBranchId: string | undefined;
-  meeting: CellMeeting | null;
+  meeting: OrgCellMeeting | null;
   singular: string;
   onClose: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [date, setDate] = useState(meeting?.date ?? format(new Date(), "yyyy-MM-dd"));
   const [topic, setTopic] = useState(meeting?.topic ?? "");
   const [notes, setNotes] = useState(meeting?.notes ?? "");
@@ -409,6 +447,55 @@ function MeetingDialog({
   const [expenseDescription, setExpenseDescription] = useState(meeting?.expenseDescription ?? "");
   const expenseApproved = meeting?.expenseStatus === "approved";
   const baseCurrency = useBaseCurrency();
+
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const amount = offertoryReported ? Number(offertoryReported) : 0;
+      const expenseAmt = expenseClaimed ? Number(expenseClaimed) : 0;
+      const input = {
+        cellId,
+        date,
+        topic: topic || undefined,
+        notes: notes || undefined,
+        offertoryReported: amount,
+        expenseClaimed: expenseApproved
+          ? (meeting?.expenseClaimed ?? undefined)
+          : expenseAmt || undefined,
+        expenseDescription: expenseApproved
+          ? (meeting?.expenseDescription ?? undefined)
+          : expenseDescription.trim() || undefined,
+        branchId: cellBranchId,
+      };
+      return meeting
+        ? updateCellMeetingFn({ data: { id: meeting.id, ...input } })
+        : createCellMeetingFn({ data: input });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cell-meetings", cellId] });
+      toast.success(meeting ? "Meeting updated" : "Meeting created — mark attendance next.");
+      onClose();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to save meeting"),
+  });
+
+  function save() {
+    const amount = offertoryReported ? Number(offertoryReported) : 0;
+    if (offertoryReported && Number.isNaN(amount)) {
+      toast.error("Enter a valid offertory amount");
+      return;
+    }
+    const expenseAmt = expenseClaimed ? Number(expenseClaimed) : 0;
+    if (expenseClaimed && Number.isNaN(expenseAmt)) {
+      toast.error("Enter a valid expense amount");
+      return;
+    }
+    if (expenseAmt > 0 && !expenseDescription.trim() && !expenseApproved) {
+      toast.error("Describe what the expense was for");
+      return;
+    }
+    saveMutation.mutate();
+  }
+
   return (
     <DialogContent>
       <DialogHeader>
@@ -480,104 +567,43 @@ function MeetingDialog({
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button
-          onClick={async () => {
-            try {
-              const amount = offertoryReported ? Number(offertoryReported) : 0;
-              if (offertoryReported && Number.isNaN(amount)) {
-                toast.error("Enter a valid offertory amount");
-                return;
-              }
-              const expenseAmt = expenseClaimed ? Number(expenseClaimed) : 0;
-              if (expenseClaimed && Number.isNaN(expenseAmt)) {
-                toast.error("Enter a valid expense amount");
-                return;
-              }
-              if (expenseAmt > 0 && !expenseDescription.trim() && !expenseApproved) {
-                toast.error("Describe what the expense was for");
-                return;
-              }
-              const claimChanged =
-                !expenseApproved &&
-                (expenseAmt !== (meeting?.expenseClaimed ?? 0) ||
-                  expenseDescription.trim() !== (meeting?.expenseDescription ?? ""));
-              const data: CellMeeting = {
-                id: meeting?.id ?? uid(),
-                cellId,
-                date,
-                topic: topic || undefined,
-                notes: notes || undefined,
-                offertoryReported: amount,
-                offertoryReceived: meeting?.offertoryReceived ?? 0,
-                reportRef: meeting?.reportRef ?? (await generateReportRef(date)),
-                editRequestStatus: "none",
-                expenseClaimed: expenseApproved ? meeting?.expenseClaimed : expenseAmt || undefined,
-                expenseDescription: expenseApproved
-                  ? meeting?.expenseDescription
-                  : expenseDescription.trim() || undefined,
-                expenseStatus: expenseApproved
-                  ? meeting?.expenseStatus
-                  : claimChanged
-                    ? expenseAmt > 0
-                      ? "pending"
-                      : "none"
-                    : meeting?.expenseStatus,
-                expenseApproved: expenseApproved
-                  ? meeting?.expenseApproved
-                  : claimChanged
-                    ? undefined
-                    : meeting?.expenseApproved,
-                expenseId: expenseApproved
-                  ? meeting?.expenseId
-                  : claimChanged
-                    ? undefined
-                    : meeting?.expenseId,
-                branchId: meeting?.branchId ?? cellBranchId,
-                createdAt: meeting?.createdAt ?? Date.now(),
-              };
-              await db.transaction(
-                "rw",
-                [db.cellMeetings, db.users, db.notifications],
-                async () => {
-                  await db.cellMeetings.put(data);
-                  if (!meeting) {
-                    await notifyCellReportSubmitted(data, cellName);
-                  }
-                },
-              );
-              toast.success(
-                meeting ? "Meeting updated" : "Meeting created — mark attendance next.",
-              );
-              onClose();
-            } catch (e) {
-              toast.error(e instanceof Error ? e.message : "Failed to save meeting");
-            }
-          }}
-        >
-          {meeting ? "Save changes" : "Create"}
-        </Button>
+        <Button onClick={save}>{meeting ? "Save changes" : "Create"}</Button>
       </DialogFooter>
     </DialogContent>
   );
 }
 
-function RecordReceivedDialog({ meeting, onClose }: { meeting: CellMeeting; onClose: () => void }) {
+function RecordReceivedDialog({
+  meeting,
+  cellId,
+  onClose,
+}: {
+  meeting: OrgCellMeeting;
+  cellId: string;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
   const [amount, setAmount] = useState(String(meeting.offertoryReceived));
   const baseCurrency = useBaseCurrency();
 
-  async function save() {
+  const saveMutation = useMutation({
+    mutationFn: (numericAmount: number) =>
+      recordOffertoryReceivedFn({ data: { id: meeting.id, amount: numericAmount } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cell-meetings", cellId] });
+      toast.success("Received amount recorded");
+      onClose();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to record amount"),
+  });
+
+  function save() {
     const numericAmount = Number(amount);
     if (amount === "" || Number.isNaN(numericAmount) || numericAmount < 0) {
       toast.error("Enter a valid amount");
       return;
     }
-    try {
-      await db.cellMeetings.update(meeting.id, { offertoryReceived: numericAmount });
-      toast.success("Received amount recorded");
-      onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to record amount");
-    }
+    saveMutation.mutate(numericAmount);
   }
 
   return (
@@ -613,65 +639,47 @@ function RecordReceivedDialog({ meeting, onClose }: { meeting: CellMeeting; onCl
 
 function ApproveExpenseDialog({
   meeting,
-  cellName,
-  cellLeaderId,
-  approverId,
+  cellId,
   onClose,
 }: {
-  meeting: CellMeeting;
-  cellName: string;
-  cellLeaderId: string | undefined;
-  approverId: string;
+  meeting: OrgCellMeeting;
+  cellId: string;
   onClose: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [amount, setAmount] = useState(String(meeting.expenseClaimed ?? 0));
   const baseCurrency = useBaseCurrency();
 
-  async function approve() {
+  const approveMutation = useMutation({
+    mutationFn: (numericAmount: number) =>
+      approveCellExpenseFn({ data: { meetingId: meeting.id, amount: numericAmount } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cell-meetings", cellId] });
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["departments"] });
+      toast.success("Expense approved and posted to Expenses");
+      onClose();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to approve expense"),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: () => rejectCellExpenseFn({ data: { meetingId: meeting.id } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cell-meetings", cellId] });
+      toast.success("Expense claim rejected");
+      onClose();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to reject expense"),
+  });
+
+  function approve() {
     const numericAmount = Number(amount);
     if (amount === "" || Number.isNaN(numericAmount) || numericAmount < 0) {
       toast.error("Enter a valid amount");
       return;
     }
-    try {
-      const department = await ensureCellFellowshipsDepartment();
-      const expenseId = uid();
-      await db.transaction(
-        "rw",
-        [db.cellMeetings, db.expenses, db.users, db.notifications],
-        async () => {
-          await db.expenses.add({
-            id: expenseId,
-            departmentId: department.id,
-            amount: numericAmount,
-            description: `${cellName} — ${meeting.reportRef} — ${meeting.expenseDescription ?? "Cell expense"}`,
-            enteredBy: approverId,
-            branchId: meeting.branchId,
-            createdAt: Date.now(),
-          });
-          await db.cellMeetings.update(meeting.id, {
-            expenseApproved: numericAmount,
-            expenseStatus: "approved",
-            expenseId,
-          });
-          await notifyCellExpenseApproved(meeting, cellName, cellLeaderId);
-        },
-      );
-      toast.success("Expense approved and posted to Expenses");
-      onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to approve expense");
-    }
-  }
-
-  async function reject() {
-    try {
-      await db.cellMeetings.update(meeting.id, { expenseStatus: "rejected" });
-      toast.success("Expense claim rejected");
-      onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to reject expense");
-    }
+    approveMutation.mutate(numericAmount);
   }
 
   return (
@@ -698,7 +706,7 @@ function ApproveExpenseDialog({
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="outline" onClick={reject}>
+          <Button variant="outline" onClick={() => rejectMutation.mutate()}>
             <X className="mr-1 h-4 w-4" /> Reject
           </Button>
           <Button onClick={approve}>
@@ -718,18 +726,19 @@ function AttendanceDialog({
   singular,
   onClose,
 }: {
-  meeting: CellMeeting;
-  roster: Member[];
-  allMembers: Member[];
+  meeting: OrgCellMeeting;
+  roster: OrgMember[];
+  allMembers: OrgMember[];
   canEdit: boolean;
   singular: string;
   onClose: () => void;
 }) {
-  const records =
-    useLiveQuery(
-      () => db.cellAttendance.where("meetingId").equals(meeting.id).toArray(),
-      [meeting.id],
-    ) ?? [];
+  const queryClient = useQueryClient();
+  const attendanceQuery = useQuery({
+    queryKey: ["cell-attendance", meeting.id],
+    queryFn: () => listCellAttendanceFn({ data: { meetingId: meeting.id } }),
+  });
+  const records = attendanceQuery.data ?? [];
   const [guestDraftName, setGuestDraftName] = useState<string | null>(null);
   const memberRecords = records.filter((r) => r.memberId);
   const guestRecords = records.filter((r) => !r.memberId && r.guestName);
@@ -745,13 +754,19 @@ function AttendanceDialog({
   const displayed = allMembers.filter((m) => displayedIds.has(m.id));
   const guestPresentCount = guestRecords.filter((r) => r.present).length;
 
-  async function toggle(memberId: string, present: boolean) {
-    const existing = map.get(memberId);
-    if (existing) {
-      await db.cellAttendance.update(existing.id, { present });
-    } else {
-      await db.cellAttendance.add({ id: uid(), meetingId: meeting.id, memberId, present });
-    }
+  const toggleMutation = useMutation({
+    mutationFn: (vars: { memberId: string; present: boolean }) =>
+      setCellAttendanceFn({ data: { meetingId: meeting.id, ...vars } }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["cell-attendance", meeting.id] }),
+  });
+
+  const removeGuestMutation = useMutation({
+    mutationFn: (recordId: string) => removeGuestAttendanceFn({ data: { id: recordId } }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["cell-attendance", meeting.id] }),
+  });
+
+  function toggle(memberId: string, present: boolean) {
+    toggleMutation.mutate({ memberId, present });
   }
 
   return (
@@ -821,7 +836,7 @@ function AttendanceDialog({
                     <button
                       type="button"
                       aria-label={`Remove ${r.guestName}`}
-                      onClick={() => db.cellAttendance.delete(r.id)}
+                      onClick={() => removeGuestMutation.mutate(r.id)}
                     >
                       <X className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
                     </button>
@@ -855,27 +870,29 @@ function GuestDialog({
   defaultName: string;
   onClose: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [name, setName] = useState(defaultName);
   const [phone, setPhone] = useState("");
 
-  async function save() {
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      addGuestAttendanceFn({
+        data: { meetingId, guestName: name.trim(), guestPhone: phone.trim() || undefined },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cell-attendance", meetingId] });
+      toast.success("Guest added");
+      onClose();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to add guest"),
+  });
+
+  function save() {
     if (!name.trim()) {
       toast.error("Enter a name");
       return;
     }
-    try {
-      await db.cellAttendance.add({
-        id: uid(),
-        meetingId,
-        guestName: name.trim(),
-        guestPhone: phone.trim() || undefined,
-        present: true,
-      });
-      toast.success("Guest added");
-      onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to add guest");
-    }
+    saveMutation.mutate();
   }
 
   return (

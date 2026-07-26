@@ -1,11 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { db } from "@/lib/db";
 import { listDepartmentsFn } from "@/server/departments";
 import { listEventsFn } from "@/server/events";
 import { listMembersFn } from "@/server/members";
+import { listCellsFn, listAllCellMeetingsFn, listAllCellAttendanceFn } from "@/server/cells";
 import { useSession, canSubmitRequisitions } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { useWeekStartDay } from "@/lib/week";
@@ -35,12 +34,20 @@ function Dashboard() {
   const { singular: cellSingular, plural: cellPlural } = useCellTerm();
   const membersQuery = useQuery({ queryKey: ["members"], queryFn: () => listMembersFn() });
   const members = membersQuery.data ?? [];
-  const cells = useLiveQuery(() => db.cells.toArray(), []) ?? [];
+  const cellsQuery = useQuery({ queryKey: ["cells"], queryFn: () => listCellsFn() });
+  const cells = cellsQuery.data ?? [];
   const eventsQuery = useQuery({ queryKey: ["events"], queryFn: () => listEventsFn() });
   const events = eventsQuery.data ?? [];
-  const cellMeetings =
-    useLiveQuery(() => db.cellMeetings.orderBy("date").reverse().limit(20).toArray(), []) ?? [];
-  const attendance = useLiveQuery(() => db.cellAttendance.toArray(), []) ?? [];
+  const cellMeetingsQuery = useQuery({
+    queryKey: ["cell-meetings-all"],
+    queryFn: () => listAllCellMeetingsFn(),
+  });
+  const cellMeetings = (cellMeetingsQuery.data ?? []).slice(0, 20);
+  const attendanceQuery = useQuery({
+    queryKey: ["cell-attendance-all"],
+    queryFn: () => listAllCellAttendanceFn(),
+  });
+  const attendance = attendanceQuery.data ?? [];
   // Departments moved to the real backend — this is the one query on this
   // still-Dexie page that needs to point there too, since the Requisition
   // dialog below needs a real department list to submit against.
@@ -55,16 +62,11 @@ function Dashboard() {
   const weekStartsOn = useWeekStartDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6;
   const weekStartStr = format(startOfWeek(new Date(), { weekStartsOn }), "yyyy-MM-dd");
   const weekEndStr = format(endOfWeek(new Date(), { weekStartsOn }), "yyyy-MM-dd");
-  const ledCells =
-    useLiveQuery(async () => {
-      if (!session) return [];
-      return db.cells.where("leaderId").equals(session.userId).toArray();
-    }, [session?.userId]) ?? [];
-  const thisWeekMeetings =
-    useLiveQuery(
-      () => db.cellMeetings.where("date").between(weekStartStr, weekEndStr, true, true).toArray(),
-      [weekStartStr, weekEndStr],
-    ) ?? [];
+  const ledCells = session ? cells.filter((c) => c.leaderId === session.userId) : [];
+  const allCellMeetings = cellMeetingsQuery.data ?? [];
+  const thisWeekMeetings = allCellMeetings.filter(
+    (m) => m.date >= weekStartStr && m.date <= weekEndStr,
+  );
 
   const activeMembers = members.filter((m) => m.status !== "inactive").length;
   const upcoming = events.filter((e) => e.date >= format(new Date(), "yyyy-MM-dd")).length;

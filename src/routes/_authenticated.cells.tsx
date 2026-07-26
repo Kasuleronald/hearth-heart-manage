@@ -1,8 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Plus, Pencil, Users2 } from "lucide-react";
-import { db, deleteCellCascade, uid, type Cell } from "@/lib/db";
+import { listCellsFn, createCellFn, updateCellFn, deleteCellFn } from "@/server/cells";
+import { listMembersFn } from "@/server/members";
+import { listOrgUsersFn } from "@/server/users";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,24 +38,36 @@ export const Route = createFileRoute("/_authenticated/cells")({
   component: CellsPage,
 });
 
+type OrgCell = Awaited<ReturnType<typeof listCellsFn>>[number];
+
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 function CellsPage() {
+  const queryClient = useQueryClient();
   const { session } = useSession();
   const { singular, plural, leaderLabel } = useCellTerm();
-  const cells = useLiveQuery(() => db.cells.orderBy("name").toArray(), []) ?? [];
-  const users =
-    useLiveQuery(
-      () =>
-        db.users
-          .filter((u) => u.role === "cell_leader" || u.role === "pastor" || u.role === "leader")
-          .toArray(),
-      [],
-    ) ?? [];
-  const members = useLiveQuery(() => db.members.toArray(), []) ?? [];
-  const [editing, setEditing] = useState<Cell | null>(null);
+  const cellsQuery = useQuery({ queryKey: ["cells"], queryFn: () => listCellsFn() });
+  const usersQuery = useQuery({ queryKey: ["org-users"], queryFn: () => listOrgUsersFn() });
+  const membersQuery = useQuery({ queryKey: ["members"], queryFn: () => listMembersFn() });
+  const cells = cellsQuery.data ?? [];
+  const users = (usersQuery.data ?? []).filter(
+    (u) => u.role === "cell_leader" || u.role === "pastor" || u.role === "leader",
+  );
+  const members = membersQuery.data ?? [];
+  const [editing, setEditing] = useState<OrgCell | null>(null);
   const [open, setOpen] = useState(false);
   const isHeadOfCellFellowships = useIsHeadOfCellFellowships(session?.userId);
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteCellFn({ data: { id } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cells"] });
+      queryClient.invalidateQueries({ queryKey: ["members"] });
+      toast.success(`${singular} deleted`);
+    },
+    onError: (e) =>
+      toast.error(e instanceof Error ? e.message : `Failed to delete ${singular.toLowerCase()}`),
+  });
 
   const canManage = session
     ? session.role === "admin" || session.role === "pastor" || isHeadOfCellFellowships
@@ -71,7 +85,7 @@ function CellsPage() {
     : false;
   const visibleCells = (
     seesAllCells ? cells : cells.filter((c) => c.leaderId === session?.userId)
-  ).filter((c) => matchesBranchFilter(effectiveBranch, c.branchId));
+  ).filter((c) => matchesBranchFilter(effectiveBranch, c.branchId ?? undefined));
 
   return (
     <div>
@@ -139,16 +153,7 @@ function CellsPage() {
                           title={`Delete "${c.name}"?`}
                           description="This also removes all of its meetings and attendance history. Members are unlinked, not deleted. This can't be undone."
                           onConfirm={async () => {
-                            try {
-                              await deleteCellCascade(c.id);
-                              toast.success(`${singular} deleted`);
-                            } catch (e) {
-                              toast.error(
-                                e instanceof Error
-                                  ? e.message
-                                  : `Failed to delete ${singular.toLowerCase()}`,
-                              );
-                            }
+                            await deleteMutation.mutateAsync(c.id);
                           }}
                         />
                       )}
@@ -185,12 +190,13 @@ function CellDialog({
   leaderLabel,
   onClose,
 }: {
-  cell: Cell | null;
+  cell: OrgCell | null;
   users: { id: string; fullName: string; role: string }[];
   singular: string;
   leaderLabel: string;
   onClose: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [name, setName] = useState(cell?.name ?? "");
   const [meetingDay, setMeetingDay] = useState(cell?.meetingDay ?? "");
   const [meetingLocation, setMeetingLocation] = useState(cell?.meetingLocation ?? "");
@@ -198,24 +204,32 @@ function CellDialog({
   const [description, setDescription] = useState(cell?.description ?? "");
   const [branchId, setBranchId] = useState(cell?.branchId ?? "");
 
-  async function save() {
-    if (!name.trim()) return toast.error("Name is required");
-    try {
-      await db.cells.put({
-        id: cell?.id ?? uid(),
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const input = {
         name: name.trim(),
         meetingDay: meetingDay || undefined,
         meetingLocation: meetingLocation || undefined,
         leaderId: leaderId || undefined,
         description: description || undefined,
         branchId: branchId || undefined,
-        createdAt: cell?.createdAt ?? Date.now(),
-      });
+      };
+      return cell
+        ? updateCellFn({ data: { id: cell.id, ...input } })
+        : createCellFn({ data: input });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cells"] });
       toast.success(cell ? `${singular} updated` : `${singular} created`);
       onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : `Failed to save ${singular.toLowerCase()}`);
-    }
+    },
+    onError: (e) =>
+      toast.error(e instanceof Error ? e.message : `Failed to save ${singular.toLowerCase()}`),
+  });
+
+  function save() {
+    if (!name.trim()) return toast.error("Name is required");
+    saveMutation.mutate();
   }
 
   return (

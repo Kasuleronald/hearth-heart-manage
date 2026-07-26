@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Users, Users2, CalendarDays, GraduationCap } from "lucide-react";
 import { db } from "@/lib/db";
 import { listEventsFn } from "@/server/events";
+import { listCellsFn } from "@/server/cells";
 import { useCellTerm } from "@/lib/terminology";
 import {
   CommandDialog,
@@ -25,7 +26,8 @@ export function QuickSearch({
   const navigate = useNavigate();
   const { plural: cellPlural } = useCellTerm();
   const members = useLiveQuery(() => db.members.toArray(), []) ?? [];
-  const cells = useLiveQuery(() => db.cells.toArray(), []) ?? [];
+  const cellsQuery = useQuery({ queryKey: ["cells"], queryFn: () => listCellsFn() });
+  const cells = cellsQuery.data ?? [];
   const classes = useLiveQuery(() => db.classes.toArray(), []) ?? [];
   const eventsQuery = useQuery({ queryKey: ["events"], queryFn: () => listEventsFn() });
   const events = eventsQuery.data ?? [];

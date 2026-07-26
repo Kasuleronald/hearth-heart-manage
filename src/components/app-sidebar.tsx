@@ -1,6 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
-import { db, type DepartmentModule } from "@/lib/db";
+import { useQuery } from "@tanstack/react-query";
+import type { DepartmentModule } from "@/lib/db";
+import { listCellsFn } from "@/server/cells";
 import {
   LayoutDashboard,
   Users,
@@ -173,11 +174,10 @@ export function AppSidebar() {
   // A user whose primary role wouldn't normally see these — e.g. a Department
   // Leader the Admin has also assigned to lead a cell, or vice versa — still
   // needs the nav item for whichever they're actually assigned to.
-  const isAssignedCellLeader =
-    useLiveQuery(async () => {
-      if (!session) return false;
-      return (await db.cells.where("leaderId").equals(session.userId).count()) > 0;
-    }, [session?.userId]) ?? false;
+  const cellsQuery = useQuery({ queryKey: ["cells"], queryFn: () => listCellsFn() });
+  const isAssignedCellLeader = session
+    ? (cellsQuery.data ?? []).some((c) => c.leaderId === session.userId)
+    : false;
   const isHeadOfCellFellowships = useIsHeadOfCellFellowships(session?.userId);
 
   if (!session) return null;

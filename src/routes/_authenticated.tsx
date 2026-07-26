@@ -9,7 +9,7 @@ import { BranchSwitcher } from "@/components/branch-switcher";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth";
 import { checkBirthdayReminders } from "@/lib/birthdays";
-import { ensureCellFellowshipsDepartment } from "@/lib/cell-fellowships";
+import { ensureCellFellowshipsDepartmentFn } from "@/server/cells";
 import { useChurchBranding } from "@/lib/branding";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -32,7 +32,7 @@ function AuthenticatedLayout() {
   }, [session]);
 
   useEffect(() => {
-    if (session) ensureCellFellowshipsDepartment();
+    if (session) ensureCellFellowshipsDepartmentFn();
   }, [session]);
 
   useEffect(() => {

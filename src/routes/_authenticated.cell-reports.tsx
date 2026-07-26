@@ -1,8 +1,8 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Search, ClipboardList } from "lucide-react";
-import { db, type CellMeeting } from "@/lib/db";
+import { listAllCellMeetingsFn, listAllCellAttendanceFn, listCellsFn } from "@/server/cells";
 import { getRunningBalances } from "@/lib/finance";
 import { useSession, canRecordOffertoryReceived, canToggleCurrency } from "@/lib/auth";
 import { useIsHeadOfCellFellowships } from "@/lib/cell-fellowships";
@@ -38,6 +38,8 @@ export const Route = createFileRoute("/_authenticated/cell-reports")({
   component: CellReportsPage,
 });
 
+type OrgCellMeeting = Awaited<ReturnType<typeof listAllCellMeetingsFn>>[number];
+
 const STATUS_OPTIONS = [
   { value: "all", label: "All" },
   { value: "full", label: "Fully received" },
@@ -46,7 +48,7 @@ const STATUS_OPTIONS = [
   { value: "edit_requested", label: "Edit requested" },
 ] as const;
 
-function matchesStatus(m: CellMeeting, status: string): boolean {
+function matchesStatus(m: OrgCellMeeting, status: string): boolean {
   switch (status) {
     case "edit_requested":
       return m.editRequestStatus === "requested";
@@ -77,9 +79,18 @@ function CellReportsPage() {
       isHeadOfCellFellowships
     : false;
 
-  const meetings = useLiveQuery(() => db.cellMeetings.toArray(), []) ?? [];
-  const cells = useLiveQuery(() => db.cells.orderBy("name").toArray(), []) ?? [];
-  const cellAttendance = useLiveQuery(() => db.cellAttendance.toArray(), []) ?? [];
+  const meetingsQuery = useQuery({
+    queryKey: ["cell-meetings-all"],
+    queryFn: () => listAllCellMeetingsFn(),
+  });
+  const cellsQuery = useQuery({ queryKey: ["cells"], queryFn: () => listCellsFn() });
+  const attendanceQuery = useQuery({
+    queryKey: ["cell-attendance-all"],
+    queryFn: () => listAllCellAttendanceFn(),
+  });
+  const meetings = meetingsQuery.data ?? [];
+  const cells = cellsQuery.data ?? [];
+  const cellAttendance = attendanceQuery.data ?? [];
   const weekStartsOn = useWeekStartDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6;
   const effectiveBranch = useEffectiveBranch(session?.branchId);
   const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
@@ -104,7 +115,7 @@ function CellReportsPage() {
   const runningBalances = getRunningBalances(meetings);
 
   const filtered = meetings
-    .filter((m) => matchesBranchFilter(effectiveBranch, m.branchId))
+    .filter((m) => matchesBranchFilter(effectiveBranch, m.branchId ?? undefined))
     .filter((m) => (cellFilter === "all" ? true : m.cellId === cellFilter))
     .filter((m) => matchesStatus(m, statusFilter))
     .filter((m) =>
@@ -117,7 +128,7 @@ function CellReportsPage() {
   const attendanceCount = (meetingId: string) =>
     cellAttendance.filter((a) => a.meetingId === meetingId && a.present).length;
 
-  const weekGroupsMap = new Map<string, CellMeeting[]>();
+  const weekGroupsMap = new Map<string, OrgCellMeeting[]>();
   for (const m of filtered) {
     const weekKey = format(
       startOfWeek(new Date(`${m.date}T00:00:00`), { weekStartsOn }),
@@ -279,7 +290,7 @@ function CellReportsPage() {
               endOfWeek(new Date(`${weekStart}T00:00:00`), { weekStartsOn }),
               "MMM d, yyyy",
             );
-            const byCell = new Map<string, CellMeeting[]>();
+            const byCell = new Map<string, OrgCellMeeting[]>();
             for (const m of weekMeetings) {
               const arr = byCell.get(m.cellId) ?? [];
               arr.push(m);

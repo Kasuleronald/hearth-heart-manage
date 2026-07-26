@@ -1,4 +1,4 @@
-import { db, type CellMeeting } from "./db";
+import { db } from "./db";
 
 // Reference number format: DDMMYYYY + a 2-digit sequence for that date
 // (e.g. "2312202601" for the first report on 23 Dec 2026). Generated once,
@@ -18,7 +18,11 @@ export async function generateReportRef(date: string): Promise<string> {
 // up an earlier shortfall). A pending/unapproved expense claim doesn't count
 // yet — it only closes the gap once the Treasurer approves it.
 export function getCellBalance(
-  meetings: Pick<CellMeeting, "offertoryReported" | "offertoryReceived" | "expenseApproved">[],
+  meetings: {
+    offertoryReported: number;
+    offertoryReceived: number;
+    expenseApproved?: number | null;
+  }[],
 ): number {
   return meetings.reduce(
     (sum, m) =>
@@ -33,16 +37,15 @@ export function getCellBalance(
 // total. Used by the cross-cell report index (§13) where each row needs to
 // show where that cell's balance stood at that point in time.
 export function getRunningBalances(
-  meetings: Pick<
-    CellMeeting,
-    | "id"
-    | "cellId"
-    | "date"
-    | "createdAt"
-    | "offertoryReported"
-    | "offertoryReceived"
-    | "expenseApproved"
-  >[],
+  meetings: {
+    id: string;
+    cellId: string;
+    date: string;
+    createdAt: number | Date;
+    offertoryReported: number;
+    offertoryReceived: number;
+    expenseApproved?: number | null;
+  }[],
 ): Map<string, number> {
   const byCell = new Map<string, typeof meetings>();
   for (const m of meetings) {
@@ -52,9 +55,10 @@ export function getRunningBalances(
   }
   const result = new Map<string, number>();
   for (const cellMeetings of byCell.values()) {
-    const sorted = [...cellMeetings].sort((a, b) =>
-      a.date === b.date ? a.createdAt - b.createdAt : a.date < b.date ? -1 : 1,
-    );
+    const sorted = [...cellMeetings].sort((a, b) => {
+      if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
     let running = 0;
     for (const m of sorted) {
       running += (m.offertoryReceived ?? 0) + (m.expenseApproved ?? 0) - (m.offertoryReported ?? 0);
