@@ -29,6 +29,7 @@ import {
   canToggleCurrency,
 } from "@/lib/auth";
 import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
+import { useDepartmentTerm } from "@/lib/terminology";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -48,6 +49,7 @@ function RequisitionsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { session } = useSession();
+  const { singular: departmentSingular } = useDepartmentTerm();
   const requisitionsQuery = useQuery({
     queryKey: ["requisitions"],
     queryFn: () => listRequisitionsFn(),
@@ -90,7 +92,9 @@ function RequisitionsPage() {
   );
 
   function departmentName(id: string): string {
-    return departments.find((d) => d.id === id)?.name ?? "Unknown department";
+    return (
+      departments.find((d) => d.id === id)?.name ?? `Unknown ${departmentSingular.toLowerCase()}`
+    );
   }
   function userName(id: string | null | undefined): string {
     if (!id) return "—";
@@ -127,7 +131,7 @@ function RequisitionsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
-                <TableHead>Department</TableHead>
+                <TableHead>{departmentSingular}</TableHead>
                 <TableHead>Amount</TableHead>
                 <TableHead>Reason</TableHead>
                 <TableHead>Requested by</TableHead>

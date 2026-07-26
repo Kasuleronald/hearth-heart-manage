@@ -173,6 +173,7 @@ export const users = pgTable(
     financeTier: text("finance_tier").$type<"A">(),
     branchId: uuid("branch_id").references(() => branches.id, { onDelete: "set null" }),
     needsEmailUpdate: boolean("needs_email_update").notNull().default(false),
+    emailNotificationsEnabled: boolean("email_notifications_enabled").notNull().default(true),
     ...timestamps,
   },
   (t) => [

@@ -1,18 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Plus, Pencil, ChevronLeft, ChevronRight, Repeat, Trash2 } from "lucide-react";
 import {
-  db,
-  deleteEventCascade,
-  uid,
-  type ChurchEvent,
-  type EventType,
-  type EventRecurrence,
-  type RecurrenceFrequency,
-  type MonthlyPosition,
-} from "@/lib/db";
-import { notifyEventCreated } from "@/lib/notifications";
+  listEventsFn,
+  createEventFn,
+  createRecurringEventsFn,
+  updateEventFn,
+  deleteEventFn,
+  deleteEventSeriesFn,
+} from "@/server/events";
+import type { EventType, EventRecurrence, RecurrenceFrequency, MonthlyPosition } from "@/lib/db";
 import { useBaseCurrency } from "@/lib/currency";
 import { useDisplayCurrency } from "@/lib/currency-toggle";
 import { PageHeader } from "@/components/page-header";
@@ -76,6 +74,8 @@ export const Route = createFileRoute("/_authenticated/events")({
   component: EventsPage,
 });
 
+type OrgEvent = Awaited<ReturnType<typeof listEventsFn>>[number];
+
 const TYPES: { value: EventType; label: string }[] = [
   { value: "sunday_service", label: "Sunday Service" },
   { value: "prayer", label: "Prayer Meeting" },
@@ -105,11 +105,14 @@ const YEAR_RANGE = 6; // years shown on either side of the current year
 function EventsPage() {
   const { session } = useSession();
   const canManage = session ? canManageEvents(session.role) : false;
-  const allEvents = useLiveQuery(() => db.events.orderBy("date").toArray(), []) ?? [];
+  const eventsQuery = useQuery({ queryKey: ["events"], queryFn: () => listEventsFn() });
+  const allEvents = eventsQuery.data ?? [];
   const effectiveBranch = useEffectiveBranch(session?.branchId);
-  const events = allEvents.filter((e) => matchesBranchFilter(effectiveBranch, e.branchId));
+  const events = allEvents.filter((e) =>
+    matchesBranchFilter(effectiveBranch, e.branchId ?? undefined),
+  );
   const [viewMonth, setViewMonth] = useState(() => startOfMonth(new Date()));
-  const [editing, setEditing] = useState<ChurchEvent | null>(null);
+  const [editing, setEditing] = useState<OrgEvent | null>(null);
   const [defaultDate, setDefaultDate] = useState<string | undefined>(undefined);
   const [open, setOpen] = useState(false);
   const [dayDialogDate, setDayDialogDate] = useState<string | null>(null);
@@ -117,7 +120,7 @@ function EventsPage() {
   const { base } = useDisplayCurrency(canToggle);
 
   const eventsByDate = useMemo(() => {
-    const map = new Map<string, ChurchEvent[]>();
+    const map = new Map<string, OrgEvent[]>();
     for (const e of events) {
       const arr = map.get(e.date) ?? [];
       arr.push(e);
@@ -148,7 +151,7 @@ function EventsPage() {
     setOpen(true);
   }
 
-  function openEditFromDayDialog(e: ChurchEvent) {
+  function openEditFromDayDialog(e: OrgEvent) {
     setDayDialogDate(null);
     setEditing(e);
     setDefaultDate(undefined);
@@ -311,7 +314,6 @@ function EventsPage() {
           key={editing?.id ?? defaultDate ?? "new"}
           event={editing}
           defaultDate={defaultDate}
-          currentUserId={session?.userId}
           onClose={() => setOpen(false)}
         />
       </Dialog>
@@ -328,11 +330,11 @@ function DayEventsDialog({
   onEditEvent,
 }: {
   date: string | null;
-  events: ChurchEvent[];
+  events: OrgEvent[];
   canManage: boolean;
   onClose: () => void;
   onAddEvent: () => void;
-  onEditEvent: (event: ChurchEvent) => void;
+  onEditEvent: (event: OrgEvent) => void;
 }) {
   return (
     <Dialog open={date !== null} onOpenChange={(o) => !o && onClose()}>
@@ -403,10 +405,13 @@ function DayEventsDialog({
   );
 }
 
-function EventDeleteButton({ event }: { event: ChurchEvent }) {
+function EventDeleteButton({ event }: { event: OrgEvent }) {
+  const queryClient = useQueryClient();
+
   async function deleteOne() {
     try {
-      await deleteEventCascade(event.id);
+      await deleteEventFn({ data: { id: event.id } });
+      queryClient.invalidateQueries({ queryKey: ["events"] });
       toast.success("Event deleted");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete event");
@@ -416,9 +421,11 @@ function EventDeleteButton({ event }: { event: ChurchEvent }) {
   async function deleteSeries() {
     if (!event.recurrenceId) return deleteOne();
     try {
-      const series = await db.events.where("recurrenceId").equals(event.recurrenceId).toArray();
-      for (const e of series) await deleteEventCascade(e.id);
-      toast.success(`Deleted ${series.length} events`);
+      const { count } = await deleteEventSeriesFn({
+        data: { recurrenceId: event.recurrenceId },
+      });
+      queryClient.invalidateQueries({ queryKey: ["events"] });
+      toast.success(`Deleted ${count} events`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete series");
     }
@@ -475,20 +482,19 @@ function EventDeleteButton({ event }: { event: ChurchEvent }) {
 function EventDialog({
   event,
   defaultDate,
-  currentUserId,
   onClose,
 }: {
-  event: ChurchEvent | null;
+  event: OrgEvent | null;
   defaultDate?: string;
-  currentUserId: string | undefined;
   onClose: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [title, setTitle] = useState(event?.title ?? "");
   const [date, setDate] = useState(event?.date ?? defaultDate ?? format(new Date(), "yyyy-MM-dd"));
   const [startTime, setStartTime] = useState(event?.startTime ?? "");
   const [endTime, setEndTime] = useState(event?.endTime ?? "");
   const [type, setType] = useState<EventType>(event?.type ?? "sunday_service");
-  const [audience, setAudience] = useState<ChurchEvent["audience"]>(event?.audience ?? "all");
+  const [audience, setAudience] = useState<OrgEvent["audience"]>(event?.audience ?? "all");
   const [notes, setNotes] = useState(event?.notes ?? "");
   const [offertoryAmount, setOffertoryAmount] = useState(
     event?.offertoryAmount != null ? String(event.offertoryAmount) : "",
@@ -541,39 +547,19 @@ function EventDialog({
           toast.error("No occurrences fall between the event date and the repeat-until date");
           return;
         }
-        const recurrenceId = uid();
-        const now = Date.now();
-        const rows: ChurchEvent[] = dates.map((occurrenceDate) => ({
-          ...base,
-          id: uid(),
-          date: occurrenceDate,
-          recurrenceId,
-          recurrence,
-          createdAt: now,
-        }));
-        await db.transaction("rw", [db.events, db.users, db.notifications], async () => {
-          await db.events.bulkAdd(rows);
-          await notifyEventCreated(rows[0], currentUserId);
-        });
+        const rows = await createRecurringEventsFn({ data: { ...base, dates, recurrence } });
+        queryClient.invalidateQueries({ queryKey: ["events"] });
         toast.success(`Created ${rows.length} events`);
         onClose();
         return;
       }
 
-      const data: ChurchEvent = {
-        ...base,
-        id: event?.id ?? uid(),
-        date,
-        recurrenceId: event?.recurrenceId,
-        recurrence: event?.recurrence,
-        createdAt: event?.createdAt ?? Date.now(),
-      };
-      await db.transaction("rw", [db.events, db.users, db.notifications], async () => {
-        await db.events.put(data);
-        if (!event) {
-          await notifyEventCreated(data, currentUserId);
-        }
-      });
+      if (event) {
+        await updateEventFn({ data: { id: event.id, ...base, date } });
+      } else {
+        await createEventFn({ data: { ...base, date } });
+      }
+      queryClient.invalidateQueries({ queryKey: ["events"] });
       toast.success(event ? "Event updated" : "Event created");
       onClose();
     } catch (e) {
@@ -707,7 +693,7 @@ function EventDialog({
         )}
         <div className="space-y-1.5">
           <Label>Notify</Label>
-          <Select value={audience} onValueChange={(v) => setAudience(v as ChurchEvent["audience"])}>
+          <Select value={audience} onValueChange={(v) => setAudience(v as OrgEvent["audience"])}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>

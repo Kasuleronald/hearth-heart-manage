@@ -18,7 +18,7 @@ const LEGACY_ALIASES: Record<string, string> = {
   new_member: "new_recruit",
   convert: "new_convert",
 };
-function normalizeCategory(category?: string): string | undefined {
+function normalizeCategory(category?: string | null): string | undefined {
   if (!category) return undefined;
   return LEGACY_ALIASES[category] ?? category;
 }
@@ -30,7 +30,7 @@ export function AttendanceBreakdown({
   presentIds,
   guestCount = 0,
 }: {
-  roster: Pick<Member, "id" | "category">[];
+  roster: { id: string; category?: Member["category"] | null }[];
   presentIds: Set<string>;
   guestCount?: number;
 }) {

@@ -22,6 +22,7 @@ export interface Session {
   allowedModules: DepartmentModule[]; // granted via the department this user leads, if any
   leadsDepartment: boolean; // true if they lead any department, even one with no modules granted
   ledDepartmentId?: string;
+  emailNotificationsEnabled: boolean;
 }
 
 function toSession(data: Awaited<ReturnType<typeof getCurrentSessionFn>>): Session | null {
@@ -39,6 +40,7 @@ function toSession(data: Awaited<ReturnType<typeof getCurrentSessionFn>>): Sessi
     allowedModules: data.allowedModules,
     leadsDepartment: data.leadsDepartment,
     ledDepartmentId: data.ledDepartmentId,
+    emailNotificationsEnabled: data.emailNotificationsEnabled,
   };
 }
 

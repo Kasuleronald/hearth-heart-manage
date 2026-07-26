@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Download, Upload, Database, Tag, Coins, CalendarDays, Church, X } from "lucide-react";
 import { exportDatabase, importDatabase, type DatabaseBackup } from "@/lib/db";
@@ -124,6 +125,7 @@ function TerminologyCard() {
 }
 
 function TermRow({ def }: { def: (typeof TERM_DEFINITIONS)[number] }) {
+  const queryClient = useQueryClient();
   const { singular, plural } = useTerm(def.key);
   const [editSingular, setEditSingular] = useState(singular);
   const [editPlural, setEditPlural] = useState(plural);
@@ -137,6 +139,7 @@ function TermRow({ def }: { def: (typeof TERM_DEFINITIONS)[number] }) {
   async function save() {
     try {
       await setTerm(def.key, editSingular, editPlural);
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
       toast.success(`${def.defaultSingular} terminology updated`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to save");

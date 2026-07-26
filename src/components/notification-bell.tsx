@@ -1,9 +1,12 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bell } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { db, type Notification } from "@/lib/db";
-import { markNotificationRead, markAllNotificationsRead } from "@/lib/notifications";
+import {
+  listNotificationsFn,
+  markNotificationReadFn,
+  markAllNotificationsReadFn,
+} from "@/server/notifications";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,18 +27,34 @@ const ENTITY_ROUTES: Record<string, string> = {
   pledge: "/pledges",
 };
 
-export function NotificationBell({ userId }: { userId: string }) {
-  const navigate = useNavigate();
-  const all =
-    useLiveQuery(
-      () => db.notifications.where("recipientUserId").equals(userId).toArray(),
-      [userId],
-    ) ?? [];
-  const notifications = [...all].sort((a, b) => b.createdAt - a.createdAt).slice(0, 20);
-  const unreadCount = all.filter((n) => !n.read).length;
+type OrgNotification = Awaited<ReturnType<typeof listNotificationsFn>>[number];
 
-  async function handleClick(n: Notification) {
-    if (!n.read) await markNotificationRead(n.id);
+// No push infra exists yet — a short poll keeps the bell reasonably fresh
+// without a websocket/SSE channel.
+const REFETCH_INTERVAL_MS = 45_000;
+
+export function NotificationBell() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const notificationsQuery = useQuery({
+    queryKey: ["notifications"],
+    queryFn: () => listNotificationsFn(),
+    refetchInterval: REFETCH_INTERVAL_MS,
+  });
+  const notifications = notificationsQuery.data ?? [];
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  const markReadMutation = useMutation({
+    mutationFn: (id: string) => markNotificationReadFn({ data: { id } }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+  const markAllReadMutation = useMutation({
+    mutationFn: () => markAllNotificationsReadFn(),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+
+  function handleClick(n: OrgNotification) {
+    if (!n.read) markReadMutation.mutate(n.id);
     const route = n.entityType ? ENTITY_ROUTES[n.entityType] : undefined;
     if (route && n.entityId) {
       navigate({ to: route, params: { id: n.entityId } } as never);
@@ -64,7 +83,7 @@ export function NotificationBell({ userId }: { userId: string }) {
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                markAllNotificationsRead(userId);
+                markAllReadMutation.mutate();
               }}
             >
               Mark all read
@@ -88,7 +107,7 @@ export function NotificationBell({ userId }: { userId: string }) {
                 {n.message}
               </span>
               <span className="text-xs text-muted-foreground">
-                {formatDistanceToNow(n.createdAt, { addSuffix: true })}
+                {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
               </span>
             </DropdownMenuItem>
           ))}

@@ -86,6 +86,7 @@ export interface AuthedSession {
   // isn't "leader" (e.g. a cell_leader also leading a department).
   leadsDepartment: boolean;
   ledDepartmentId?: string;
+  emailNotificationsEnabled: boolean;
 }
 
 export interface PlatformSession {
@@ -163,6 +164,7 @@ export const resolveSession = createServerOnlyFn(
           allowedModules: ledDepartment?.allowedModules ?? [],
           leadsDepartment: !!ledDepartment,
           ledDepartmentId: ledDepartment?.id,
+          emailNotificationsEnabled: user.users.emailNotificationsEnabled,
         };
       });
     }

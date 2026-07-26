@@ -67,3 +67,42 @@ export const sendInviteEmail = createServerOnlyFn(
     }
   },
 );
+
+export const sendEventNotificationEmail = createServerOnlyFn(
+  async (params: {
+    to: string;
+    recipientName: string;
+    eventTitle: string;
+    eventDateLabel: string;
+    orgName: string;
+    eventLink?: string;
+  }): Promise<{ sent: boolean }> => {
+    const transport = getTransport();
+    if (!transport) {
+      console.warn(
+        `[email] SMTP not configured — event notification for ${params.to} was not emailed: ${params.eventTitle}`,
+      );
+      return { sent: false };
+    }
+
+    const from = process.env.SMTP_FROM || process.env.SMTP_USER!;
+    const subject = `New event at ${params.orgName}: ${params.eventTitle}`;
+    const linkText = params.eventLink ? `\n\nView it here: ${params.eventLink}` : "";
+    const linkHtml = params.eventLink
+      ? `<p><a href="${params.eventLink}">View event details</a></p>`
+      : "";
+    try {
+      await transport.sendMail({
+        from,
+        to: params.to,
+        subject,
+        text: `Hi ${params.recipientName},\n\nA new event has been posted at ${params.orgName}:\n\n${params.eventTitle}\n${params.eventDateLabel}${linkText}`,
+        html: `<p>Hi ${params.recipientName},</p><p>A new event has been posted at <strong>${params.orgName}</strong>:</p><p><strong>${params.eventTitle}</strong><br>${params.eventDateLabel}</p>${linkHtml}`,
+      });
+      return { sent: true };
+    } catch (err) {
+      console.error(`[email] Failed to send event notification email to ${params.to}:`, err);
+      return { sent: false };
+    }
+  },
+);

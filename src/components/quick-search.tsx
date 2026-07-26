@@ -1,7 +1,9 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery } from "@tanstack/react-query";
 import { Users, Users2, CalendarDays, GraduationCap } from "lucide-react";
 import { db } from "@/lib/db";
+import { listEventsFn } from "@/server/events";
 import { useCellTerm } from "@/lib/terminology";
 import {
   CommandDialog,
@@ -25,7 +27,8 @@ export function QuickSearch({
   const members = useLiveQuery(() => db.members.toArray(), []) ?? [];
   const cells = useLiveQuery(() => db.cells.toArray(), []) ?? [];
   const classes = useLiveQuery(() => db.classes.toArray(), []) ?? [];
-  const events = useLiveQuery(() => db.events.toArray(), []) ?? [];
+  const eventsQuery = useQuery({ queryKey: ["events"], queryFn: () => listEventsFn() });
+  const events = eventsQuery.data ?? [];
 
   function go(to: string, params?: Record<string, string>) {
     onOpenChange(false);

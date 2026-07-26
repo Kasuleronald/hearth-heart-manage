@@ -1,9 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { format, subDays } from "date-fns";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from "recharts";
-import { db } from "@/lib/db";
+import { db, type ChurchEvent } from "@/lib/db";
+import { listEventsFn, listAllEventAttendanceFn } from "@/server/events";
 import { useSession, canAccessGivings, canToggleCurrency } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
@@ -65,8 +67,23 @@ function ReportsPage() {
   }, [session, navigate]);
 
   const members = useLiveQuery(() => db.members.toArray(), []) ?? [];
-  const events = useLiveQuery(() => db.events.toArray(), []) ?? [];
-  const eventAttendance = useLiveQuery(() => db.eventAttendance.toArray(), []) ?? [];
+  const eventsQuery = useQuery({ queryKey: ["events"], queryFn: () => listEventsFn() });
+  const events: ChurchEvent[] = (eventsQuery.data ?? []).map((e) => ({
+    ...e,
+    startTime: e.startTime ?? undefined,
+    endTime: e.endTime ?? undefined,
+    notes: e.notes ?? undefined,
+    offertoryAmount: e.offertoryAmount ?? undefined,
+    branchId: e.branchId ?? undefined,
+    recurrenceId: e.recurrenceId ?? undefined,
+    recurrence: e.recurrence ?? undefined,
+    createdAt: e.createdAt.getTime(),
+  }));
+  const eventAttendanceQuery = useQuery({
+    queryKey: ["event-attendance-all"],
+    queryFn: () => listAllEventAttendanceFn(),
+  });
+  const eventAttendance = eventAttendanceQuery.data ?? [];
   const cells = useLiveQuery(() => db.cells.toArray(), []) ?? [];
   const cellMeetings = useLiveQuery(() => db.cellMeetings.toArray(), []) ?? [];
   const cellAttendance = useLiveQuery(() => db.cellAttendance.toArray(), []) ?? [];

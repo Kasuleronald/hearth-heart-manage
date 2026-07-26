@@ -40,19 +40,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { isValidEmail, useSession, canManageUsers } from "@/lib/auth";
-import { useCellTerm, useTreasurerTerm } from "@/lib/terminology";
+import { useCellTerm, useTreasurerTerm, useDepartmentTerm } from "@/lib/terminology";
 import { toast } from "sonner";
 
 type OrgUser = Awaited<ReturnType<typeof listOrgUsersFn>>[number];
 type OrgMember = Awaited<ReturnType<typeof listMembersFn>>[number];
 type OrgDepartment = Awaited<ReturnType<typeof listDepartmentsFn>>[number];
 
-function getRoles(leaderLabel: string, treasurerLabel: string): { value: Role; label: string }[] {
+function getRoles(
+  leaderLabel: string,
+  treasurerLabel: string,
+  departmentLeaderLabel: string,
+): { value: Role; label: string }[] {
   return [
     { value: "admin", label: "Admin" },
     { value: "pastor", label: "Pastor" },
     { value: "cell_leader", label: leaderLabel },
-    { value: "leader", label: "Department Leader" },
+    { value: "leader", label: departmentLeaderLabel },
     { value: "treasurer", label: treasurerLabel },
   ];
 }
@@ -115,7 +119,8 @@ function UsersPage() {
   const { session } = useSession();
   const { leaderLabel } = useCellTerm();
   const { singular: treasurerLabel } = useTreasurerTerm();
-  const roles = getRoles(leaderLabel, treasurerLabel);
+  const { leaderLabel: departmentLeaderLabel } = useDepartmentTerm();
+  const roles = getRoles(leaderLabel, treasurerLabel, departmentLeaderLabel);
   const roleLabel = Object.fromEntries(roles.map((r) => [r.value, r.label])) as Record<
     Role,
     string
@@ -310,12 +315,13 @@ function DepartmentField({
   otherName: string;
   onOtherNameChange: (v: string) => void;
 }) {
+  const { singular } = useDepartmentTerm();
   return (
     <div className="space-y-1.5">
-      <Label>Department</Label>
+      <Label>{singular}</Label>
       <Select value={choice} onValueChange={onChoiceChange}>
         <SelectTrigger>
-          <SelectValue placeholder="Select a department" />
+          <SelectValue placeholder={`Select a ${singular.toLowerCase()}`} />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="none">Unassigned</SelectItem>
@@ -333,7 +339,7 @@ function DepartmentField({
           className="mt-1.5"
           value={otherName}
           onChange={(e) => onOtherNameChange(e.target.value)}
-          placeholder="Department name"
+          placeholder={`${singular} name`}
         />
       )}
     </div>

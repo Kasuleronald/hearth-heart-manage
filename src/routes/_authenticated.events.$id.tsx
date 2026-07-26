@@ -1,7 +1,8 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
-import { db, uid } from "@/lib/db";
+import { getEventFn, listEventAttendanceFn, setEventAttendanceFn } from "@/server/events";
+import { listMembersFn } from "@/server/members";
 import { useSession, canAccessRecordBranch, canToggleCurrency } from "@/lib/auth";
 import { useDisplayCurrency } from "@/lib/currency-toggle";
 import { PageHeader } from "@/components/page-header";
@@ -24,17 +25,35 @@ export const Route = createFileRoute("/_authenticated/events/$id")({
 
 function EventDetail() {
   const { id } = Route.useParams();
+  const queryClient = useQueryClient();
   const { session } = useSession();
-  const event = useLiveQuery(() => db.events.get(id), [id]);
-  const members = useLiveQuery(() => db.members.orderBy("lastName").toArray(), []) ?? [];
-  const attendance =
-    useLiveQuery(() => db.eventAttendance.where("eventId").equals(id).toArray(), [id]) ?? [];
+  const eventQuery = useQuery({
+    queryKey: ["events", id],
+    queryFn: () => getEventFn({ data: { id } }),
+    retry: false,
+  });
+  const membersQuery = useQuery({ queryKey: ["members"], queryFn: () => listMembersFn() });
+  const attendanceQuery = useQuery({
+    queryKey: ["event-attendance", id],
+    queryFn: () => listEventAttendanceFn({ data: { eventId: id } }),
+  });
+  const event = eventQuery.data;
+  const members = membersQuery.data ?? [];
+  const attendance = attendanceQuery.data ?? [];
   const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
   const { format: formatAmount, base } = useDisplayCurrency(canToggle);
 
-  if (event === undefined) return null;
-  if (!event) throw notFound();
-  if (session && !canAccessRecordBranch(session.branchId, event.branchId)) throw notFound();
+  const toggleMutation = useMutation({
+    mutationFn: (vars: { memberId: string; present: boolean }) =>
+      setEventAttendanceFn({ data: { eventId: id, ...vars } }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event-attendance", id] }),
+  });
+
+  if (eventQuery.isLoading) return null;
+  if (eventQuery.isError || !event) throw notFound();
+  if (session && !canAccessRecordBranch(session.branchId, event.branchId ?? undefined)) {
+    throw notFound();
+  }
 
   const map = new Map(attendance.map((a) => [a.memberId, a]));
   const presentCount = attendance.filter((a) => a.present).length;
@@ -46,13 +65,8 @@ function EventDetail() {
   ]);
   const displayedMembers = members.filter((m) => displayedIds.has(m.id));
 
-  async function toggle(memberId: string, present: boolean) {
-    const rec = map.get(memberId);
-    if (rec) {
-      await db.eventAttendance.update(rec.id, { present });
-    } else {
-      await db.eventAttendance.add({ id: uid(), eventId: id, memberId, present });
-    }
+  function toggle(memberId: string, present: boolean) {
+    toggleMutation.mutate({ memberId, present });
   }
 
   return (

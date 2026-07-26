@@ -24,6 +24,7 @@ import {
   PiggyBank,
 } from "lucide-react";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
+import { NotificationPrefsDialog } from "@/components/notification-prefs-dialog";
 import { AppLogo } from "@/components/app-logo";
 import {
   Sidebar,
@@ -39,10 +40,15 @@ import {
 } from "@/components/ui/sidebar";
 import { useSession, isTierAFinanceLeader } from "@/lib/auth";
 import { useIsHeadOfCellFellowships } from "@/lib/cell-fellowships";
-import { useCellTerm, useTreasurerTerm, useGivingsTerm } from "@/lib/terminology";
+import {
+  useCellTerm,
+  useTreasurerTerm,
+  useGivingsTerm,
+  useDepartmentTerm,
+} from "@/lib/terminology";
 import { Button } from "@/components/ui/button";
 
-function getNav(cellTermPlural: string, givingsPlural: string) {
+function getNav(cellTermPlural: string, givingsPlural: string, departmentPlural: string) {
   return [
     {
       title: "Dashboard",
@@ -78,7 +84,7 @@ function getNav(cellTermPlural: string, givingsPlural: string) {
       roles: ["admin", "pastor", "cell_leader"] as const,
     },
     {
-      title: "Departments",
+      title: departmentPlural,
       url: "/departments",
       icon: Building2,
       roles: ["admin", "pastor", "leader"] as const,
@@ -162,7 +168,8 @@ export function AppSidebar() {
   const { plural, leaderLabel } = useCellTerm();
   const { singular: treasurerLabel } = useTreasurerTerm();
   const { plural: givingsPlural } = useGivingsTerm();
-  const nav = getNav(plural, givingsPlural);
+  const { plural: departmentPlural } = useDepartmentTerm();
+  const nav = getNav(plural, givingsPlural, departmentPlural);
   // A user whose primary role wouldn't normally see these — e.g. a Department
   // Leader the Admin has also assigned to lead a cell, or vice versa — still
   // needs the nav item for whichever they're actually assigned to.
@@ -233,6 +240,9 @@ export function AppSidebar() {
             </div>
           </div>
           <div className="flex items-center gap-1">
+            <NotificationPrefsDialog
+              emailNotificationsEnabled={session.emailNotificationsEnabled}
+            />
             <ChangePasswordDialog userId={session.userId} />
             <Button
               size="icon"

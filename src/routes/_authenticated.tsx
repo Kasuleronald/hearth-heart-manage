@@ -85,7 +85,7 @@ function AuthenticatedLayout() {
                   <span className="font-display text-sm font-semibold">{churchName}</span>
                 </div>
                 {!session.branchId && <BranchSwitcher />}
-                <NotificationBell userId={session.userId} />
+                <NotificationBell />
               </div>
             </div>
           </header>

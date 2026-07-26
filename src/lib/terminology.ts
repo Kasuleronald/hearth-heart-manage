@@ -1,12 +1,12 @@
-import { useLiveQuery } from "dexie-react-hooks";
-import { db } from "./db";
+import { useQuery } from "@tanstack/react-query";
+import { listSettingsFn, setSettingFn } from "@/server/settings";
 
 // Some churches use different words for the same underlying concept — "Cell
 // Fellowship" vs. "Zonal Fellowship", "Department" vs. "Ministry", etc. This
 // registry lets an admin rename any of them app-wide from Settings without
 // touching the underlying data model (routes, field names, and permission
 // checks are untouched — only the displayed label changes). Stored in the
-// existing `settings` key/value table as `{key}TermSingular` / `{key}TermPlural`.
+// real per-organization `settings` table as `{key}TermSingular` / `{key}TermPlural`.
 export const TERM_DEFINITIONS = [
   { key: "cell", defaultSingular: "Cell Fellowship", defaultPlural: "Cell Fellowships" },
   { key: "department", defaultSingular: "Department", defaultPlural: "Departments" },
@@ -26,19 +26,18 @@ function keysFor(key: TermKey) {
 export function useTerm(key: TermKey) {
   const def = TERM_DEFINITIONS.find((d) => d.key === key)!;
   const { singularKey, pluralKey } = keysFor(key);
-  const singularRow = useLiveQuery(() => db.settings.get(singularKey), [singularKey]);
-  const pluralRow = useLiveQuery(() => db.settings.get(pluralKey), [pluralKey]);
-  const singular = singularRow?.value || def.defaultSingular;
-  const plural = pluralRow?.value || def.defaultPlural;
+  const { data } = useQuery({ queryKey: ["settings"], queryFn: () => listSettingsFn() });
+  const singular = data?.[singularKey] || def.defaultSingular;
+  const plural = data?.[pluralKey] || def.defaultPlural;
   return { singular, plural, leaderLabel: `${singular} Leader` };
 }
 
 export async function setTerm(key: TermKey, singular: string, plural: string) {
   const def = TERM_DEFINITIONS.find((d) => d.key === key)!;
   const { singularKey, pluralKey } = keysFor(key);
-  await db.settings.bulkPut([
-    { key: singularKey, value: singular.trim() || def.defaultSingular },
-    { key: pluralKey, value: plural.trim() || def.defaultPlural },
+  await Promise.all([
+    setSettingFn({ data: { key: singularKey, value: singular.trim() || def.defaultSingular } }),
+    setSettingFn({ data: { key: pluralKey, value: plural.trim() || def.defaultPlural } }),
   ]);
 }
 
@@ -57,4 +56,7 @@ export function useTreasurerTerm() {
 }
 export function useGivingsTerm() {
   return useTerm("givings");
+}
+export function useDepartmentTerm() {
+  return useTerm("department");
 }

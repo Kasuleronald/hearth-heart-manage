@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createRequisitionFn } from "@/server/requisitions";
 import { useBaseCurrency } from "@/lib/currency";
+import { useDepartmentTerm } from "@/lib/terminology";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,6 +25,7 @@ export function RequisitionDialog({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { singular: departmentSingular, plural: departmentPlural } = useDepartmentTerm();
   const [departmentId, setDepartmentId] = useState("");
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
@@ -42,7 +44,7 @@ export function RequisitionDialog({
 
   function save() {
     if (!departmentId) {
-      toast.error("Select a department");
+      toast.error(`Select a ${departmentSingular.toLowerCase()}`);
       return;
     }
     const numericAmount = Number(amount);
@@ -64,10 +66,10 @@ export function RequisitionDialog({
       </DialogHeader>
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label>Department</Label>
+          <Label>{departmentSingular}</Label>
           <Select value={departmentId} onValueChange={setDepartmentId}>
             <SelectTrigger>
-              <SelectValue placeholder="Select a department" />
+              <SelectValue placeholder={`Select a ${departmentSingular.toLowerCase()}`} />
             </SelectTrigger>
             <SelectContent>
               {departments.map((d) => (
@@ -79,7 +81,7 @@ export function RequisitionDialog({
           </Select>
           {departments.length === 0 && (
             <p className="text-xs text-muted-foreground">
-              Create a department on the Departments page first.
+              Create a {departmentSingular.toLowerCase()} on the {departmentPlural} page first.
             </p>
           )}
         </div>

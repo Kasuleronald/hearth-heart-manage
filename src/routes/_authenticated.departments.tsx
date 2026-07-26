@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/select";
 import { useSession, canAccessDepartments, canManageDepartments } from "@/lib/auth";
 import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
+import { useDepartmentTerm } from "@/lib/terminology";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/departments")({
@@ -59,6 +60,7 @@ function DepartmentsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { session } = useSession();
+  const { singular, plural, leaderLabel } = useDepartmentTerm();
   const baseCurrency = useBaseCurrency();
   const effectiveBranch = useEffectiveBranch(session?.branchId);
   const departmentsQuery = useQuery({
@@ -83,9 +85,10 @@ function DepartmentsPage() {
     mutationFn: () => seedDefaultDepartmentsFn(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["departments"] });
-      toast.success("Common departments added");
+      toast.success(`Common ${plural.toLowerCase()} added`);
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to add departments"),
+    onError: (e) =>
+      toast.error(e instanceof Error ? e.message : `Failed to add ${plural.toLowerCase()}`),
   });
 
   const deleteMutation = useMutation({
@@ -93,7 +96,7 @@ function DepartmentsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["departments"] });
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
-      toast.success("Department deleted");
+      toast.success(`${singular} deleted`);
     },
   });
 
@@ -113,7 +116,7 @@ function DepartmentsPage() {
   return (
     <div>
       <PageHeader
-        title="Departments"
+        title={plural}
         description="Ministries and teams — Ushering, Sound, Worship, Youth, and the leader assigned to each."
         actions={
           canManage && (
@@ -123,7 +126,7 @@ function DepartmentsPage() {
                 disabled={seedMutation.isPending}
                 onClick={() => seedMutation.mutate()}
               >
-                <Sparkles className="mr-2 h-4 w-4" /> Add common departments
+                <Sparkles className="mr-2 h-4 w-4" /> Add common {plural.toLowerCase()}
               </Button>
               <Dialog
                 open={open}
@@ -134,13 +137,15 @@ function DepartmentsPage() {
               >
                 <DialogTrigger asChild>
                   <Button onClick={() => setEditing(null)}>
-                    <Plus className="mr-2 h-4 w-4" /> New department
+                    <Plus className="mr-2 h-4 w-4" /> New {singular.toLowerCase()}
                   </Button>
                 </DialogTrigger>
                 <DepartmentDialog
                   key={editing?.id ?? "new"}
                   dept={editing}
                   users={users}
+                  singular={singular}
+                  leaderLabel={leaderLabel}
                   onClose={() => setOpen(false)}
                 />
               </Dialog>
@@ -183,14 +188,16 @@ function DepartmentsPage() {
                       </Button>
                       <DeleteButton
                         label={`Delete ${d.name}`}
-                        title={`Delete department "${d.name}"?`}
+                        title={`Delete ${singular.toLowerCase()} "${d.name}"?`}
                         description="This also removes its recorded expenses and requisitions. This can't be undone."
                         onConfirm={async () => {
                           try {
                             await deleteMutation.mutateAsync(d.id);
                           } catch (e) {
                             toast.error(
-                              e instanceof Error ? e.message : "Failed to delete department",
+                              e instanceof Error
+                                ? e.message
+                                : `Failed to delete ${singular.toLowerCase()}`,
                             );
                           }
                         }}
@@ -241,10 +248,14 @@ function DepartmentsPage() {
 function DepartmentDialog({
   dept,
   users,
+  singular,
+  leaderLabel,
   onClose,
 }: {
   dept: OrgDepartment | null;
   users: { id: string; fullName: string; role: string }[];
+  singular: string;
+  leaderLabel: string;
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -271,10 +282,11 @@ function DepartmentDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["departments"] });
-      toast.success(dept ? "Department updated" : "Department created");
+      toast.success(dept ? `${singular} updated` : `${singular} created`);
       onClose();
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to save department"),
+    onError: (e) =>
+      toast.error(e instanceof Error ? e.message : `Failed to save ${singular.toLowerCase()}`),
   });
 
   function toggleModule(m: DepartmentModule) {
@@ -293,7 +305,7 @@ function DepartmentDialog({
     <DialogContent>
       <DialogHeader>
         <DialogTitle className="font-display">
-          {dept ? "Edit department" : "New department"}
+          {dept ? `Edit ${singular.toLowerCase()}` : `New ${singular.toLowerCase()}`}
         </DialogTitle>
       </DialogHeader>
       <div className="space-y-4">
@@ -321,7 +333,7 @@ function DepartmentDialog({
           </Select>
           {users.length === 0 && (
             <p className="text-xs text-muted-foreground">
-              Create a user with role "Department Leader" in the Users page to assign here.
+              Create a user with role "{leaderLabel}" in the Users page to assign here.
             </p>
           )}
         </div>
@@ -357,7 +369,7 @@ function DepartmentDialog({
           Cancel
         </Button>
         <Button onClick={save} disabled={saveMutation.isPending}>
-          {dept ? "Save changes" : "Create department"}
+          {dept ? "Save changes" : `Create ${singular.toLowerCase()}`}
         </Button>
       </DialogFooter>
     </DialogContent>

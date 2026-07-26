@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { db } from "@/lib/db";
 import { listDepartmentsFn } from "@/server/departments";
+import { listEventsFn } from "@/server/events";
 import { useSession, canSubmitRequisitions } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { useWeekStartDay } from "@/lib/week";
@@ -33,7 +34,8 @@ function Dashboard() {
   const { singular: cellSingular, plural: cellPlural } = useCellTerm();
   const members = useLiveQuery(() => db.members.toArray(), []) ?? [];
   const cells = useLiveQuery(() => db.cells.toArray(), []) ?? [];
-  const events = useLiveQuery(() => db.events.orderBy("date").reverse().toArray(), []) ?? [];
+  const eventsQuery = useQuery({ queryKey: ["events"], queryFn: () => listEventsFn() });
+  const events = eventsQuery.data ?? [];
   const cellMeetings =
     useLiveQuery(() => db.cellMeetings.orderBy("date").reverse().limit(20).toArray(), []) ?? [];
   const attendance = useLiveQuery(() => db.cellAttendance.toArray(), []) ?? [];

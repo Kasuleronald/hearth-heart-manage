@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/select";
 import { useSession, canEnterExpenses, canDecideRequisitions, canToggleCurrency } from "@/lib/auth";
 import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
+import { useDepartmentTerm } from "@/lib/terminology";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -70,6 +71,7 @@ function ExpensesPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { session } = useSession();
+  const { singular: departmentSingular } = useDepartmentTerm();
   const canManage = session ? canEnterExpenses(session.role) : false;
   const canDecide = session ? canDecideRequisitions(session.role) : false;
   const canAccessPage = canManage || (session?.leadsDepartment ?? false);
@@ -119,7 +121,9 @@ function ExpensesPage() {
   ).filter((e) => matchesBranchFilter(effectiveBranch, e.branchId ?? undefined));
 
   function departmentName(id: string): string {
-    return departments.find((d) => d.id === id)?.name ?? "Unknown department";
+    return (
+      departments.find((d) => d.id === id)?.name ?? `Unknown ${departmentSingular.toLowerCase()}`
+    );
   }
 
   return (
@@ -136,7 +140,7 @@ function ExpensesPage() {
                 title="Expenses"
                 headers={[
                   "Date",
-                  "Department",
+                  departmentSingular,
                   `Amount (${displayCode})`,
                   "Description",
                   "Entered by",
@@ -198,7 +202,7 @@ function ExpensesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
-                <TableHead>Department</TableHead>
+                <TableHead>{departmentSingular}</TableHead>
                 <TableHead>Amount</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Entered by</TableHead>
@@ -317,6 +321,7 @@ function ExpenseDialog({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { singular: departmentSingular, plural: departmentPlural } = useDepartmentTerm();
   const [departmentId, setDepartmentId] = useState(expense?.departmentId ?? "");
   const [amount, setAmount] = useState(expense ? String(expense.amount) : "");
   const [description, setDescription] = useState(expense?.description ?? "");
@@ -343,7 +348,7 @@ function ExpenseDialog({
 
   function save() {
     if (!departmentId) {
-      toast.error("Select a department");
+      toast.error(`Select a ${departmentSingular.toLowerCase()}`);
       return;
     }
     const numericAmount = Number(amount);
@@ -372,10 +377,10 @@ function ExpenseDialog({
       </DialogHeader>
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label>Department</Label>
+          <Label>{departmentSingular}</Label>
           <Select value={departmentId} onValueChange={setDepartmentId}>
             <SelectTrigger>
-              <SelectValue placeholder="Select a department" />
+              <SelectValue placeholder={`Select a ${departmentSingular.toLowerCase()}`} />
             </SelectTrigger>
             <SelectContent>
               {departments.map((d) => (
@@ -387,7 +392,7 @@ function ExpenseDialog({
           </Select>
           {departments.length === 0 && (
             <p className="text-xs text-muted-foreground">
-              Create a department on the Departments page first.
+              Create a {departmentSingular.toLowerCase()} on the {departmentPlural} page first.
             </p>
           )}
         </div>
