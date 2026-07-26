@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DeleteButton } from "@/components/delete-button";
 import { BranchField } from "@/components/branch-field";
+import { ViewToggle, type CollectionView } from "@/components/view-toggle";
 import {
   Dialog,
   DialogContent,
@@ -81,6 +82,7 @@ function DepartmentsPage() {
   const expenses = expensesQuery.data ?? [];
   const [editing, setEditing] = useState<OrgDepartment | null>(null);
   const [open, setOpen] = useState(false);
+  const [view, setView] = useState<CollectionView>("tiles");
 
   const seedMutation = useMutation({
     mutationFn: () => seedDefaultDepartmentsFn(),
@@ -114,134 +116,156 @@ function DepartmentsPage() {
 
   if (!session || dataPending || !canAccess) return null;
 
+  function renderDeptBody(d: OrgDepartment) {
+    const leader = users.find((u) => u.id === d.leaderId);
+    const isMine = session?.userId === d.leaderId;
+    const expenseTotal = expenses
+      .filter((e) => e.departmentId === d.id && e.status !== "rejected")
+      .reduce((sum, e) => sum + e.amount, 0);
+    return (
+      <>
+        <div className="flex items-start justify-between">
+          <div className="min-w-0">
+            <h3 className="font-display text-lg font-semibold">{d.name}</h3>
+            {d.description && (
+              <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{d.description}</p>
+            )}
+          </div>
+          {canManage && (
+            <div className="flex gap-1">
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label={`Edit ${d.name}`}
+                onClick={() => {
+                  setEditing(d);
+                  setOpen(true);
+                }}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <DeleteButton
+                label={`Delete ${d.name}`}
+                title={`Delete ${singular.toLowerCase()} "${d.name}"?`}
+                description="This also removes its recorded expenses and requisitions. This can't be undone."
+                onConfirm={async () => {
+                  try {
+                    await deleteMutation.mutateAsync(d.id);
+                  } catch (e) {
+                    toast.error(
+                      e instanceof Error ? e.message : `Failed to delete ${singular.toLowerCase()}`,
+                    );
+                  }
+                }}
+              />
+            </div>
+          )}
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+          {leader ? (
+            <Badge variant="secondary">{leader.fullName}</Badge>
+          ) : (
+            <span className="text-xs text-muted-foreground">Unassigned</span>
+          )}
+          {isMine && (
+            <Badge className="border-0 bg-primary text-primary-foreground">You lead this</Badge>
+          )}
+          {d.allowedModules.map((m) => (
+            <Badge key={m} variant="outline" className="text-xs capitalize">
+              {m}
+            </Badge>
+          ))}
+        </div>
+        {expenseTotal > 0 && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Expenses:{" "}
+            <span className="text-foreground">
+              {formatCurrency(expenseTotal, baseCurrency.code)}
+            </span>
+          </p>
+        )}
+      </>
+    );
+  }
+
   return (
     <div>
       <PageHeader
         title={plural}
         description="Ministries and teams — Ushering, Sound, Worship, Youth, and the leader assigned to each."
         actions={
-          canManage && (
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                disabled={seedMutation.isPending}
-                onClick={() => seedMutation.mutate()}
-              >
-                <Sparkles className="mr-2 h-4 w-4" /> Add common {plural.toLowerCase()}
-              </Button>
-              <Dialog
-                open={open}
-                onOpenChange={(o) => {
-                  setOpen(o);
-                  if (!o) setEditing(null);
-                }}
-              >
-                <DialogTrigger asChild>
-                  <Button onClick={() => setEditing(null)}>
-                    <Plus className="mr-2 h-4 w-4" /> New {singular.toLowerCase()}
-                  </Button>
-                </DialogTrigger>
-                <DepartmentDialog
-                  key={editing?.id ?? "new"}
-                  dept={editing}
-                  users={users}
-                  singular={singular}
-                  leaderLabel={leaderLabel}
-                  onClose={() => setOpen(false)}
-                />
-              </Dialog>
-            </div>
-          )
+          <div className="flex items-center gap-2">
+            <ViewToggle view={view} onChange={setView} />
+            {canManage && (
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  disabled={seedMutation.isPending}
+                  onClick={() => seedMutation.mutate()}
+                >
+                  <Sparkles className="mr-2 h-4 w-4" /> Add common {plural.toLowerCase()}
+                </Button>
+                <Dialog
+                  open={open}
+                  onOpenChange={(o) => {
+                    setOpen(o);
+                    if (!o) setEditing(null);
+                  }}
+                >
+                  <DialogTrigger asChild>
+                    <Button onClick={() => setEditing(null)}>
+                      <Plus className="mr-2 h-4 w-4" /> New {singular.toLowerCase()}
+                    </Button>
+                  </DialogTrigger>
+                  <DepartmentDialog
+                    key={editing?.id ?? "new"}
+                    dept={editing}
+                    users={users}
+                    singular={singular}
+                    leaderLabel={leaderLabel}
+                    onClose={() => setOpen(false)}
+                  />
+                </Dialog>
+              </div>
+            )}
+          </div>
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {departments.map((d) => {
-          const leader = users.find((u) => u.id === d.leaderId);
-          const isMine = session?.userId === d.leaderId;
-          const expenseTotal = expenses
-            .filter((e) => e.departmentId === d.id && e.status !== "rejected")
-            .reduce((sum, e) => sum + e.amount, 0);
-          return (
-            <Card key={d.id} className={isMine ? "border-primary" : undefined}>
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between">
-                  <div className="min-w-0">
-                    <h3 className="font-display text-lg font-semibold">{d.name}</h3>
-                    {d.description && (
-                      <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                        {d.description}
-                      </p>
-                    )}
-                  </div>
-                  {canManage && (
-                    <div className="flex gap-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        aria-label={`Edit ${d.name}`}
-                        onClick={() => {
-                          setEditing(d);
-                          setOpen(true);
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <DeleteButton
-                        label={`Delete ${d.name}`}
-                        title={`Delete ${singular.toLowerCase()} "${d.name}"?`}
-                        description="This also removes its recorded expenses and requisitions. This can't be undone."
-                        onConfirm={async () => {
-                          try {
-                            await deleteMutation.mutateAsync(d.id);
-                          } catch (e) {
-                            toast.error(
-                              e instanceof Error
-                                ? e.message
-                                : `Failed to delete ${singular.toLowerCase()}`,
-                            );
-                          }
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-                <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
-                  {leader ? (
-                    <Badge variant="secondary">{leader.fullName}</Badge>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">Unassigned</span>
-                  )}
-                  {isMine && (
-                    <Badge className="border-0 bg-primary text-primary-foreground">
-                      You lead this
-                    </Badge>
-                  )}
-                  {d.allowedModules.map((m) => (
-                    <Badge key={m} variant="outline" className="text-xs capitalize">
-                      {m}
-                    </Badge>
-                  ))}
-                </div>
-                {expenseTotal > 0 && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Expenses:{" "}
-                    <span className="text-foreground">
-                      {formatCurrency(expenseTotal, baseCurrency.code)}
-                    </span>
-                  </p>
-                )}
-              </CardContent>
+      {departments.length === 0 ? (
+        <div className="py-10 text-center text-sm text-muted-foreground">
+          <Building2 className="mx-auto mb-2 h-6 w-6 text-muted-foreground/60" />
+          No departments yet.
+        </div>
+      ) : view === "tiles" ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {departments.map((d) => (
+            <Card
+              key={d.id}
+              className={session?.userId === d.leaderId ? "border-primary" : undefined}
+            >
+              <CardContent className="p-5">{renderDeptBody(d)}</CardContent>
             </Card>
-          );
-        })}
-        {departments.length === 0 && (
-          <div className="col-span-full py-10 text-center text-sm text-muted-foreground">
-            <Building2 className="mx-auto mb-2 h-6 w-6 text-muted-foreground/60" />
-            No departments yet.
-          </div>
-        )}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <ul className="divide-y">
+              {departments.map((d) => (
+                <li
+                  key={d.id}
+                  className={
+                    session?.userId === d.leaderId ? "border-l-2 border-l-primary p-4" : "p-4"
+                  }
+                >
+                  {renderDeptBody(d)}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

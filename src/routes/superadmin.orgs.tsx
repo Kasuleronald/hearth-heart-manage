@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { getCurrentSessionFn, logoutFn } from "@/server/auth";
 import { ChangePlatformPasswordDialog } from "@/components/change-platform-password-dialog";
+import { ViewToggle, type CollectionView } from "@/components/view-toggle";
 import {
   listOrganizationsFn,
   createOrganizationFn,
@@ -54,6 +55,7 @@ function SuperAdminOrgsPage() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editingOrg, setEditingOrg] = useState<OrgListItem | null>(null);
+  const [view, setView] = useState<CollectionView>("tiles");
   const [resetResult, setResetResult] = useState<{
     link: string;
     emailSent: boolean;
@@ -124,6 +126,96 @@ function SuperAdminOrgsPage() {
 
   const orgs = orgsQuery.data ?? [];
 
+  function renderOrgBody(org: OrgListItem) {
+    return (
+      <>
+        <div className="flex items-start justify-between">
+          <div className="min-w-0">
+            <h3 className="font-display text-lg font-semibold">{org.name}</h3>
+            <p className="mt-1 text-xs capitalize text-muted-foreground">{org.type}</p>
+          </div>
+          <div className="flex items-center gap-1">
+            <Badge className={`border-0 capitalize ${STATUS_STYLE[org.status] ?? ""}`}>
+              {org.status}
+            </Badge>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              title="Edit organization"
+              aria-label="Edit organization"
+              onClick={() => setEditingOrg(org)}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+        <div className="mt-3 text-xs text-muted-foreground">
+          {org.admins.length === 0 ? (
+            "No admin yet"
+          ) : (
+            <ul className="space-y-1">
+              {org.admins.map((a) => (
+                <li key={a.id} className="flex items-center justify-between gap-2">
+                  <span className="truncate">Admin: {a.fullName}</span>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 shrink-0"
+                    title="Reset password"
+                    aria-label={`Reset password for ${a.fullName}`}
+                    disabled={resetPasswordMutation.isPending}
+                    onClick={() =>
+                      resetPasswordMutation.mutate({
+                        adminUserId: a.id,
+                        adminEmail: a.email,
+                      })
+                    }
+                  >
+                    <KeyRound className="h-3.5 w-3.5" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="mt-4 flex gap-2">
+          {org.status !== "active" && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={statusMutation.isPending}
+              onClick={() => statusMutation.mutate({ organizationId: org.id, status: "active" })}
+            >
+              Reactivate
+            </Button>
+          )}
+          {org.status !== "suspended" && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={statusMutation.isPending}
+              onClick={() => statusMutation.mutate({ organizationId: org.id, status: "suspended" })}
+            >
+              Suspend
+            </Button>
+          )}
+          {org.status !== "disabled" && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-destructive"
+              disabled={statusMutation.isPending}
+              onClick={() => statusMutation.mutate({ organizationId: org.id, status: "disabled" })}
+            >
+              Disable
+            </Button>
+          )}
+        </div>
+      </>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-muted/20 p-6 lg:p-8">
       <div className="mx-auto max-w-5xl">
@@ -140,6 +232,7 @@ function SuperAdminOrgsPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <ViewToggle view={view} onChange={setView} />
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>
                 <Button>
@@ -155,108 +248,31 @@ function SuperAdminOrgsPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {orgs.map((org) => (
-            <Card key={org.id}>
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between">
-                  <div className="min-w-0">
-                    <h3 className="font-display text-lg font-semibold">{org.name}</h3>
-                    <p className="mt-1 text-xs capitalize text-muted-foreground">{org.type}</p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Badge className={`border-0 capitalize ${STATUS_STYLE[org.status] ?? ""}`}>
-                      {org.status}
-                    </Badge>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7"
-                      title="Edit organization"
-                      aria-label="Edit organization"
-                      onClick={() => setEditingOrg(org)}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-                <div className="mt-3 text-xs text-muted-foreground">
-                  {org.admins.length === 0 ? (
-                    "No admin yet"
-                  ) : (
-                    <ul className="space-y-1">
-                      {org.admins.map((a) => (
-                        <li key={a.id} className="flex items-center justify-between gap-2">
-                          <span className="truncate">Admin: {a.fullName}</span>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-6 w-6 shrink-0"
-                            title="Reset password"
-                            aria-label={`Reset password for ${a.fullName}`}
-                            disabled={resetPasswordMutation.isPending}
-                            onClick={() =>
-                              resetPasswordMutation.mutate({
-                                adminUserId: a.id,
-                                adminEmail: a.email,
-                              })
-                            }
-                          >
-                            <KeyRound className="h-3.5 w-3.5" />
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-                <div className="mt-4 flex gap-2">
-                  {org.status !== "active" && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={statusMutation.isPending}
-                      onClick={() =>
-                        statusMutation.mutate({ organizationId: org.id, status: "active" })
-                      }
-                    >
-                      Reactivate
-                    </Button>
-                  )}
-                  {org.status !== "suspended" && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={statusMutation.isPending}
-                      onClick={() =>
-                        statusMutation.mutate({ organizationId: org.id, status: "suspended" })
-                      }
-                    >
-                      Suspend
-                    </Button>
-                  )}
-                  {org.status !== "disabled" && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-destructive"
-                      disabled={statusMutation.isPending}
-                      onClick={() =>
-                        statusMutation.mutate({ organizationId: org.id, status: "disabled" })
-                      }
-                    >
-                      Disable
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-          {orgs.length === 0 && (
-            <p className="col-span-full py-10 text-center text-sm text-muted-foreground">
-              No organizations yet — create the first one above.
-            </p>
-          )}
-        </div>
+        {orgs.length === 0 ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            No organizations yet — create the first one above.
+          </p>
+        ) : view === "tiles" ? (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {orgs.map((org) => (
+              <Card key={org.id}>
+                <CardContent className="p-5">{renderOrgBody(org)}</CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <Card>
+            <CardContent className="p-0">
+              <ul className="divide-y">
+                {orgs.map((org) => (
+                  <li key={org.id} className="p-4">
+                    {renderOrgBody(org)}
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <Dialog open={!!editingOrg} onOpenChange={(o) => !o && setEditingOrg(null)}>

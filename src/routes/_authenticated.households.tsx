@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { DeleteButton } from "@/components/delete-button";
 import { BranchField } from "@/components/branch-field";
+import { ViewToggle, type CollectionView } from "@/components/view-toggle";
 import {
   Dialog,
   DialogContent,
@@ -47,6 +48,7 @@ function HouseholdsPage() {
   const users = usersQuery.data ?? [];
   const [editing, setEditing] = useState<OrgHousehold | null>(null);
   const [open, setOpen] = useState(false);
+  const [view, setView] = useState<CollectionView>("tiles");
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteHouseholdFn({ data: { id } }),
@@ -64,119 +66,139 @@ function HouseholdsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["members"] }),
   });
 
+  function renderHouseholdBody(h: OrgHousehold) {
+    const hhMembers = members.filter((m) => m.householdId === h.id);
+    const head = hhMembers.find((m) => m.isHeadOfHousehold);
+    const addedBy = users.find((u) => u.id === h.createdBy);
+    return (
+      <>
+        <div className="flex items-start justify-between">
+          <div>
+            <h3 className="font-display text-lg font-semibold">{h.name}</h3>
+            {h.address && <p className="mt-1 text-xs text-muted-foreground">{h.address}</p>}
+          </div>
+          <div className="flex gap-1">
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label={`Edit ${h.name}`}
+              onClick={() => {
+                setEditing(h);
+                setOpen(true);
+              }}
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <DeleteButton
+              label={`Delete ${h.name}`}
+              title={`Delete household "${h.name}"?`}
+              description="Members keep their records but are unlinked from this household. This can't be undone."
+              onConfirm={async () => {
+                await deleteMutation.mutateAsync(h.id);
+              }}
+            />
+          </div>
+        </div>
+        <div className="mt-4">
+          <div className="text-xs uppercase tracking-wide text-muted-foreground">
+            Members ({hhMembers.length})
+          </div>
+          <ul className="mt-2 space-y-1 text-sm">
+            {hhMembers.map((m) => (
+              <li key={m.id} className="flex items-center justify-between">
+                <span>
+                  {m.firstName} {m.lastName}
+                </span>
+                <button
+                  className="text-xs text-muted-foreground hover:text-primary"
+                  onClick={() =>
+                    toggleHeadMutation.mutate({
+                      householdId: h.id,
+                      memberId: m.isHeadOfHousehold ? null : m.id,
+                    })
+                  }
+                >
+                  {m.isHeadOfHousehold ? "★ Head" : "Set as head"}
+                </button>
+              </li>
+            ))}
+            {hhMembers.length === 0 && (
+              <li className="text-xs text-muted-foreground">
+                No members assigned. Set the household on a member's profile.
+              </li>
+            )}
+          </ul>
+          {head && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              Head of household:{" "}
+              <span className="text-foreground">
+                {head.firstName} {head.lastName}
+              </span>
+            </p>
+          )}
+          {addedBy && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Added by: <span className="text-foreground">{addedBy.fullName}</span>
+            </p>
+          )}
+        </div>
+      </>
+    );
+  }
+
   return (
     <div>
       <PageHeader
         title="Households"
         description="Group members into families and households."
         actions={
-          <Dialog
-            open={open}
-            onOpenChange={(o) => {
-              setOpen(o);
-              if (!o) setEditing(null);
-            }}
-          >
-            <DialogTrigger asChild>
-              <Button onClick={() => setEditing(null)}>
-                <Plus className="mr-2 h-4 w-4" /> New household
-              </Button>
-            </DialogTrigger>
-            <HouseholdDialog
-              key={editing?.id ?? "new"}
-              hh={editing}
-              onClose={() => setOpen(false)}
-            />
-          </Dialog>
+          <div className="flex items-center gap-2">
+            <ViewToggle view={view} onChange={setView} />
+            <Dialog
+              open={open}
+              onOpenChange={(o) => {
+                setOpen(o);
+                if (!o) setEditing(null);
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button onClick={() => setEditing(null)}>
+                  <Plus className="mr-2 h-4 w-4" /> New household
+                </Button>
+              </DialogTrigger>
+              <HouseholdDialog
+                key={editing?.id ?? "new"}
+                hh={editing}
+                onClose={() => setOpen(false)}
+              />
+            </Dialog>
+          </div>
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {households.map((h) => {
-          const hhMembers = members.filter((m) => m.householdId === h.id);
-          const head = hhMembers.find((m) => m.isHeadOfHousehold);
-          const addedBy = users.find((u) => u.id === h.createdBy);
-          return (
+      {households.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No households yet.</p>
+      ) : view === "tiles" ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {households.map((h) => (
             <Card key={h.id}>
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-display text-lg font-semibold">{h.name}</h3>
-                    {h.address && <p className="mt-1 text-xs text-muted-foreground">{h.address}</p>}
-                  </div>
-                  <div className="flex gap-1">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={`Edit ${h.name}`}
-                      onClick={() => {
-                        setEditing(h);
-                        setOpen(true);
-                      }}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <DeleteButton
-                      label={`Delete ${h.name}`}
-                      title={`Delete household "${h.name}"?`}
-                      description="Members keep their records but are unlinked from this household. This can't be undone."
-                      onConfirm={async () => {
-                        await deleteMutation.mutateAsync(h.id);
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Members ({hhMembers.length})
-                  </div>
-                  <ul className="mt-2 space-y-1 text-sm">
-                    {hhMembers.map((m) => (
-                      <li key={m.id} className="flex items-center justify-between">
-                        <span>
-                          {m.firstName} {m.lastName}
-                        </span>
-                        <button
-                          className="text-xs text-muted-foreground hover:text-primary"
-                          onClick={() =>
-                            toggleHeadMutation.mutate({
-                              householdId: h.id,
-                              memberId: m.isHeadOfHousehold ? null : m.id,
-                            })
-                          }
-                        >
-                          {m.isHeadOfHousehold ? "★ Head" : "Set as head"}
-                        </button>
-                      </li>
-                    ))}
-                    {hhMembers.length === 0 && (
-                      <li className="text-xs text-muted-foreground">
-                        No members assigned. Set the household on a member's profile.
-                      </li>
-                    )}
-                  </ul>
-                  {head && (
-                    <p className="mt-3 text-xs text-muted-foreground">
-                      Head of household:{" "}
-                      <span className="text-foreground">
-                        {head.firstName} {head.lastName}
-                      </span>
-                    </p>
-                  )}
-                  {addedBy && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Added by: <span className="text-foreground">{addedBy.fullName}</span>
-                    </p>
-                  )}
-                </div>
-              </CardContent>
+              <CardContent className="p-5">{renderHouseholdBody(h)}</CardContent>
             </Card>
-          );
-        })}
-        {households.length === 0 && (
-          <p className="text-sm text-muted-foreground">No households yet.</p>
-        )}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <ul className="divide-y">
+              {households.map((h) => (
+                <li key={h.id} className="p-4">
+                  {renderHouseholdBody(h)}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

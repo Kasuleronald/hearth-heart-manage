@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { DeleteButton } from "@/components/delete-button";
 import { BranchField } from "@/components/branch-field";
+import { ViewToggle, type CollectionView } from "@/components/view-toggle";
 import { useSession, canManageUsers, isTierAFinanceLeader } from "@/lib/auth";
 import { useIsHeadOfCellFellowships } from "@/lib/cell-fellowships";
 import { useCellTerm } from "@/lib/terminology";
@@ -56,6 +57,7 @@ function CellsPage() {
   const members = membersQuery.data ?? [];
   const [editing, setEditing] = useState<OrgCell | null>(null);
   const [open, setOpen] = useState(false);
+  const [view, setView] = useState<CollectionView>("tiles");
   const isHeadOfCellFellowships = useIsHeadOfCellFellowships(session?.userId);
 
   const deleteMutation = useMutation({
@@ -87,98 +89,118 @@ function CellsPage() {
     seesAllCells ? cells : cells.filter((c) => c.leaderId === session?.userId)
   ).filter((c) => matchesBranchFilter(effectiveBranch, c.branchId ?? undefined));
 
+  function renderCellBody(c: OrgCell) {
+    const leader = users.find((u) => u.id === c.leaderId);
+    const count = members.filter((m) => m.cellId === c.id).length;
+    return (
+      <>
+        <div className="flex items-start justify-between">
+          <Link to="/cells/$id" params={{ id: c.id }} className="min-w-0">
+            <h3 className="font-display text-lg font-semibold group-hover:text-primary">
+              {c.name}
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {c.meetingDay ?? "Any day"} • {c.meetingLocation ?? "—"}
+            </p>
+          </Link>
+          {canManage && (
+            <div className="flex gap-1">
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label={`Edit ${c.name}`}
+                onClick={() => {
+                  setEditing(c);
+                  setOpen(true);
+                }}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+              {canManageUsers(session!.role) && (
+                <DeleteButton
+                  label={`Delete ${c.name}`}
+                  title={`Delete "${c.name}"?`}
+                  description="This also removes all of its meetings and attendance history. Members are unlinked, not deleted. This can't be undone."
+                  onConfirm={async () => {
+                    await deleteMutation.mutateAsync(c.id);
+                  }}
+                />
+              )}
+            </div>
+          )}
+        </div>
+        <div className="mt-4 flex items-center justify-between text-sm">
+          <div className="text-muted-foreground">
+            Leader: <span className="text-foreground">{leader?.fullName ?? "—"}</span>
+          </div>
+          <div className="flex items-center gap-1 text-muted-foreground">
+            <Users2 className="h-4 w-4" /> {count}
+          </div>
+        </div>
+        {c.description && (
+          <p className="mt-3 text-xs text-muted-foreground line-clamp-2">{c.description}</p>
+        )}
+      </>
+    );
+  }
+
   return (
     <div>
       <PageHeader
         title={plural}
         description={`Small groups shepherded by their leaders.`}
         actions={
-          canManage && (
-            <Dialog
-              open={open}
-              onOpenChange={(o) => {
-                setOpen(o);
-                if (!o) setEditing(null);
-              }}
-            >
-              <DialogTrigger asChild>
-                <Button onClick={() => setEditing(null)}>
-                  <Plus className="mr-2 h-4 w-4" /> New {singular.toLowerCase()}
-                </Button>
-              </DialogTrigger>
-              <CellDialog
-                key={editing?.id ?? "new"}
-                cell={editing}
-                users={users}
-                singular={singular}
-                leaderLabel={leaderLabel}
-                onClose={() => setOpen(false)}
-              />
-            </Dialog>
-          )
+          <div className="flex items-center gap-2">
+            <ViewToggle view={view} onChange={setView} />
+            {canManage && (
+              <Dialog
+                open={open}
+                onOpenChange={(o) => {
+                  setOpen(o);
+                  if (!o) setEditing(null);
+                }}
+              >
+                <DialogTrigger asChild>
+                  <Button onClick={() => setEditing(null)}>
+                    <Plus className="mr-2 h-4 w-4" /> New {singular.toLowerCase()}
+                  </Button>
+                </DialogTrigger>
+                <CellDialog
+                  key={editing?.id ?? "new"}
+                  cell={editing}
+                  users={users}
+                  singular={singular}
+                  leaderLabel={leaderLabel}
+                  onClose={() => setOpen(false)}
+                />
+              </Dialog>
+            )}
+          </div>
         }
       />
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {visibleCells.map((c) => {
-          const leader = users.find((u) => u.id === c.leaderId);
-          const count = members.filter((m) => m.cellId === c.id).length;
-          return (
+      {visibleCells.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No {plural.toLowerCase()} yet.</p>
+      ) : view === "tiles" ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {visibleCells.map((c) => (
             <Card key={c.id} className="group overflow-hidden">
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between">
-                  <Link to="/cells/$id" params={{ id: c.id }} className="min-w-0">
-                    <h3 className="font-display text-lg font-semibold group-hover:text-primary">
-                      {c.name}
-                    </h3>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {c.meetingDay ?? "Any day"} • {c.meetingLocation ?? "—"}
-                    </p>
-                  </Link>
-                  {canManage && (
-                    <div className="flex gap-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        aria-label={`Edit ${c.name}`}
-                        onClick={() => {
-                          setEditing(c);
-                          setOpen(true);
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      {canManageUsers(session!.role) && (
-                        <DeleteButton
-                          label={`Delete ${c.name}`}
-                          title={`Delete "${c.name}"?`}
-                          description="This also removes all of its meetings and attendance history. Members are unlinked, not deleted. This can't be undone."
-                          onConfirm={async () => {
-                            await deleteMutation.mutateAsync(c.id);
-                          }}
-                        />
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div className="mt-4 flex items-center justify-between text-sm">
-                  <div className="text-muted-foreground">
-                    Leader: <span className="text-foreground">{leader?.fullName ?? "—"}</span>
-                  </div>
-                  <div className="flex items-center gap-1 text-muted-foreground">
-                    <Users2 className="h-4 w-4" /> {count}
-                  </div>
-                </div>
-                {c.description && (
-                  <p className="mt-3 text-xs text-muted-foreground line-clamp-2">{c.description}</p>
-                )}
-              </CardContent>
+              <CardContent className="p-5">{renderCellBody(c)}</CardContent>
             </Card>
-          );
-        })}
-        {visibleCells.length === 0 && (
-          <p className="text-sm text-muted-foreground">No {plural.toLowerCase()} yet.</p>
-        )}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <ul className="divide-y">
+              {visibleCells.map((c) => (
+                <li key={c.id} className="group p-4">
+                  {renderCellBody(c)}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
