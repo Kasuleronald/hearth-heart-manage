@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Plus, MessageCircleHeart } from "lucide-react";
-import { db, uid, TESTIMONY_CATEGORIES, type Testimony, type TestimonyCategory } from "@/lib/db";
-import { notifyTestimonyAdded } from "@/lib/notifications";
+import { TESTIMONY_CATEGORIES, type TestimonyCategory } from "@/lib/db";
+import { listTestimoniesFn, createTestimonyFn, deleteTestimonyFn } from "@/server/testimonies";
+import { listOrgUsersFn } from "@/server/users";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,11 +36,25 @@ export const Route = createFileRoute("/_authenticated/testimonies")({
 });
 
 function TestimoniesPage() {
+  const queryClient = useQueryClient();
   const { session } = useSession();
-  const testimonies = useLiveQuery(() => db.testimonies.toArray(), []) ?? [];
-  const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
-  const sorted = [...testimonies].sort((a, b) => b.createdAt - a.createdAt);
+  const testimoniesQuery = useQuery({
+    queryKey: ["testimonies"],
+    queryFn: () => listTestimoniesFn(),
+  });
+  const usersQuery = useQuery({ queryKey: ["org-users"], queryFn: () => listOrgUsersFn() });
+  const sorted = testimoniesQuery.data ?? [];
+  const users = usersQuery.data ?? [];
   const [open, setOpen] = useState(false);
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteTestimonyFn({ data: { id } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["testimonies"] });
+      toast.success("Testimony deleted");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to delete"),
+  });
 
   if (!session) return null;
 
@@ -55,9 +70,7 @@ function TestimoniesPage() {
                 <Plus className="mr-2 h-4 w-4" /> Share a testimony
               </Button>
             </DialogTrigger>
-            {open && (
-              <TestimonyDialog currentUserId={session.userId} onClose={() => setOpen(false)} />
-            )}
+            {open && <TestimonyDialog onClose={() => setOpen(false)} />}
           </Dialog>
         }
       />
@@ -79,7 +92,7 @@ function TestimoniesPage() {
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <span className="whitespace-nowrap text-xs text-muted-foreground">
-                      {formatDistanceToNow(t.createdAt, { addSuffix: true })}
+                      {formatDistanceToNow(new Date(t.createdAt), { addSuffix: true })}
                     </span>
                     {session.role === "admin" && (
                       <DeleteButton
@@ -87,12 +100,7 @@ function TestimoniesPage() {
                         title="Delete this testimony?"
                         description="This can't be undone."
                         onConfirm={async () => {
-                          try {
-                            await db.testimonies.delete(t.id);
-                            toast.success("Testimony deleted");
-                          } catch (e) {
-                            toast.error(e instanceof Error ? e.message : "Failed to delete");
-                          }
+                          await deleteMutation.mutateAsync(t.id);
                         }}
                       />
                     )}
@@ -113,38 +121,27 @@ function TestimoniesPage() {
   );
 }
 
-function TestimonyDialog({
-  currentUserId,
-  onClose,
-}: {
-  currentUserId: string;
-  onClose: () => void;
-}) {
+function TestimonyDialog({ onClose }: { onClose: () => void }) {
+  const queryClient = useQueryClient();
   const [category, setCategory] = useState<TestimonyCategory>("Salvation");
   const [body, setBody] = useState("");
 
-  async function save() {
+  const saveMutation = useMutation({
+    mutationFn: () => createTestimonyFn({ data: { category, body: body.trim() } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["testimonies"] });
+      toast.success("Testimony shared");
+      onClose();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to share testimony"),
+  });
+
+  function save() {
     if (!body.trim()) {
       toast.error("Enter your testimony");
       return;
     }
-    try {
-      const testimony: Testimony = {
-        id: uid(),
-        userId: currentUserId,
-        category,
-        body: body.trim(),
-        createdAt: Date.now(),
-      };
-      await db.transaction("rw", [db.testimonies, db.users, db.notifications], async () => {
-        await db.testimonies.add(testimony);
-        await notifyTestimonyAdded(testimony);
-      });
-      toast.success("Testimony shared");
-      onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to share testimony");
-    }
+    saveMutation.mutate();
   }
 
   return (

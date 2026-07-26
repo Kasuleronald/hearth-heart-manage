@@ -1,6 +1,6 @@
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery } from "@tanstack/react-query";
 import { Building } from "lucide-react";
-import { db } from "@/lib/db";
+import { listBranchesFn } from "@/server/branches";
 import { useBranchFilter } from "@/lib/branch-filter";
 import {
   Select,
@@ -13,7 +13,8 @@ import {
 // Only rendered for church-wide users (branchId undefined on their session) —
 // branch-scoped users are always pinned to their own branch and never see this.
 export function BranchSwitcher() {
-  const branches = useLiveQuery(() => db.branches.orderBy("name").toArray(), []) ?? [];
+  const branchesQuery = useQuery({ queryKey: ["branches"], queryFn: () => listBranchesFn() });
+  const branches = branchesQuery.data ?? [];
   const [selected, setSelected] = useBranchFilter();
 
   if (branches.length === 0) return null;

@@ -1,5 +1,5 @@
-import { useLiveQuery } from "dexie-react-hooks";
-import { db } from "@/lib/db";
+import { useQuery } from "@tanstack/react-query";
+import { listBranchesFn } from "@/server/branches";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -21,7 +21,8 @@ export function BranchField({
   onChange: (v: string) => void;
   label?: string;
 }) {
-  const branches = useLiveQuery(() => db.branches.orderBy("name").toArray(), []) ?? [];
+  const branchesQuery = useQuery({ queryKey: ["branches"], queryFn: () => listBranchesFn() });
+  const branches = branchesQuery.data ?? [];
   if (branches.length === 0) return null;
   return (
     <div className="space-y-1.5">

@@ -1,9 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Plus, Pencil } from "lucide-react";
-import { db, uid, type Household } from "@/lib/db";
-import { useSession } from "@/lib/auth";
+import {
+  listHouseholdsFn,
+  createHouseholdFn,
+  updateHouseholdFn,
+  deleteHouseholdFn,
+  setHouseholdHeadFn,
+} from "@/server/households";
+import { listMembersFn } from "@/server/members";
+import { listOrgUsersFn } from "@/server/users";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,13 +32,37 @@ export const Route = createFileRoute("/_authenticated/households")({
   component: HouseholdsPage,
 });
 
+type OrgHousehold = Awaited<ReturnType<typeof listHouseholdsFn>>[number];
+
 function HouseholdsPage() {
-  const { session } = useSession();
-  const households = useLiveQuery(() => db.households.orderBy("name").toArray(), []) ?? [];
-  const members = useLiveQuery(() => db.members.toArray(), []) ?? [];
-  const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
-  const [editing, setEditing] = useState<Household | null>(null);
+  const queryClient = useQueryClient();
+  const householdsQuery = useQuery({
+    queryKey: ["households"],
+    queryFn: () => listHouseholdsFn(),
+  });
+  const membersQuery = useQuery({ queryKey: ["members"], queryFn: () => listMembersFn() });
+  const usersQuery = useQuery({ queryKey: ["org-users"], queryFn: () => listOrgUsersFn() });
+  const households = householdsQuery.data ?? [];
+  const members = membersQuery.data ?? [];
+  const users = usersQuery.data ?? [];
+  const [editing, setEditing] = useState<OrgHousehold | null>(null);
   const [open, setOpen] = useState(false);
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteHouseholdFn({ data: { id } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["households"] });
+      queryClient.invalidateQueries({ queryKey: ["members"] });
+      toast.success("Household deleted");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to delete household"),
+  });
+
+  const toggleHeadMutation = useMutation({
+    mutationFn: (vars: { householdId: string; memberId: string | null }) =>
+      setHouseholdHeadFn({ data: vars }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["members"] }),
+  });
 
   return (
     <div>
@@ -54,7 +85,6 @@ function HouseholdsPage() {
             <HouseholdDialog
               key={editing?.id ?? "new"}
               hh={editing}
-              currentUserId={session?.userId}
               onClose={() => setOpen(false)}
             />
           </Dialog>
@@ -91,22 +121,7 @@ function HouseholdsPage() {
                       title={`Delete household "${h.name}"?`}
                       description="Members keep their records but are unlinked from this household. This can't be undone."
                       onConfirm={async () => {
-                        try {
-                          await db.households.delete(h.id);
-                          await Promise.all(
-                            hhMembers.map((m) =>
-                              db.members.update(m.id, {
-                                householdId: undefined,
-                                isHeadOfHousehold: false,
-                              }),
-                            ),
-                          );
-                          toast.success("Household deleted");
-                        } catch (e) {
-                          toast.error(
-                            e instanceof Error ? e.message : "Failed to delete household",
-                          );
-                        }
+                        await deleteMutation.mutateAsync(h.id);
                       }}
                     />
                   </div>
@@ -123,16 +138,12 @@ function HouseholdsPage() {
                         </span>
                         <button
                           className="text-xs text-muted-foreground hover:text-primary"
-                          onClick={async () => {
-                            // toggle head — only one head at a time
-                            await Promise.all(
-                              hhMembers.map((x) =>
-                                db.members.update(x.id, {
-                                  isHeadOfHousehold: x.id === m.id ? !m.isHeadOfHousehold : false,
-                                }),
-                              ),
-                            );
-                          }}
+                          onClick={() =>
+                            toggleHeadMutation.mutate({
+                              householdId: h.id,
+                              memberId: m.isHeadOfHousehold ? null : m.id,
+                            })
+                          }
                         >
                           {m.isHeadOfHousehold ? "★ Head" : "Set as head"}
                         </button>
@@ -170,35 +181,34 @@ function HouseholdsPage() {
   );
 }
 
-function HouseholdDialog({
-  hh,
-  currentUserId,
-  onClose,
-}: {
-  hh: Household | null;
-  currentUserId: string | undefined;
-  onClose: () => void;
-}) {
+function HouseholdDialog({ hh, onClose }: { hh: OrgHousehold | null; onClose: () => void }) {
+  const queryClient = useQueryClient();
   const [name, setName] = useState(hh?.name ?? "");
   const [address, setAddress] = useState(hh?.address ?? "");
   const [branchId, setBranchId] = useState(hh?.branchId ?? "");
 
-  async function save() {
-    if (!name.trim()) return toast.error("Name is required");
-    try {
-      await db.households.put({
-        id: hh?.id ?? uid(),
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const input = {
         name: name.trim(),
         address: address || undefined,
         branchId: branchId || undefined,
-        createdBy: hh?.createdBy ?? currentUserId,
-        createdAt: hh?.createdAt ?? Date.now(),
-      });
+      };
+      return hh
+        ? updateHouseholdFn({ data: { id: hh.id, ...input } })
+        : createHouseholdFn({ data: input });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["households"] });
       toast.success(hh ? "Household updated" : "Household added");
       onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save household");
-    }
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to save household"),
+  });
+
+  function save() {
+    if (!name.trim()) return toast.error("Name is required");
+    saveMutation.mutate();
   }
 
   return (

@@ -1,9 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Building } from "lucide-react";
 import { format } from "date-fns";
-import { db, uid, deleteBranchCascade, type Branch } from "@/lib/db";
+import { listBranchesFn, createBranchFn, updateBranchFn, deleteBranchFn } from "@/server/branches";
+import { listOrgUsersFn } from "@/server/users";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,21 +33,30 @@ export const Route = createFileRoute("/_authenticated/branches")({
   component: BranchesPage,
 });
 
+type OrgBranch = Awaited<ReturnType<typeof listBranchesFn>>[number];
+
 function BranchesPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { session } = useSession();
   const canManage = session ? canManageBranches(session.role) : false;
-  const branches = useLiveQuery(() => db.branches.orderBy("name").toArray(), []) ?? [];
-  const users =
-    useLiveQuery(
-      () =>
-        db.users
-          .filter((u) => u.role === "pastor" || u.role === "leader" || u.role === "admin")
-          .toArray(),
-      [],
-    ) ?? [];
-  const [editing, setEditing] = useState<Branch | null>(null);
+  const branchesQuery = useQuery({ queryKey: ["branches"], queryFn: () => listBranchesFn() });
+  const usersQuery = useQuery({ queryKey: ["org-users"], queryFn: () => listOrgUsersFn() });
+  const branches = branchesQuery.data ?? [];
+  const users = (usersQuery.data ?? []).filter(
+    (u) => u.role === "pastor" || u.role === "leader" || u.role === "admin",
+  );
+  const [editing, setEditing] = useState<OrgBranch | null>(null);
   const [open, setOpen] = useState(false);
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteBranchFn({ data: { id } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["branches"] });
+      toast.success("Branch deleted");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to delete branch"),
+  });
 
   useEffect(() => {
     if (session && !canManageBranches(session.role)) navigate({ to: "/dashboard", replace: true });
@@ -120,12 +130,7 @@ function BranchesPage() {
                       title={`Delete "${b.name}"?`}
                       description="Records scoped to this branch aren't deleted — they become church-wide instead. This can't be undone."
                       onConfirm={async () => {
-                        try {
-                          await deleteBranchCascade(b.id);
-                          toast.success("Branch deleted");
-                        } catch (e) {
-                          toast.error(e instanceof Error ? e.message : "Failed to delete branch");
-                        }
+                        await deleteMutation.mutateAsync(b.id);
                       }}
                     />
                   </div>
@@ -150,31 +155,39 @@ function BranchDialog({
   users,
   onClose,
 }: {
-  branch: Branch | null;
+  branch: OrgBranch | null;
   users: { id: string; fullName: string; role: string }[];
   onClose: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [name, setName] = useState(branch?.name ?? "");
   const [address, setAddress] = useState(branch?.address ?? "");
   const [leadPastorId, setLeadPastorId] = useState(branch?.leadPastorId ?? "");
   const [startDate, setStartDate] = useState(branch?.startDate ?? "");
 
-  async function save() {
-    if (!name.trim()) return toast.error("Name is required");
-    try {
-      await db.branches.put({
-        id: branch?.id ?? uid(),
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const input = {
         name: name.trim(),
         address: address || undefined,
         leadPastorId: leadPastorId || undefined,
         startDate: startDate || undefined,
-        createdAt: branch?.createdAt ?? Date.now(),
-      });
+      };
+      return branch
+        ? updateBranchFn({ data: { id: branch.id, ...input } })
+        : createBranchFn({ data: input });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["branches"] });
       toast.success(branch ? "Branch updated" : "Branch created");
       onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save branch");
-    }
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to save branch"),
+  });
+
+  function save() {
+    if (!name.trim()) return toast.error("Name is required");
+    saveMutation.mutate();
   }
 
   return (
