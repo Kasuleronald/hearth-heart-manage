@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Download, Upload, Database, Tag, Coins, CalendarDays, Church, X } from "lucide-react";
-import { exportDatabase, importDatabase, type DatabaseBackup } from "@/lib/db";
+import { exportOrgDataFn, importOrgDataFn, type OrgBackup } from "@/server/backup";
 import { downloadJson } from "@/lib/download";
 import { TERM_DEFINITIONS, useTerm, setTerm } from "@/lib/terminology";
 import { useBaseCurrency, setBaseCurrency, DEFAULT_BASE_RATE } from "@/lib/currency";
@@ -393,14 +393,15 @@ function ExportCard() {
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Download every household, member, cell, event and attendance record as a single JSON file.
-          Keep it somewhere safe — this is the only way to recover your data if this browser's
-          storage is ever cleared, or to move it to a new device. User accounts are not included.
+          Download every household, member, cell, event and attendance record as a single JSON file,
+          straight from the database, to wherever your browser saves downloads. Keep it somewhere
+          safe — this is how you recover your data or move it elsewhere. User accounts are not
+          included.
         </p>
         <Button
           onClick={async () => {
             try {
-              const backup = await exportDatabase();
+              const backup = await exportOrgDataFn();
               downloadJson(`my-church-backup-${format(new Date(), "yyyy-MM-dd")}.json`, backup);
               toast.success("Backup downloaded");
             } catch (e) {
@@ -417,7 +418,7 @@ function ExportCard() {
 
 function ImportCard() {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [parsed, setParsed] = useState<DatabaseBackup | null>(null);
+  const [parsed, setParsed] = useState<OrgBackup | null>(null);
   const [fileName, setFileName] = useState("");
   const [mode, setMode] = useState<"replace" | "merge">("merge");
   const [busy, setBusy] = useState(false);
@@ -425,7 +426,7 @@ function ImportCard() {
   async function handleFile(file: File) {
     try {
       const text = await file.text();
-      const data = JSON.parse(text) as DatabaseBackup;
+      const data = JSON.parse(text) as OrgBackup;
       if (data.format !== "my-church-backup") {
         throw new Error("This file isn't a My Church backup.");
       }
@@ -442,8 +443,13 @@ function ImportCard() {
     if (!parsed) return;
     setBusy(true);
     try {
-      await importDatabase(parsed, mode);
-      toast.success("Backup restored");
+      const result = await importOrgDataFn({ data: { backup: parsed, mode } });
+      const skippedCount = Object.values(result.skipped).reduce((sum, n) => sum + (n ?? 0), 0);
+      toast.success(
+        skippedCount > 0
+          ? `Backup restored — ${skippedCount} record(s) skipped (referenced a user that no longer exists)`
+          : "Backup restored",
+      );
       setParsed(null);
       setFileName("");
       if (inputRef.current) inputRef.current.value = "";

@@ -3,7 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Search, ClipboardList } from "lucide-react";
 import { listAllCellMeetingsFn, listAllCellAttendanceFn, listCellsFn } from "@/server/cells";
-import { getRunningBalances } from "@/lib/finance";
+import { listOrgUsersFn } from "@/server/users";
+import { getRunningBalances, getCellBalance } from "@/lib/finance";
 import { useSession, canRecordOffertoryReceived, canToggleCurrency } from "@/lib/auth";
 import { useIsHeadOfCellFellowships } from "@/lib/cell-fellowships";
 import { useWeekStartDay } from "@/lib/week";
@@ -84,12 +85,14 @@ function CellReportsPage() {
     queryFn: () => listAllCellMeetingsFn(),
   });
   const cellsQuery = useQuery({ queryKey: ["cells"], queryFn: () => listCellsFn() });
+  const usersQuery = useQuery({ queryKey: ["org-users"], queryFn: () => listOrgUsersFn() });
   const attendanceQuery = useQuery({
     queryKey: ["cell-attendance-all"],
     queryFn: () => listAllCellAttendanceFn(),
   });
   const meetings = meetingsQuery.data ?? [];
   const cells = cellsQuery.data ?? [];
+  const users = usersQuery.data ?? [];
   const cellAttendance = attendanceQuery.data ?? [];
   const weekStartsOn = useWeekStartDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6;
   const effectiveBranch = useEffectiveBranch(session?.branchId);
@@ -140,6 +143,36 @@ function CellReportsPage() {
   }
   const weekGroups = [...weekGroupsMap.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
 
+  // One statement row per cell — collections reported vs. what finance
+  // actually recorded as submitted, and the resulting balance (a Treasurer-
+  // approved expense closes part of the gap; anything left uncovered shows
+  // up here so it doesn't get lost). Respects the same filters as the List
+  // tab, so the date range doubles as "statement period."
+  const statementRows = cells
+    .filter((c) => matchesBranchFilter(effectiveBranch, c.branchId ?? undefined))
+    .filter((c) => (cellFilter === "all" ? true : c.id === cellFilter))
+    .map((c) => {
+      const cellMeetingsInRange = filtered.filter((m) => m.cellId === c.id);
+      const collected = cellMeetingsInRange.reduce((sum, m) => sum + m.offertoryReported, 0);
+      const submitted = cellMeetingsInRange.reduce((sum, m) => sum + m.offertoryReceived, 0);
+      const expenseApproved = cellMeetingsInRange.reduce(
+        (sum, m) => sum + (m.expenseApproved ?? 0),
+        0,
+      );
+      const leader = users.find((u) => u.id === c.leaderId);
+      return {
+        cell: c,
+        leaderName: leader?.fullName ?? "Unassigned",
+        reportCount: cellMeetingsInRange.length,
+        collected,
+        submitted,
+        expenseApproved,
+        balance: getCellBalance(cellMeetingsInRange),
+      };
+    })
+    .filter((r) => r.reportCount > 0)
+    .sort((a, b) => a.balance - b.balance);
+
   return (
     <div>
       <PageHeader
@@ -152,6 +185,7 @@ function CellReportsPage() {
         <TabsList className="mb-4">
           <TabsTrigger value="list">List</TabsTrigger>
           <TabsTrigger value="weekly">Weekly</TabsTrigger>
+          <TabsTrigger value="statement">By {cellSingular}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="list">
@@ -372,6 +406,74 @@ function CellReportsPage() {
               No reports match these filters.
             </p>
           )}
+        </TabsContent>
+
+        <TabsContent value="statement">
+          <Card className="p-4">
+            <p className="mb-4 text-xs text-muted-foreground">
+              One row per {cellSingular.toLowerCase()} — collections reported vs. what finance
+              actually recorded as submitted. A negative balance means the gap between the two
+              hasn't been covered by an approved expense; use the date filters above (List tab) to
+              change the statement period.
+            </p>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{cellSingular}</TableHead>
+                    <TableHead>Leader</TableHead>
+                    <TableHead>Reports</TableHead>
+                    <TableHead>Collections</TableHead>
+                    <TableHead>Submissions</TableHead>
+                    <TableHead>Expense approved</TableHead>
+                    <TableHead>Balance</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {statementRows.map((r) => (
+                    <TableRow key={r.cell.id}>
+                      <TableCell>
+                        <Link
+                          to="/cells/$id"
+                          params={{ id: r.cell.id }}
+                          className="text-primary hover:underline"
+                        >
+                          {r.cell.name}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{r.leaderName}</TableCell>
+                      <TableCell className="text-muted-foreground">{r.reportCount}</TableCell>
+                      <TableCell>{formatAmount(r.collected)}</TableCell>
+                      <TableCell>{formatAmount(r.submitted)}</TableCell>
+                      <TableCell>{formatAmount(r.expenseApproved)}</TableCell>
+                      <TableCell
+                        className={
+                          r.balance < 0
+                            ? "font-medium text-destructive"
+                            : r.balance > 0
+                              ? "font-medium text-primary"
+                              : "text-muted-foreground"
+                        }
+                      >
+                        {formatAmount(r.balance)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {statementRows.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={7}
+                        className="py-10 text-center text-sm text-muted-foreground"
+                      >
+                        <ClipboardList className="mx-auto mb-2 h-6 w-6 text-muted-foreground/60" />
+                        No reports match these filters.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
