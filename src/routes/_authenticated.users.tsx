@@ -40,6 +40,7 @@ import {
 import { isValidEmail, useSession, canManageUsers } from "@/lib/auth";
 import { useCellTerm, useTreasurerTerm, useDepartmentTerm } from "@/lib/terminology";
 import { toast } from "sonner";
+import { copyToClipboard } from "@/lib/clipboard";
 
 type OrgUser = Awaited<ReturnType<typeof listOrgUsersFn>>[number];
 type OrgMember = Awaited<ReturnType<typeof listMembersFn>>[number];
@@ -299,8 +300,9 @@ function ResetPasswordButton({ user }: { user: OrgUser }) {
                 size="icon"
                 variant="outline"
                 onClick={() => {
-                  navigator.clipboard.writeText(result.link);
-                  toast.success("Copied");
+                  copyToClipboard(result.link).then((ok) =>
+                    ok ? toast.success("Copied") : toast.error("Couldn't copy — copy it manually"),
+                  );
                 }}
               >
                 <Copy className="h-4 w-4" />
@@ -550,8 +552,9 @@ function NewUserDialog({
             size="icon"
             variant="outline"
             onClick={() => {
-              navigator.clipboard.writeText(inviteResult.link);
-              toast.success("Copied");
+              copyToClipboard(inviteResult.link).then((ok) =>
+                ok ? toast.success("Copied") : toast.error("Couldn't copy — copy it manually"),
+              );
             }}
           >
             <Copy className="h-4 w-4" />

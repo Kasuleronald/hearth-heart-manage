@@ -36,6 +36,7 @@ import {
   disableOrganizationFn,
 } from "@/server/superadmin";
 import { toast } from "sonner";
+import { copyToClipboard } from "@/lib/clipboard";
 
 export const Route = createFileRoute("/superadmin/orgs")({
   ssr: false,
@@ -334,8 +335,9 @@ function SuperAdminOrgsPage() {
                 size="icon"
                 variant="outline"
                 onClick={() => {
-                  navigator.clipboard.writeText(resetResult.link);
-                  toast.success("Copied");
+                  copyToClipboard(resetResult.link).then((ok) =>
+                    ok ? toast.success("Copied") : toast.error("Couldn't copy — copy it manually"),
+                  );
                 }}
               >
                 <Copy className="h-4 w-4" />
@@ -551,8 +553,9 @@ function NewOrganizationDialog({ onClose }: { onClose: () => void }) {
             size="icon"
             variant="outline"
             onClick={() => {
-              navigator.clipboard.writeText(inviteLink);
-              toast.success("Copied");
+              copyToClipboard(inviteLink).then((ok) =>
+                ok ? toast.success("Copied") : toast.error("Couldn't copy — copy it manually"),
+              );
             }}
           >
             <Copy className="h-4 w-4" />
