@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { and, asc, desc, eq, ilike, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, isNull, ne } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant, type Tx } from "./db/client";
 import {
@@ -47,12 +47,17 @@ export const createCellFn = createServerFn({ method: "POST" })
   .validator(cellFieldsSchema)
   .handler(async ({ data }) => {
     const session = await requireSession();
-    const [cell] = await withTenant(session.organizationId, (tx) =>
-      tx
+    const [cell] = await withTenant(session.organizationId, async (tx) => {
+      // A user can lead at most one Cell Fellowship — clear them from any
+      // other cell first, same 1:1 enforcement createDepartmentFn uses.
+      if (data.leaderId) {
+        await tx.update(cells).set({ leaderId: null }).where(eq(cells.leaderId, data.leaderId));
+      }
+      return tx
         .insert(cells)
         .values({ organizationId: session.organizationId, ...data })
-        .returning(),
-    );
+        .returning();
+    });
     return cell;
   });
 
@@ -61,13 +66,19 @@ export const updateCellFn = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const session = await requireSession();
     const { id, ...rest } = data;
-    const [cell] = await withTenant(session.organizationId, (tx) =>
-      tx
+    const [cell] = await withTenant(session.organizationId, async (tx) => {
+      if (rest.leaderId) {
+        await tx
+          .update(cells)
+          .set({ leaderId: null })
+          .where(and(eq(cells.leaderId, rest.leaderId), ne(cells.id, id)));
+      }
+      return tx
         .update(cells)
         .set({ ...rest, leaderId: rest.leaderId ?? null })
         .where(eq(cells.id, id))
-        .returning(),
-    );
+        .returning();
+    });
     if (!cell) throw new AuthError("Cell not found");
     return cell;
   });

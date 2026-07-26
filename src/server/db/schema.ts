@@ -172,6 +172,11 @@ export const users = pgTable(
     memberId: uuid("member_id").references((): AnyPgColumn => members.id, { onDelete: "set null" }),
     financeTier: text("finance_tier").$type<"A">(),
     branchId: uuid("branch_id").references(() => branches.id, { onDelete: "set null" }),
+    // Grants Cell Fellowship leadership eligibility on top of whatever the
+    // user's primary role already is — same "additive, not a role swap"
+    // approach as financeTier, so an Admin can make e.g. a Treasurer
+    // eligible to lead a cell without losing their Treasurer access.
+    canLeadCell: boolean("can_lead_cell").notNull().default(false),
     needsEmailUpdate: boolean("needs_email_update").notNull().default(false),
     emailNotificationsEnabled: boolean("email_notifications_enabled").notNull().default(true),
     ...timestamps,

@@ -22,6 +22,7 @@ const createUserSchema = z.object({
   memberId: z.string().uuid().optional(),
   branchId: z.string().uuid().optional(),
   financeTier: z.enum(["A"]).optional(),
+  canLeadCell: z.boolean().default(false),
 });
 
 // No password is typed here — the new user gets a real account with no
@@ -52,6 +53,7 @@ export const createOrgUserFn = createServerFn({ method: "POST" })
           memberId: data.memberId,
           branchId: data.branchId,
           financeTier: data.financeTier,
+          canLeadCell: data.canLeadCell,
         })
         .returning();
       return u;
@@ -87,6 +89,7 @@ const updateUserSchema = z.object({
   memberId: z.string().uuid().optional(),
   branchId: z.string().uuid().optional(),
   financeTier: z.enum(["A"]).optional(),
+  canLeadCell: z.boolean().default(false),
 });
 
 export const updateOrgUserFn = createServerFn({ method: "POST" })
@@ -118,6 +121,7 @@ export const updateOrgUserFn = createServerFn({ method: "POST" })
           memberId: data.memberId,
           branchId: data.branchId,
           financeTier: data.financeTier,
+          canLeadCell: data.canLeadCell,
           needsEmailUpdate: email !== target.email ? false : target.needsEmailUpdate,
         })
         .where(eq(users.id, data.id))

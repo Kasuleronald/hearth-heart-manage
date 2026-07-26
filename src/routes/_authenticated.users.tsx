@@ -382,6 +382,32 @@ function FinanceTierField({
   );
 }
 
+// Additive, like Tier-A finance — lets an Admin make any user eligible to be
+// picked as a Cell Fellowship's leader (and, once actually assigned to one,
+// gain that cell's leader capabilities) without changing their primary role.
+function CellLeaderField({
+  cellLabel,
+  checked,
+  onCheckedChange,
+}: {
+  cellLabel: string;
+  checked: boolean;
+  onCheckedChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-md border px-3 py-2">
+      <div>
+        <Label>Can lead a {cellLabel.toLowerCase()}</Label>
+        <p className="text-xs text-muted-foreground">
+          Makes this user selectable as a {cellLabel.toLowerCase()}'s leader, alongside their normal
+          role. A user can only lead one at a time.
+        </p>
+      </div>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+    </div>
+  );
+}
+
 function MemberLinkField({
   members,
   isMember,
@@ -455,6 +481,8 @@ function NewUserDialog({
   const [memberId, setMemberId] = useState("");
   const [branchId, setBranchId] = useState("");
   const [financeTierA, setFinanceTierA] = useState(false);
+  const [canLeadCell, setCanLeadCell] = useState(false);
+  const { singular: cellLabel } = useCellTerm();
   const [inviteResult, setInviteResult] = useState<{ link: string; emailSent: boolean } | null>(
     null,
   );
@@ -470,6 +498,7 @@ function NewUserDialog({
           branchId: branchId || undefined,
           financeTier:
             financeTierA && (role === "leader" || role === "cell_leader") ? "A" : undefined,
+          canLeadCell,
         },
       }),
     onSuccess: async (result) => {
@@ -586,6 +615,11 @@ function NewUserDialog({
           {(role === "leader" || role === "cell_leader") && (
             <FinanceTierField checked={financeTierA} onCheckedChange={setFinanceTierA} />
           )}
+          <CellLeaderField
+            cellLabel={cellLabel}
+            checked={canLeadCell}
+            onCheckedChange={setCanLeadCell}
+          />
           <MemberLinkField
             members={members}
             isMember={isMember}
@@ -635,6 +669,8 @@ function EditUserDialog({
   const [memberId, setMemberId] = useState(user.memberId ?? "");
   const [branchId, setBranchId] = useState(user.branchId ?? "");
   const [financeTierA, setFinanceTierA] = useState(user.financeTier === "A");
+  const [canLeadCell, setCanLeadCell] = useState(user.canLeadCell);
+  const { singular: cellLabel } = useCellTerm();
 
   const updateMutation = useMutation({
     mutationFn: (trimmedEmail: string) =>
@@ -648,6 +684,7 @@ function EditUserDialog({
           branchId: branchId || undefined,
           financeTier:
             financeTierA && (role === "leader" || role === "cell_leader") ? "A" : undefined,
+          canLeadCell,
         },
       }),
     onSuccess: async () => {
@@ -723,6 +760,11 @@ function EditUserDialog({
           {(role === "leader" || role === "cell_leader") && (
             <FinanceTierField checked={financeTierA} onCheckedChange={setFinanceTierA} />
           )}
+          <CellLeaderField
+            cellLabel={cellLabel}
+            checked={canLeadCell}
+            onCheckedChange={setCanLeadCell}
+          />
           <MemberLinkField
             members={members}
             isMember={isMember}

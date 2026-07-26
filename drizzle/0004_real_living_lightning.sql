@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "can_lead_cell" boolean DEFAULT false NOT NULL;

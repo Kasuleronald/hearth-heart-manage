@@ -29,6 +29,13 @@
       "when": 1785055219966,
       "tag": "0003_volatile_sabretooth",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785078041160,
+      "tag": "0004_real_living_lightning",
+      "breakpoints": true
     }
   ]
 }

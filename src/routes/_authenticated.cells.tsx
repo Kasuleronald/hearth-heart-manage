@@ -52,7 +52,7 @@ function CellsPage() {
   const membersQuery = useQuery({ queryKey: ["members"], queryFn: () => listMembersFn() });
   const cells = cellsQuery.data ?? [];
   const users = (usersQuery.data ?? []).filter(
-    (u) => u.role === "cell_leader" || u.role === "pastor" || u.role === "leader",
+    (u) => u.role === "cell_leader" || u.role === "pastor" || u.role === "leader" || u.canLeadCell,
   );
   const members = membersQuery.data ?? [];
   const [editing, setEditing] = useState<OrgCell | null>(null);
