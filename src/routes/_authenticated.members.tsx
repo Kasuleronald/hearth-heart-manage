@@ -36,6 +36,7 @@ import { DuplicateEmailAlert } from "@/components/duplicate-email-alert";
 import { findEmailMatches, type DuplicateEmailMatch } from "@/lib/duplicate-contact";
 import { downloadMemberImportTemplate, parseMemberImportFile } from "@/lib/member-import";
 import { copyToClipboard } from "@/lib/clipboard";
+import { useCountry } from "@/lib/country";
 import {
   useSession,
   canEditDeleteMembers,
@@ -1045,7 +1046,8 @@ function MemberDialog({
   const queryClient = useQueryClient();
   const [firstName, setFirstName] = useState(member?.firstName ?? "");
   const [lastName, setLastName] = useState(member?.lastName ?? "");
-  const [phone, setPhone] = useState(member?.phone ?? "");
+  const country = useCountry();
+  const [phone, setPhone] = useState(member?.phone ?? `${country.callingCode} `);
   const [email, setEmail] = useState(member?.email ?? "");
   const [gender, setGender] = useState<Member["gender"] | undefined>(member?.gender);
   const [birthMonth, setBirthMonth] = useState(member?.birthMonth ? String(member.birthMonth) : "");
@@ -1095,7 +1097,7 @@ function MemberDialog({
     return {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
-      phone: phone || undefined,
+      phone: phone.trim() === country.callingCode ? undefined : phone || undefined,
       email: email || undefined,
       gender: gender ?? undefined,
       birthMonth: birthMonth ? Number(birthMonth) : undefined,

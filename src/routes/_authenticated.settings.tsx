@@ -1,12 +1,23 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { Download, Upload, Database, Tag, Coins, CalendarDays, Church, X } from "lucide-react";
+import {
+  Download,
+  Upload,
+  Database,
+  Tag,
+  Coins,
+  CalendarDays,
+  Church,
+  X,
+  Globe,
+} from "lucide-react";
 import { exportOrgDataFn, importOrgDataFn, type OrgBackup } from "@/server/backup";
 import { downloadJson } from "@/lib/download";
 import { TERM_DEFINITIONS, useTerm, setTerm } from "@/lib/terminology";
 import { useBaseCurrency, setBaseCurrency, DEFAULT_BASE_RATE } from "@/lib/currency";
 import { useWeekStartDay, setWeekStartDay, WEEKDAY_OPTIONS } from "@/lib/week";
+import { useCountry, setCountry, COUNTRIES } from "@/lib/country";
 import {
   useChurchBranding,
   setChurchName,
@@ -52,6 +63,7 @@ import {
   canManageCurrencySettings,
   canManageWeekStartSetting,
   canManageBranding,
+  canManageCountrySetting,
 } from "@/lib/auth";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -80,6 +92,7 @@ function SettingsPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {canManageBranding(session.role) && <BrandingCard />}
         <TerminologyCard />
+        {canManageCountrySetting(session.role) && <CountryCard />}
         {canManageCurrencySettings(session.role) && <CurrencyCard />}
         {canManageWeekStartSetting(session.role) && <WeekStartCard />}
         <ExportCard />
@@ -169,7 +182,54 @@ function TermRow({ def }: { def: (typeof TERM_DEFINITIONS)[number] }) {
   );
 }
 
+function CountryCard() {
+  const queryClient = useQueryClient();
+  const country = useCountry();
+
+  async function save(code: string) {
+    try {
+      await setCountry(code);
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
+      toast.success("Country updated");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save");
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="font-display flex items-center gap-2">
+          <Globe className="h-5 w-5" /> Country
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Phone number fields default to this country's calling code — anyone can still change it
+          per entry.
+        </p>
+        <div className="space-y-1.5">
+          <Label>Country</Label>
+          <Select value={country.code} onValueChange={save}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {COUNTRIES.map((c) => (
+                <SelectItem key={c.code} value={c.code}>
+                  {c.name} ({c.callingCode})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function CurrencyCard() {
+  const queryClient = useQueryClient();
   const { code, rate, updatedAt } = useBaseCurrency();
   const [editCode, setEditCode] = useState(code);
   const [editRate, setEditRate] = useState(String(rate));
@@ -191,6 +251,7 @@ function CurrencyCard() {
     }
     try {
       await setBaseCurrency(editCode, numericRate);
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
       toast.success("Currency settings updated");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to save");
@@ -237,11 +298,13 @@ function CurrencyCard() {
 }
 
 function WeekStartCard() {
+  const queryClient = useQueryClient();
   const weekStartDay = useWeekStartDay();
 
   async function save(day: number) {
     try {
       await setWeekStartDay(day);
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
       toast.success("Week start day updated");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to save");
@@ -280,6 +343,7 @@ function WeekStartCard() {
 }
 
 function BrandingCard() {
+  const queryClient = useQueryClient();
   const { name, logoDataUrl } = useChurchBranding();
   const [editName, setEditName] = useState(name);
   const [busy, setBusy] = useState(false);
@@ -292,6 +356,7 @@ function BrandingCard() {
   async function saveName() {
     try {
       await setChurchName(editName);
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
       toast.success("Church name updated");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to save");
@@ -303,6 +368,7 @@ function BrandingCard() {
     try {
       const dataUrl = await compressImageToDataUrl(file, { maxBytes: MAX_LOGO_BYTES });
       await setChurchLogo(dataUrl);
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
       toast.success("Logo updated");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to save logo");
@@ -366,8 +432,10 @@ function BrandingCard() {
                 variant="ghost"
                 size="icon"
                 onClick={() => {
-                  clearChurchLogo();
-                  toast.success("Logo removed");
+                  clearChurchLogo().then(() => {
+                    queryClient.invalidateQueries({ queryKey: ["settings"] });
+                    toast.success("Logo removed");
+                  });
                 }}
               >
                 <X className="h-4 w-4" />

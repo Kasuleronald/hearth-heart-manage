@@ -1,5 +1,5 @@
-import { useLiveQuery } from "dexie-react-hooks";
-import { db } from "./db";
+import { useQuery } from "@tanstack/react-query";
+import { listSettingsFn, setSettingFn } from "@/server/settings";
 
 // A practical list of common ISO 4217 codes — not the full ~180-code set,
 // just what a church is realistically likely to use as its base currency.
@@ -48,26 +48,26 @@ const BASE_CURRENCY_KEY = "baseCurrency";
 const BASE_RATE_KEY = "baseCurrencyToUsdRate";
 const BASE_RATE_UPDATED_KEY = "baseCurrencyRateUpdatedAt";
 
-// The church's configured base/local currency + its rate to USD. Data is
-// always stored in this currency — conversion only ever happens at
-// display/export time, using whatever the *current* rate is (no historical
-// rate tracking — see §12 of the feature brief).
+// The church's configured base/local currency + its rate to USD — a real,
+// per-organization setting (same generic settings table as Terminology),
+// not a per-browser one. Data is always stored in this currency —
+// conversion only ever happens at display/export time, using whatever the
+// *current* rate is (no historical rate tracking — see §12 of the feature
+// brief).
 export function useBaseCurrency() {
-  const codeRow = useLiveQuery(() => db.settings.get(BASE_CURRENCY_KEY), []);
-  const rateRow = useLiveQuery(() => db.settings.get(BASE_RATE_KEY), []);
-  const updatedRow = useLiveQuery(() => db.settings.get(BASE_RATE_UPDATED_KEY), []);
-  const code = codeRow?.value || DEFAULT_BASE_CURRENCY;
-  const rateNum = rateRow?.value ? Number(rateRow.value) : DEFAULT_BASE_RATE;
+  const { data } = useQuery({ queryKey: ["settings"], queryFn: () => listSettingsFn() });
+  const code = data?.[BASE_CURRENCY_KEY] || DEFAULT_BASE_CURRENCY;
+  const rateNum = data?.[BASE_RATE_KEY] ? Number(data[BASE_RATE_KEY]) : DEFAULT_BASE_RATE;
   const rate = Number.isFinite(rateNum) && rateNum > 0 ? rateNum : DEFAULT_BASE_RATE;
-  const updatedAt = updatedRow?.value ? Number(updatedRow.value) : undefined;
+  const updatedAt = data?.[BASE_RATE_UPDATED_KEY] ? Number(data[BASE_RATE_UPDATED_KEY]) : undefined;
   return { code, rate, updatedAt };
 }
 
 export async function setBaseCurrency(code: string, rate: number) {
-  await db.settings.bulkPut([
-    { key: BASE_CURRENCY_KEY, value: code },
-    { key: BASE_RATE_KEY, value: String(rate) },
-    { key: BASE_RATE_UPDATED_KEY, value: String(Date.now()) },
+  await Promise.all([
+    setSettingFn({ data: { key: BASE_CURRENCY_KEY, value: code } }),
+    setSettingFn({ data: { key: BASE_RATE_KEY, value: String(rate) } }),
+    setSettingFn({ data: { key: BASE_RATE_UPDATED_KEY, value: String(Date.now()) } }),
   ]);
 }
 

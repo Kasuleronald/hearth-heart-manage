@@ -11,6 +11,7 @@ import {
 import { listGivingsFn } from "@/server/givings";
 import { listOrgUsersFn } from "@/server/users";
 import { useBaseCurrency } from "@/lib/currency";
+import { useCountry } from "@/lib/country";
 import { useDisplayCurrency } from "@/lib/currency-toggle";
 import { CurrencyToggle } from "@/components/currency-toggle";
 import { PageHeader } from "@/components/page-header";
@@ -236,7 +237,8 @@ function PartnerDialog({
   const [type, setType] = useState<"individual" | "organization" | "church" | undefined>(
     partner?.type ?? undefined,
   );
-  const [phone, setPhone] = useState(partner?.phone ?? "");
+  const country = useCountry();
+  const [phone, setPhone] = useState(partner?.phone ?? `${country.callingCode} `);
   const [email, setEmail] = useState(partner?.email ?? "");
   const [pledgeAmount, setPledgeAmount] = useState(
     partner?.pledgeAmount != null ? String(partner.pledgeAmount) : "",
@@ -252,7 +254,7 @@ function PartnerDialog({
       const input = {
         name: name.trim(),
         type,
-        phone: phone || undefined,
+        phone: phone.trim() === country.callingCode ? undefined : phone || undefined,
         email: email || undefined,
         pledgeAmount: pledge != null && !Number.isNaN(pledge) ? pledge : undefined,
         notes: notes || undefined,
