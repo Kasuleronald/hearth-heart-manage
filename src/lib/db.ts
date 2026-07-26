@@ -398,7 +398,8 @@ export type NotificationType =
   | "cell_expense_approved"
   | "expense_submitted"
   | "expense_approved"
-  | "notice_posted";
+  | "notice_posted"
+  | "member_registration_submitted";
 
 export interface Notification {
   id: string;

@@ -26,6 +26,7 @@ const ENTITY_ROUTES: Record<string, string> = {
   testimony: "/testimonies",
   pledge: "/pledges",
   notice: "/dashboard",
+  member_registration: "/members",
 };
 
 type OrgNotification = Awaited<ReturnType<typeof listNotificationsFn>>[number];

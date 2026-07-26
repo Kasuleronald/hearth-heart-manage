@@ -16,6 +16,7 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SuperadminIndexRouteImport } from './routes/superadmin.index'
 import { Route as SuperadminOrgsRouteImport } from './routes/superadmin.orgs'
+import { Route as RegisterOrganizationIdRouteImport } from './routes/register.$organizationId'
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated.users'
 import { Route as AuthenticatedTestimoniesRouteImport } from './routes/_authenticated.testimonies'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated.settings'
@@ -73,6 +74,11 @@ const SuperadminOrgsRoute = SuperadminOrgsRouteImport.update({
   id: '/orgs',
   path: '/orgs',
   getParentRoute: () => SuperadminRoute,
+} as any)
+const RegisterOrganizationIdRoute = RegisterOrganizationIdRouteImport.update({
+  id: '/register/$organizationId',
+  path: '/register/$organizationId',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedUsersRoute = AuthenticatedUsersRouteImport.update({
   id: '/users',
@@ -218,6 +224,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AuthenticatedSettingsRoute
   '/testimonies': typeof AuthenticatedTestimoniesRoute
   '/users': typeof AuthenticatedUsersRoute
+  '/register/$organizationId': typeof RegisterOrganizationIdRoute
   '/superadmin/orgs': typeof SuperadminOrgsRoute
   '/superadmin/': typeof SuperadminIndexRoute
   '/cells/$id': typeof AuthenticatedCellsIdRoute
@@ -248,6 +255,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthenticatedSettingsRoute
   '/testimonies': typeof AuthenticatedTestimoniesRoute
   '/users': typeof AuthenticatedUsersRoute
+  '/register/$organizationId': typeof RegisterOrganizationIdRoute
   '/superadmin/orgs': typeof SuperadminOrgsRoute
   '/superadmin': typeof SuperadminIndexRoute
   '/cells/$id': typeof AuthenticatedCellsIdRoute
@@ -281,6 +289,7 @@ export interface FileRoutesById {
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/testimonies': typeof AuthenticatedTestimoniesRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
+  '/register/$organizationId': typeof RegisterOrganizationIdRoute
   '/superadmin/orgs': typeof SuperadminOrgsRoute
   '/superadmin/': typeof SuperadminIndexRoute
   '/_authenticated/cells/$id': typeof AuthenticatedCellsIdRoute
@@ -314,6 +323,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/testimonies'
     | '/users'
+    | '/register/$organizationId'
     | '/superadmin/orgs'
     | '/superadmin/'
     | '/cells/$id'
@@ -344,6 +354,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/testimonies'
     | '/users'
+    | '/register/$organizationId'
     | '/superadmin/orgs'
     | '/superadmin'
     | '/cells/$id'
@@ -376,6 +387,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings'
     | '/_authenticated/testimonies'
     | '/_authenticated/users'
+    | '/register/$organizationId'
     | '/superadmin/orgs'
     | '/superadmin/'
     | '/_authenticated/cells/$id'
@@ -390,6 +402,7 @@ export interface RootRouteChildren {
   AcceptInviteRoute: typeof AcceptInviteRoute
   LoginRoute: typeof LoginRoute
   SuperadminRoute: typeof SuperadminRouteWithChildren
+  RegisterOrganizationIdRoute: typeof RegisterOrganizationIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -442,6 +455,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/superadmin/orgs'
       preLoaderRoute: typeof SuperadminOrgsRouteImport
       parentRoute: typeof SuperadminRoute
+    }
+    '/register/$organizationId': {
+      id: '/register/$organizationId'
+      path: '/register/$organizationId'
+      fullPath: '/register/$organizationId'
+      preLoaderRoute: typeof RegisterOrganizationIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/users': {
       id: '/_authenticated/users'
@@ -719,6 +739,7 @@ const rootRouteChildren: RootRouteChildren = {
   AcceptInviteRoute: AcceptInviteRoute,
   LoginRoute: LoginRoute,
   SuperadminRoute: SuperadminRouteWithChildren,
+  RegisterOrganizationIdRoute: RegisterOrganizationIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

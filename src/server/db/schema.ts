@@ -277,6 +277,46 @@ export const members = pgTable(
   ],
 ).enableRLS();
 
+// A prospective member's public self-registration submission — deliberately
+// separate from `members` (not just a status flag there) so an
+// unauthenticated visitor never writes directly into the real roster;
+// Admin/Pastor review and either promote it into a real `members` row
+// (approve) or leave it as a record of what was declined (reject).
+export const memberRegistrations = pgTable(
+  "member_registrations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    firstName: text("first_name").notNull(),
+    lastName: text("last_name").notNull(),
+    address: text("address").notNull(),
+    phone: text("phone"),
+    email: text("email"),
+    gender: text("gender").$type<"male" | "female" | "other">(),
+    birthMonth: integer("birth_month"),
+    birthDay: integer("birth_day"),
+    birthYear: integer("birth_year"),
+    notes: text("notes"),
+    status: text("status")
+      .notNull()
+      .$type<"pending" | "approved" | "rejected">()
+      .default("pending"),
+    reviewedBy: uuid("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    rejectionReason: text("rejection_reason"),
+    createdMemberId: uuid("created_member_id").references((): AnyPgColumn => members.id, {
+      onDelete: "set null",
+    }),
+    ...timestamps,
+  },
+  (t) => [
+    index("member_registrations_org_idx").on(t.organizationId),
+    tenantPolicy(t.organizationId),
+  ],
+).enableRLS();
+
 // ---- Cells (small groups) ----
 
 export const cells = pgTable(

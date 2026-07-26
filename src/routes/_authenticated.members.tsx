@@ -1,7 +1,20 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Search, Pencil, Trash2, Columns3, Hash, Upload, Download } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Pencil,
+  Trash2,
+  Columns3,
+  Hash,
+  Upload,
+  Download,
+  Copy,
+  UserPlus,
+  Check,
+  X,
+} from "lucide-react";
 import { formatBirthday, MONTH_NAMES, type MemberCategory, type MemberStatus } from "@/lib/db";
 import {
   listMembersFn,
@@ -12,12 +25,23 @@ import {
   nextMemberNumberFn,
   importMembersFn,
 } from "@/server/members";
+import {
+  listPendingRegistrationsFn,
+  approveMemberRegistrationFn,
+  rejectMemberRegistrationFn,
+} from "@/server/member-registrations";
 import { ExportMenu } from "@/components/export-menu";
 import { BranchField } from "@/components/branch-field";
 import { DuplicateEmailAlert } from "@/components/duplicate-email-alert";
 import { findEmailMatches, type DuplicateEmailMatch } from "@/lib/duplicate-contact";
 import { downloadMemberImportTemplate, parseMemberImportFile } from "@/lib/member-import";
-import { useSession, canEditDeleteMembers, canImportMembers } from "@/lib/auth";
+import { copyToClipboard } from "@/lib/clipboard";
+import {
+  useSession,
+  canEditDeleteMembers,
+  canImportMembers,
+  canManageMemberRegistrations,
+} from "@/lib/auth";
 import { useCellTerm, useTerm } from "@/lib/terminology";
 import { useEffectiveBranch, matchesBranchFilter } from "@/lib/branch-filter";
 import { PageHeader } from "@/components/page-header";
@@ -218,7 +242,14 @@ function MembersPage() {
   const { singular: classSingular } = useTerm("class");
   const canEditDelete = session ? canEditDeleteMembers(session.role) : false;
   const canImport = session ? canImportMembers(session.role) : false;
+  const canReviewRegistrations = session ? canManageMemberRegistrations(session.role) : false;
   const membersQuery = useQuery({ queryKey: ["members"], queryFn: () => listMembersFn() });
+  const registrationsQuery = useQuery({
+    queryKey: ["pending-registrations"],
+    queryFn: () => listPendingRegistrationsFn(),
+    enabled: canReviewRegistrations,
+  });
+  const pendingRegistrations = registrationsQuery.data ?? [];
   const optionsQuery = useQuery({
     queryKey: ["member-form-options"],
     queryFn: () => listMemberFormOptionsFn(),
@@ -247,6 +278,7 @@ function MembersPage() {
   const [open, setOpen] = useState(false);
   const [viewing, setViewing] = useState<Member | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [registrationsOpen, setRegistrationsOpen] = useState(false);
   const [visibleCols, setVisibleCols] = useState<Set<string>>(
     () => new Set(OPTIONAL_COLUMNS.filter((c) => c.defaultVisible).map((c) => c.key)),
   );
@@ -329,6 +361,25 @@ function MembersPage() {
                   classLabel={classSingular}
                   onImported={() => queryClient.invalidateQueries({ queryKey: ["members"] })}
                   onClose={() => setImportOpen(false)}
+                />
+              </Dialog>
+            )}
+            {canReviewRegistrations && (
+              <Dialog open={registrationsOpen} onOpenChange={setRegistrationsOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="relative">
+                    <UserPlus className="mr-2 h-4 w-4" /> Registrations
+                    {pendingRegistrations.length > 0 && (
+                      <Badge className="ml-2 border-0 bg-destructive px-1.5 text-destructive-foreground">
+                        {pendingRegistrations.length}
+                      </Badge>
+                    )}
+                  </Button>
+                </DialogTrigger>
+                <RegistrationsDialog
+                  organizationId={session?.organizationId ?? ""}
+                  registrations={pendingRegistrations}
+                  onClose={() => setRegistrationsOpen(false)}
                 />
               </Dialog>
             )}
@@ -496,6 +547,160 @@ function MembersPage() {
           ctx={ctx}
           onClose={() => setViewing(null)}
         />
+      )}
+    </div>
+  );
+}
+
+type PendingRegistration = Awaited<ReturnType<typeof listPendingRegistrationsFn>>[number];
+
+function RegistrationsDialog({
+  organizationId,
+  registrations,
+  onClose,
+}: {
+  organizationId: string;
+  registrations: PendingRegistration[];
+  onClose: () => void;
+}) {
+  const link = `${window.location.origin}/register/${organizationId}`;
+
+  return (
+    <DialogContent className="max-w-2xl">
+      <DialogHeader>
+        <DialogTitle className="font-display">Member registrations</DialogTitle>
+      </DialogHeader>
+      <div className="space-y-1.5">
+        <Label>Self-registration link</Label>
+        <div className="flex gap-2">
+          <Input readOnly value={link} className="font-mono text-xs" />
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() =>
+              copyToClipboard(link).then((ok) =>
+                ok ? toast.success("Copied") : toast.error("Couldn't copy — copy it manually"),
+              )
+            }
+          >
+            <Copy className="h-4 w-4" />
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Share this link (or a QR code pointing to it) so prospective members can register
+          themselves — submissions land here for review before becoming real member records.
+        </p>
+      </div>
+      <div className="max-h-96 space-y-3 overflow-y-auto">
+        {registrations.length === 0 && (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            No pending registrations.
+          </p>
+        )}
+        {registrations.map((r) => (
+          <RegistrationRow key={r.id} registration={r} />
+        ))}
+      </div>
+      <DialogFooter>
+        <Button variant="ghost" onClick={onClose}>
+          Close
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  );
+}
+
+function RegistrationRow({ registration: r }: { registration: PendingRegistration }) {
+  const queryClient = useQueryClient();
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState("");
+
+  const approveMutation = useMutation({
+    mutationFn: () => approveMemberRegistrationFn({ data: { id: r.id } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pending-registrations"] });
+      queryClient.invalidateQueries({ queryKey: ["members"] });
+      toast.success(`${r.firstName} ${r.lastName} added as a member`);
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to approve"),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: () =>
+      rejectMemberRegistrationFn({ data: { id: r.id, reason: reason.trim() || undefined } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pending-registrations"] });
+      toast.success("Registration rejected");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to reject"),
+  });
+
+  const dob =
+    r.birthMonth && r.birthDay
+      ? `${MONTH_NAMES[r.birthMonth - 1]} ${r.birthDay}${r.birthYear ? `, ${r.birthYear}` : ""}`
+      : null;
+
+  return (
+    <div className="rounded-md border p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-medium">
+            {r.firstName} {r.lastName}
+          </div>
+          <div className="text-xs text-muted-foreground">{r.address}</div>
+          {(r.phone || r.email) && (
+            <div className="text-xs text-muted-foreground">
+              {[r.phone, r.email].filter(Boolean).join(" · ")}
+            </div>
+          )}
+          {dob && <div className="text-xs text-muted-foreground">Born {dob}</div>}
+          {r.notes && <p className="mt-1 text-xs text-muted-foreground">{r.notes}</p>}
+        </div>
+        {!rejecting && (
+          <div className="flex shrink-0 gap-1">
+            <Button
+              size="icon"
+              variant="outline"
+              aria-label={`Approve ${r.firstName} ${r.lastName}`}
+              disabled={approveMutation.isPending}
+              onClick={() => approveMutation.mutate()}
+            >
+              <Check className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="outline"
+              aria-label={`Reject ${r.firstName} ${r.lastName}`}
+              onClick={() => setRejecting(true)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+      </div>
+      {rejecting && (
+        <div className="mt-3 space-y-2">
+          <Textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Reason (optional)"
+            rows={2}
+          />
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setRejecting(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={rejectMutation.isPending}
+              onClick={() => rejectMutation.mutate()}
+            >
+              Confirm reject
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -353,6 +353,11 @@ export function canManageBranches(role: Role) {
 export function canImportMembers(role: Role) {
   return role === "admin" || role === "pastor";
 }
+// Reviewing (approve/reject) public self-registration submissions before
+// they become real Member records.
+export function canManageMemberRegistrations(role: Role) {
+  return role === "admin" || role === "pastor";
+}
 export function canEnterExpenses(role: Role) {
   return role === "admin" || role === "treasurer";
 }
