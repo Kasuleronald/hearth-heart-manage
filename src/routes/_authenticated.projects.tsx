@@ -1,8 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Plus, Pencil, Target } from "lucide-react";
-import { db, deleteProjectCascade, uid, type Project } from "@/lib/db";
+import { db } from "@/lib/db";
+import {
+  listProjectsFn,
+  createProjectFn,
+  updateProjectFn,
+  deleteProjectFn,
+} from "@/server/projects";
+import { listOrgUsersFn } from "@/server/users";
 import { useBaseCurrency } from "@/lib/currency";
 import { useDisplayCurrency } from "@/lib/currency-toggle";
 import { CurrencyToggle } from "@/components/currency-toggle";
@@ -12,7 +20,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { DeleteButton } from "@/components/delete-button";
 import { BranchField } from "@/components/branch-field";
@@ -32,17 +39,33 @@ export const Route = createFileRoute("/_authenticated/projects")({
   component: ProjectsPage,
 });
 
+type OrgProject = Awaited<ReturnType<typeof listProjectsFn>>[number];
+
 function ProjectsPage() {
+  const queryClient = useQueryClient();
   const { session } = useSession();
   const canManage = session ? canManageProjects(session.role) : false;
-  const projects = useLiveQuery(() => db.projects.orderBy("name").toArray(), []) ?? [];
+  const projectsQuery = useQuery({ queryKey: ["projects"], queryFn: () => listProjectsFn() });
+  const usersQuery = useQuery({ queryKey: ["org-users"], queryFn: () => listOrgUsersFn() });
+  const projects = projectsQuery.data ?? [];
+  const users = usersQuery.data ?? [];
+  // Givings isn't migrated yet — this stays a local read until that phase
+  // lands, so progress may under-report in the meantime.
   const givings =
     useLiveQuery(() => db.givings.where("category").equals("project").toArray(), []) ?? [];
-  const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
-  const [editing, setEditing] = useState<Project | null>(null);
+  const [editing, setEditing] = useState<OrgProject | null>(null);
   const [open, setOpen] = useState(false);
   const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
   const { format: formatAmount, base } = useDisplayCurrency(canToggle);
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteProjectFn({ data: { id } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success("Project deleted");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to delete project"),
+  });
 
   const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd");
   const monthStart = format(startOfMonth(new Date()), "yyyy-MM-dd");
@@ -71,7 +94,6 @@ function ProjectsPage() {
                 <ProjectDialog
                   key={editing?.id ?? "new"}
                   project={editing}
-                  currentUserId={session?.userId}
                   onClose={() => setOpen(false)}
                 />
               </Dialog>
@@ -120,14 +142,7 @@ function ProjectsPage() {
                         title={`Delete "${p.name}"?`}
                         description="Givings recorded against this project are kept, just unlinked. This can't be undone."
                         onConfirm={async () => {
-                          try {
-                            await deleteProjectCascade(p.id);
-                            toast.success("Project deleted");
-                          } catch (e) {
-                            toast.error(
-                              e instanceof Error ? e.message : "Failed to delete project",
-                            );
-                          }
+                          await deleteMutation.mutateAsync(p.id);
                         }}
                       />
                     </div>
@@ -220,15 +235,8 @@ function TargetRow({
   );
 }
 
-function ProjectDialog({
-  project,
-  currentUserId,
-  onClose,
-}: {
-  project: Project | null;
-  currentUserId: string | undefined;
-  onClose: () => void;
-}) {
+function ProjectDialog({ project, onClose }: { project: OrgProject | null; onClose: () => void }) {
+  const queryClient = useQueryClient();
   const [name, setName] = useState(project?.name ?? "");
   const [scope, setScope] = useState(project?.scope ?? "");
   const [financialTarget, setFinancialTarget] = useState(
@@ -249,25 +257,31 @@ function ProjectDialog({
     return Number.isNaN(n) ? undefined : n;
   }
 
-  async function save() {
-    if (!name.trim()) return toast.error("Name is required");
-    try {
-      await db.projects.put({
-        id: project?.id ?? uid(),
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const input = {
         name: name.trim(),
         scope: scope || undefined,
         financialTarget: parseAmount(financialTarget),
         weeklyTarget: parseAmount(weeklyTarget),
         monthlyTarget: parseAmount(monthlyTarget),
         branchId: branchId || undefined,
-        createdBy: project?.createdBy ?? currentUserId,
-        createdAt: project?.createdAt ?? Date.now(),
-      });
+      };
+      return project
+        ? updateProjectFn({ data: { id: project.id, ...input } })
+        : createProjectFn({ data: input });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
       toast.success(project ? "Project updated" : "Project created");
       onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save project");
-    }
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to save project"),
+  });
+
+  function save() {
+    if (!name.trim()) return toast.error("Name is required");
+    saveMutation.mutate();
   }
 
   return (

@@ -1,8 +1,16 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Handshake } from "lucide-react";
-import { db, deletePartnerCascade, uid, type Partner } from "@/lib/db";
+import { db } from "@/lib/db";
+import {
+  listPartnersFn,
+  createPartnerFn,
+  updatePartnerFn,
+  deletePartnerFn,
+} from "@/server/partners";
+import { listOrgUsersFn } from "@/server/users";
 import { useBaseCurrency } from "@/lib/currency";
 import { useDisplayCurrency } from "@/lib/currency-toggle";
 import { CurrencyToggle } from "@/components/currency-toggle";
@@ -37,7 +45,9 @@ export const Route = createFileRoute("/_authenticated/partners")({
   component: PartnersPage,
 });
 
-const TYPES: { value: NonNullable<Partner["type"]>; label: string }[] = [
+type OrgPartner = Awaited<ReturnType<typeof listPartnersFn>>[number];
+
+const TYPES: { value: NonNullable<OrgPartner["type"]>; label: string }[] = [
   { value: "individual", label: "Individual" },
   { value: "organization", label: "Organization" },
   { value: "church", label: "Church" },
@@ -46,14 +56,28 @@ const TYPE_LABEL = Object.fromEntries(TYPES.map((t) => [t.value, t.label]));
 
 function PartnersPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { session } = useSession();
-  const partners = useLiveQuery(() => db.partners.orderBy("name").toArray(), []) ?? [];
+  const partnersQuery = useQuery({ queryKey: ["partners"], queryFn: () => listPartnersFn() });
+  const usersQuery = useQuery({ queryKey: ["org-users"], queryFn: () => listOrgUsersFn() });
+  const partners = partnersQuery.data ?? [];
+  const users = usersQuery.data ?? [];
+  // Givings isn't migrated yet — this stays a local read until that phase
+  // lands, so "given to date" may under-report in the meantime.
   const givings = useLiveQuery(() => db.givings.toArray(), []) ?? [];
-  const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
-  const [editing, setEditing] = useState<Partner | null>(null);
+  const [editing, setEditing] = useState<OrgPartner | null>(null);
   const [open, setOpen] = useState(false);
   const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
   const { format: formatAmount, base } = useDisplayCurrency(canToggle);
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deletePartnerFn({ data: { id } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["partners"] });
+      toast.success("Partner deleted");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to delete partner"),
+  });
 
   useEffect(() => {
     if (session && !canAccessPartners(session.role, session.financeTier, session.allowedModules)) {
@@ -87,7 +111,6 @@ function PartnersPage() {
               <PartnerDialog
                 key={editing?.id ?? "new"}
                 partner={editing}
-                currentUserId={session.userId}
                 onClose={() => setOpen(false)}
               />
             </Dialog>
@@ -131,12 +154,7 @@ function PartnersPage() {
                       title={`Delete "${p.name}"?`}
                       description="Givings recorded against this partner are kept, just unlinked. This can't be undone."
                       onConfirm={async () => {
-                        try {
-                          await deletePartnerCascade(p.id);
-                          toast.success("Partner deleted");
-                        } catch (e) {
-                          toast.error(e instanceof Error ? e.message : "Failed to delete partner");
-                        }
+                        await deleteMutation.mutateAsync(p.id);
                       }}
                     />
                   </div>
@@ -182,17 +200,12 @@ function PartnersPage() {
   );
 }
 
-function PartnerDialog({
-  partner,
-  currentUserId,
-  onClose,
-}: {
-  partner: Partner | null;
-  currentUserId: string;
-  onClose: () => void;
-}) {
+function PartnerDialog({ partner, onClose }: { partner: OrgPartner | null; onClose: () => void }) {
+  const queryClient = useQueryClient();
   const [name, setName] = useState(partner?.name ?? "");
-  const [type, setType] = useState<Partner["type"]>(partner?.type);
+  const [type, setType] = useState<"individual" | "organization" | "church" | undefined>(
+    partner?.type ?? undefined,
+  );
   const [phone, setPhone] = useState(partner?.phone ?? "");
   const [email, setEmail] = useState(partner?.email ?? "");
   const [pledgeAmount, setPledgeAmount] = useState(
@@ -202,12 +215,10 @@ function PartnerDialog({
   const [branchId, setBranchId] = useState(partner?.branchId ?? "");
   const baseCurrency = useBaseCurrency();
 
-  async function save() {
-    if (!name.trim()) return toast.error("Name is required");
-    try {
+  const saveMutation = useMutation({
+    mutationFn: () => {
       const pledge = pledgeAmount ? Number(pledgeAmount) : undefined;
-      await db.partners.put({
-        id: partner?.id ?? uid(),
+      const input = {
         name: name.trim(),
         type,
         phone: phone || undefined,
@@ -215,14 +226,22 @@ function PartnerDialog({
         pledgeAmount: pledge != null && !Number.isNaN(pledge) ? pledge : undefined,
         notes: notes || undefined,
         branchId: branchId || undefined,
-        createdBy: partner?.createdBy ?? currentUserId,
-        createdAt: partner?.createdAt ?? Date.now(),
-      });
+      };
+      return partner
+        ? updatePartnerFn({ data: { id: partner.id, ...input } })
+        : createPartnerFn({ data: input });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["partners"] });
       toast.success(partner ? "Partner updated" : "Partner added");
       onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save partner");
-    }
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to save partner"),
+  });
+
+  function save() {
+    if (!name.trim()) return toast.error("Name is required");
+    saveMutation.mutate();
   }
 
   return (
@@ -242,7 +261,9 @@ function PartnerDialog({
             <Label>Type</Label>
             <Select
               value={type ?? "none"}
-              onValueChange={(v) => setType(v === "none" ? undefined : (v as Partner["type"]))}
+              onValueChange={(v) =>
+                setType(v === "none" ? undefined : (v as "individual" | "organization" | "church"))
+              }
             >
               <SelectTrigger>
                 <SelectValue placeholder="—" />
