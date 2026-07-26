@@ -331,6 +331,7 @@ function MembersPage() {
                 households={households}
                 cells={cells}
                 classes={classes}
+                users={users}
                 cellSingular={cellSingular}
                 canEditNumber={canEditDelete}
                 onClose={() => setOpen(false)}
@@ -667,6 +668,7 @@ function MemberDialog({
   households,
   cells,
   classes,
+  users,
   cellSingular,
   canEditNumber,
   onClose,
@@ -676,6 +678,7 @@ function MemberDialog({
   households: { id: string; name: string }[];
   cells: { id: string; name: string }[];
   classes: { id: string; name: string }[];
+  users: { id: string; fullName: string; email: string; role: string }[];
   cellSingular: string;
   canEditNumber: boolean;
   onClose: () => void;
@@ -739,7 +742,7 @@ function MemberDialog({
       birthMonth: birthMonth ? Number(birthMonth) : undefined,
       birthDay: birthDay ? Number(birthDay) : undefined,
       birthYear: birthYear ? Number(birthYear) : undefined,
-      address: address || undefined,
+      address: address.trim(),
       status,
       // The two legacy values ("new_member"/"convert") only ever exist on
       // records already in the database — the picker below never offers
@@ -762,7 +765,11 @@ function MemberDialog({
 
   async function save() {
     if (!firstName.trim() || !lastName.trim()) {
-      toast.error("Name is required");
+      toast.error("First and last name are required");
+      return;
+    }
+    if (!address.trim()) {
+      toast.error("Address is required");
       return;
     }
     if (Boolean(birthMonth) !== Boolean(birthDay)) {
@@ -771,7 +778,7 @@ function MemberDialog({
     }
     const input = buildInput();
     if (input.email && input.email !== member?.email) {
-      const matches = await findEmailMatches(input.email, { memberId: member?.id }, members);
+      const matches = findEmailMatches(input.email, { memberId: member?.id }, members, users);
       if (matches.length > 0) {
         setDuplicateMatches(matches);
         return;
@@ -805,10 +812,10 @@ function MemberDialog({
           </DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="First name">
+          <Field label="First name" required>
             <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} />
           </Field>
-          <Field label="Last name">
+          <Field label="Last name" required>
             <Input value={lastName} onChange={(e) => setLastName(e.target.value)} />
           </Field>
           {canEditNumber && (
@@ -1005,7 +1012,7 @@ function MemberDialog({
             </Select>
           </Field>
           <div className="sm:col-span-2">
-            <Field label="Address">
+            <Field label="Address" required>
               <Input value={address} onChange={(e) => setAddress(e.target.value)} />
             </Field>
           </div>
@@ -1029,10 +1036,21 @@ function MemberDialog({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  required,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <div className="space-y-1.5">
-      <Label>{label}</Label>
+      <Label>
+        {label}
+        {required && <span className="text-destructive"> *</span>}
+      </Label>
       {children}
     </div>
   );

@@ -40,7 +40,9 @@ export const listMemberFormOptionsFn = createServerFn({ method: "GET" }).handler
         .orderBy(asc(households.name)),
       tx.select({ id: cells.id, name: cells.name }).from(cells).orderBy(asc(cells.name)),
       tx.select({ id: classes.id, name: classes.name }).from(classes).orderBy(asc(classes.name)),
-      tx.select({ id: users.id, fullName: users.fullName }).from(users),
+      tx
+        .select({ id: users.id, fullName: users.fullName, email: users.email, role: users.role })
+        .from(users),
     ]);
     return { households: householdRows, cells: cellRows, classes: classRows, users: userRows };
   });
@@ -108,7 +110,7 @@ const memberInputSchema = z.object({
   birthMonth: z.number().int().min(1).max(12).optional(),
   birthDay: z.number().int().min(1).max(31).optional(),
   birthYear: z.number().int().min(1900).optional(),
-  address: z.string().optional(),
+  address: z.string().min(1, "Address is required"),
   status: z.enum(memberStatusValues),
   category: z.enum(memberCategoryValues).optional(),
   categoryOther: z.string().optional(),
@@ -145,7 +147,7 @@ function normalizeMemberInput(data: z.infer<typeof memberInputSchema>) {
     birthMonth: data.birthMonth,
     birthDay: data.birthDay,
     birthYear: data.birthYear,
-    address: data.address || undefined,
+    address: data.address.trim(),
     status: data.status,
     category: data.category,
     categoryOther: data.category === "other" ? data.categoryOther || undefined : undefined,

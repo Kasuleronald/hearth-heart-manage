@@ -22,8 +22,6 @@ import { Switch } from "@/components/ui/switch";
 import { DeleteButton } from "@/components/delete-button";
 import { MemberCombobox } from "@/components/member-combobox";
 import { BranchField } from "@/components/branch-field";
-import { DuplicateEmailAlert } from "@/components/duplicate-email-alert";
-import { findEmailMatches, type DuplicateEmailMatch } from "@/lib/duplicate-contact";
 import {
   Dialog,
   DialogContent,
@@ -441,7 +439,6 @@ function NewUserDialog({
   const [memberId, setMemberId] = useState("");
   const [branchId, setBranchId] = useState("");
   const [financeTierA, setFinanceTierA] = useState(false);
-  const [duplicateMatches, setDuplicateMatches] = useState<DuplicateEmailMatch[]>([]);
   const [inviteResult, setInviteResult] = useState<{ link: string; emailSent: boolean } | null>(
     null,
   );
@@ -475,14 +472,13 @@ function NewUserDialog({
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to create user"),
   });
 
-  async function save() {
-    if (!isValidEmail(email)) {
-      toast.error("Enter a valid email address");
+  function save() {
+    if (!fullName.trim()) {
+      toast.error("Full name is required");
       return;
     }
-    const matches = await findEmailMatches(email, {}, members);
-    if (matches.length > 0) {
-      setDuplicateMatches(matches);
+    if (!isValidEmail(email)) {
+      toast.error("Enter a valid email address");
       return;
     }
     createMutation.mutate();
@@ -525,25 +521,15 @@ function NewUserDialog({
 
   return (
     <>
-      <DuplicateEmailAlert
-        open={duplicateMatches.length > 0}
-        onOpenChange={(o) => {
-          if (!o) setDuplicateMatches([]);
-        }}
-        matches={duplicateMatches}
-        subject="user"
-        onContinue={() => {
-          setDuplicateMatches([]);
-          createMutation.mutate();
-        }}
-      />
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="font-display">New user</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label>Full name</Label>
+            <Label>
+              Full name<span className="text-destructive"> *</span>
+            </Label>
             <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -633,7 +619,6 @@ function EditUserDialog({
   const [memberId, setMemberId] = useState(user.memberId ?? "");
   const [branchId, setBranchId] = useState(user.branchId ?? "");
   const [financeTierA, setFinanceTierA] = useState(user.financeTier === "A");
-  const [duplicateMatches, setDuplicateMatches] = useState<DuplicateEmailMatch[]>([]);
 
   const updateMutation = useMutation({
     mutationFn: (trimmedEmail: string) =>
@@ -665,7 +650,7 @@ function EditUserDialog({
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to update user"),
   });
 
-  async function save() {
+  function save() {
     if (!fullName.trim()) {
       toast.error("Full name is required");
       return;
@@ -675,38 +660,20 @@ function EditUserDialog({
       toast.error("Enter a valid email address");
       return;
     }
-    if (trimmedEmail !== user.email) {
-      const matches = await findEmailMatches(trimmedEmail, { userId: user.id }, members);
-      if (matches.length > 0) {
-        setDuplicateMatches(matches);
-        return;
-      }
-    }
     updateMutation.mutate(trimmedEmail);
   }
 
   return (
     <>
-      <DuplicateEmailAlert
-        open={duplicateMatches.length > 0}
-        onOpenChange={(o) => {
-          if (!o) setDuplicateMatches([]);
-        }}
-        matches={duplicateMatches}
-        subject="user"
-        onContinue={() => {
-          const trimmedEmail = email.trim().toLowerCase();
-          setDuplicateMatches([]);
-          updateMutation.mutate(trimmedEmail);
-        }}
-      />
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="font-display">Edit {user.fullName}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label>Full name</Label>
+            <Label>
+              Full name<span className="text-destructive"> *</span>
+            </Label>
             <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
           </div>
           <div className="space-y-1.5">

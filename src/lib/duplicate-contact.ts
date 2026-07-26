@@ -1,5 +1,3 @@
-import { db } from "./db";
-
 export interface DuplicateEmailMatch {
   kind: "user" | "member";
   id: string;
@@ -11,22 +9,20 @@ export interface DuplicateEmailMatch {
 // Member — used to prompt "is this the same person?" before saving, rather
 // than silently allowing (or bluntly rejecting) a duplicate.
 //
-// Members now live on the real backend (src/server/members.ts), not Dexie —
-// pass the caller's already-fetched member list via `members` so this checks
-// real data. Callers that don't (Users page, not yet migrated) only get the
-// user-side check; checking Dexie's `members` table here would silently
-// match against data that's no longer kept in sync.
-export async function findEmailMatches(
+// Both `members` and `users` must be the caller's already-fetched real
+// (Postgres-backed) lists — this never reads storage itself, so it can't go
+// stale the way a locally-cached table could.
+export function findEmailMatches(
   email: string,
   exclude: { userId?: string; memberId?: string } = {},
   members: { id: string; firstName: string; lastName: string; email?: string | null }[] = [],
-): Promise<DuplicateEmailMatch[]> {
+  users: { id: string; fullName: string; email: string; role: string }[] = [],
+): DuplicateEmailMatch[] {
   const normalized = email.trim().toLowerCase();
   if (!normalized) return [];
 
   const matches: DuplicateEmailMatch[] = [];
 
-  const users = await db.users.toArray();
   for (const u of users) {
     if (u.id === exclude.userId) continue;
     if (u.email.toLowerCase() === normalized) {
