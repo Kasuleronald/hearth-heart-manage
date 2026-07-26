@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Shield, Plus, LogOut, Copy, Pencil, KeyRound } from "lucide-react";
+import { Loader2, Shield, Plus, LogOut, Copy, Pencil, KeyRound, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -56,6 +56,7 @@ function SuperAdminOrgsPage() {
   const [open, setOpen] = useState(false);
   const [editingOrg, setEditingOrg] = useState<OrgListItem | null>(null);
   const [view, setView] = useState<CollectionView>("tiles");
+  const [q, setQ] = useState("");
   const [resetResult, setResetResult] = useState<{
     link: string;
     emailSent: boolean;
@@ -125,6 +126,12 @@ function SuperAdminOrgsPage() {
   if (sessionQuery.data?.kind !== "platform_admin") return null;
 
   const orgs = orgsQuery.data ?? [];
+  const filteredOrgs = orgs.filter((org) => {
+    if (!q) return true;
+    const adminNames = org.admins.map((a) => `${a.fullName} ${a.email}`).join(" ");
+    const s = `${org.name} ${org.type} ${adminNames}`.toLowerCase();
+    return s.includes(q.toLowerCase());
+  });
 
   function renderOrgBody(org: OrgListItem) {
     return (
@@ -248,13 +255,26 @@ function SuperAdminOrgsPage() {
           </div>
         </div>
 
+        {orgs.length > 0 && (
+          <div className="relative mb-4 max-w-sm">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search organizations or admins…"
+              className="pl-9"
+            />
+          </div>
+        )}
         {orgs.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">
             No organizations yet — create the first one above.
           </p>
+        ) : filteredOrgs.length === 0 ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">No matches for "{q}".</p>
         ) : view === "tiles" ? (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {orgs.map((org) => (
+            {filteredOrgs.map((org) => (
               <Card key={org.id}>
                 <CardContent className="p-5">{renderOrgBody(org)}</CardContent>
               </Card>
@@ -264,7 +284,7 @@ function SuperAdminOrgsPage() {
           <Card>
             <CardContent className="p-0">
               <ul className="divide-y">
-                {orgs.map((org) => (
+                {filteredOrgs.map((org) => (
                   <li key={org.id} className="p-4">
                     {renderOrgBody(org)}
                   </li>

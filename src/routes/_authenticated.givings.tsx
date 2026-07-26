@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Plus, Pencil, HandCoins } from "lucide-react";
+import { Plus, Pencil, HandCoins, Search } from "lucide-react";
 import type { GivingCategory } from "@/lib/db";
 import { listGivingsFn, createGivingFn, updateGivingFn, deleteGivingFn } from "@/server/givings";
 import { listMembersFn } from "@/server/members";
@@ -88,6 +88,7 @@ function GivingsPage() {
   const projects = projectsQuery.data ?? [];
   const users = usersQuery.data ?? [];
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [q, setQ] = useState("");
   const [editing, setEditing] = useState<OrgGiving | null>(null);
   const [open, setOpen] = useState(false);
   const effectiveBranch = useEffectiveBranch(session?.branchId);
@@ -144,6 +145,12 @@ function GivingsPage() {
     return g.projectName ?? "";
   }
 
+  const visibleGivings = filtered.filter((g) => {
+    if (!q) return true;
+    const s = `${giverName(g)} ${projectName(g)} ${g.notes ?? ""}`.toLowerCase();
+    return s.includes(q.toLowerCase());
+  });
+
   return (
     <div>
       <PageHeader
@@ -164,7 +171,7 @@ function GivingsPage() {
                 "Notes",
                 "Added by",
               ]}
-              rows={filtered.map((g) => {
+              rows={visibleGivings.map((g) => {
                 const addedBy = users.find((u) => u.id === g.createdBy);
                 return [
                   g.date,
@@ -218,6 +225,15 @@ function GivingsPage() {
 
       <Card className="p-4">
         <div className="mb-4 flex flex-wrap gap-2">
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search giver, project, notes…"
+              className="pl-9"
+            />
+          </div>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
             <SelectTrigger className="w-56">
               <SelectValue />
@@ -246,7 +262,7 @@ function GivingsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((g) => {
+              {visibleGivings.map((g) => {
                 const addedBy = users.find((u) => u.id === g.createdBy);
                 const proj = projectName(g);
                 return (
@@ -294,7 +310,7 @@ function GivingsPage() {
                   </TableRow>
                 );
               })}
-              {filtered.length === 0 && (
+              {visibleGivings.length === 0 && (
                 <TableRow>
                   <TableCell
                     colSpan={6}

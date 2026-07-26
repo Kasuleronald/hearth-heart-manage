@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Pencil, Users2 } from "lucide-react";
+import { Plus, Pencil, Users2, Search } from "lucide-react";
 import { listCellsFn, createCellFn, updateCellFn, deleteCellFn } from "@/server/cells";
 import { listMembersFn } from "@/server/members";
 import { listOrgUsersFn } from "@/server/users";
@@ -58,6 +58,7 @@ function CellsPage() {
   const [editing, setEditing] = useState<OrgCell | null>(null);
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<CollectionView>("tiles");
+  const [q, setQ] = useState("");
   const isHeadOfCellFellowships = useIsHeadOfCellFellowships(session?.userId);
 
   const deleteMutation = useMutation({
@@ -88,6 +89,13 @@ function CellsPage() {
   const visibleCells = (
     seesAllCells ? cells : cells.filter((c) => c.leaderId === session?.userId)
   ).filter((c) => matchesBranchFilter(effectiveBranch, c.branchId ?? undefined));
+  const filteredCells = visibleCells.filter((c) => {
+    if (!q) return true;
+    const leader = users.find((u) => u.id === c.leaderId);
+    const s =
+      `${c.name} ${c.description ?? ""} ${c.meetingLocation ?? ""} ${leader?.fullName ?? ""}`.toLowerCase();
+    return s.includes(q.toLowerCase());
+  });
 
   function renderCellBody(c: OrgCell) {
     const leader = users.find((u) => u.id === c.leaderId);
@@ -178,11 +186,24 @@ function CellsPage() {
           </div>
         }
       />
+      {visibleCells.length > 0 && (
+        <div className="relative mb-4 max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={`Search ${plural.toLowerCase()}…`}
+            className="pl-9"
+          />
+        </div>
+      )}
       {visibleCells.length === 0 ? (
         <p className="text-sm text-muted-foreground">No {plural.toLowerCase()} yet.</p>
+      ) : filteredCells.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No matches for "{q}".</p>
       ) : view === "tiles" ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {visibleCells.map((c) => (
+          {filteredCells.map((c) => (
             <Card key={c.id} className="group overflow-hidden">
               <CardContent className="p-5">{renderCellBody(c)}</CardContent>
             </Card>
@@ -192,7 +213,7 @@ function CellsPage() {
         <Card>
           <CardContent className="p-0">
             <ul className="divide-y">
-              {visibleCells.map((c) => (
+              {filteredCells.map((c) => (
                 <li key={c.id} className="group p-4">
                   {renderCellBody(c)}
                 </li>

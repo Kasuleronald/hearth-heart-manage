@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Plus, Pencil, Receipt, Check, X, HandCoins } from "lucide-react";
+import { Plus, Pencil, Receipt, Check, X, HandCoins, Search } from "lucide-react";
 import {
   listExpensesFn,
   createExpenseFn,
@@ -88,6 +88,7 @@ function ExpensesPage() {
   const [editing, setEditing] = useState<OrgExpense | null>(null);
   const [open, setOpen] = useState(false);
   const [accountabilityOpen, setAccountabilityOpen] = useState(false);
+  const [q, setQ] = useState("");
   const effectiveBranch = useEffectiveBranch(session?.branchId);
   const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
   const { format: formatAmount, convert, displayCode, base } = useDisplayCurrency(canToggle);
@@ -126,6 +127,14 @@ function ExpensesPage() {
     );
   }
 
+  const visible = filtered.filter((e) => {
+    if (!q) return true;
+    const enteredBy = users.find((u) => u.id === e.enteredBy);
+    const s =
+      `${departmentName(e.departmentId)} ${e.description} ${enteredBy?.fullName ?? ""}`.toLowerCase();
+    return s.includes(q.toLowerCase());
+  });
+
   return (
     <div>
       <PageHeader
@@ -146,7 +155,7 @@ function ExpensesPage() {
                   "Entered by",
                   "Status",
                 ]}
-                rows={filtered.map((e) => {
+                rows={visible.map((e) => {
                   const enteredBy = users.find((u) => u.id === e.enteredBy);
                   return [
                     format(new Date(e.createdAt), "MMM d, yyyy"),
@@ -197,6 +206,15 @@ function ExpensesPage() {
       />
 
       <Card className="p-4">
+        <div className="relative mb-4 max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={`Search ${departmentSingular.toLowerCase()}, description, entered by…`}
+            className="pl-9"
+          />
+        </div>
         <div className="rounded-md border">
           <Table>
             <TableHeader>
@@ -211,7 +229,7 @@ function ExpensesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((e) => {
+              {visible.map((e) => {
                 const enteredBy = users.find((u) => u.id === e.enteredBy);
                 const status = e.status ?? "approved";
                 return (
@@ -292,7 +310,7 @@ function ExpensesPage() {
                   </TableRow>
                 );
               })}
-              {filtered.length === 0 && (
+              {visible.length === 0 && (
                 <TableRow>
                   <TableCell
                     colSpan={7}

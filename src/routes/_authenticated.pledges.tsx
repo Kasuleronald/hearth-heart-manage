@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Pencil, Check, Ban, RotateCcw, HandCoins } from "lucide-react";
+import { Plus, Pencil, Check, Ban, RotateCcw, HandCoins, Search } from "lucide-react";
 import type { PledgeCause, PledgeStatus } from "@/lib/db";
 import {
   listPledgesFn,
@@ -86,6 +86,7 @@ function PledgesPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<OrgPledge | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [q, setQ] = useState("");
   const effectiveBranch = useEffectiveBranch(session?.branchId);
   const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
   const { format: formatAmount, base } = useDisplayCurrency(canToggle);
@@ -129,6 +130,12 @@ function PledgesPage() {
     return projects.find((pr) => pr.id === p.projectId)?.name ?? "Unknown project";
   }
 
+  const visiblePledges = sorted.filter((p) => {
+    if (!q) return true;
+    const s = `${p.name} ${p.description ?? ""} ${projectName(p)}`.toLowerCase();
+    return s.includes(q.toLowerCase());
+  });
+
   return (
     <div>
       <PageHeader
@@ -166,6 +173,15 @@ function PledgesPage() {
 
       <Card className="p-4">
         <div className="mb-4 flex flex-wrap gap-2">
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search name, description, project…"
+              className="pl-9"
+            />
+          </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-48">
               <SelectValue />
@@ -195,7 +211,7 @@ function PledgesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sorted.map((p) => {
+              {visiblePledges.map((p) => {
                 const bookedByMe = p.bookedBy === session.userId;
                 const canEditThis = canEditAny || (bookedByMe && p.status === "active");
                 const bookedByUser = users.find((u) => u.id === p.bookedBy);
@@ -277,7 +293,7 @@ function PledgesPage() {
                   </TableRow>
                 );
               })}
-              {sorted.length === 0 && (
+              {visiblePledges.length === 0 && (
                 <TableRow>
                   <TableCell
                     colSpan={canViewAll ? 8 : 7}

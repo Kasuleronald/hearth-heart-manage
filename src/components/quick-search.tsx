@@ -1,8 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
 import { useQuery } from "@tanstack/react-query";
 import { Users, Users2, CalendarDays, GraduationCap } from "lucide-react";
-import { db } from "@/lib/db";
+import { listMembersFn } from "@/server/members";
 import { listEventsFn } from "@/server/events";
 import { listCellsFn } from "@/server/cells";
 import { listClassesFn } from "@/server/classes";
@@ -26,7 +25,8 @@ export function QuickSearch({
 }) {
   const navigate = useNavigate();
   const { plural: cellPlural } = useCellTerm();
-  const members = useLiveQuery(() => db.members.toArray(), []) ?? [];
+  const membersQuery = useQuery({ queryKey: ["members"], queryFn: () => listMembersFn() });
+  const members = membersQuery.data ?? [];
   const cellsQuery = useQuery({ queryKey: ["cells"], queryFn: () => listCellsFn() });
   const cells = cellsQuery.data ?? [];
   const classesQuery = useQuery({ queryKey: ["classes"], queryFn: () => listClassesFn() });

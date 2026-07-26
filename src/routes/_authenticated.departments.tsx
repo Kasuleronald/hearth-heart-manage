@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Plus, Pencil, Building2, Sparkles } from "lucide-react";
+import { Plus, Pencil, Building2, Sparkles, Search } from "lucide-react";
 import type { DepartmentModule } from "@/lib/db";
 import {
   listDepartmentsFn,
@@ -83,6 +83,7 @@ function DepartmentsPage() {
   const [editing, setEditing] = useState<OrgDepartment | null>(null);
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<CollectionView>("tiles");
+  const [q, setQ] = useState("");
 
   const seedMutation = useMutation({
     mutationFn: () => seedDefaultDepartmentsFn(),
@@ -188,6 +189,13 @@ function DepartmentsPage() {
     );
   }
 
+  const filteredDepartments = departments.filter((d) => {
+    if (!q) return true;
+    const leader = users.find((u) => u.id === d.leaderId);
+    const s = `${d.name} ${d.description ?? ""} ${leader?.fullName ?? ""}`.toLowerCase();
+    return s.includes(q.toLowerCase());
+  });
+
   return (
     <div>
       <PageHeader
@@ -232,14 +240,27 @@ function DepartmentsPage() {
         }
       />
 
+      {departments.length > 0 && (
+        <div className="relative mb-4 max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={`Search ${plural.toLowerCase()}…`}
+            className="pl-9"
+          />
+        </div>
+      )}
       {departments.length === 0 ? (
         <div className="py-10 text-center text-sm text-muted-foreground">
           <Building2 className="mx-auto mb-2 h-6 w-6 text-muted-foreground/60" />
           No departments yet.
         </div>
+      ) : filteredDepartments.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No matches for "{q}".</p>
       ) : view === "tiles" ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {departments.map((d) => (
+          {filteredDepartments.map((d) => (
             <Card
               key={d.id}
               className={session?.userId === d.leaderId ? "border-primary" : undefined}
@@ -252,7 +273,7 @@ function DepartmentsPage() {
         <Card>
           <CardContent className="p-0">
             <ul className="divide-y">
-              {departments.map((d) => (
+              {filteredDepartments.map((d) => (
                 <li
                   key={d.id}
                   className={

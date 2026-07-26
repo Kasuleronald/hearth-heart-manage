@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Plus, Pencil, KeyRound, Copy } from "lucide-react";
+import { Plus, Pencil, KeyRound, Copy, Search } from "lucide-react";
 import type { Role } from "@/lib/db";
 import {
   listOrgUsersFn,
@@ -134,6 +134,7 @@ function UsersPage() {
   const departments = departmentsQuery.data ?? [];
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<OrgUser | null>(null);
+  const [q, setQ] = useState("");
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteOrgUserFn({ data: { id } }),
@@ -148,6 +149,12 @@ function UsersPage() {
   }, [session, navigate]);
 
   if (!session || !canManageUsers(session.role)) return null;
+
+  const filteredUsers = users.filter((u) => {
+    if (!q) return true;
+    const s = `${u.fullName} ${u.email}`.toLowerCase();
+    return s.includes(q.toLowerCase());
+  });
 
   return (
     <div>
@@ -170,10 +177,19 @@ function UsersPage() {
           </Dialog>
         }
       />
+      <div className="relative mb-4 max-w-sm">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search name or email…"
+          className="pl-9"
+        />
+      </div>
       <Card>
         <CardContent className="p-0">
           <ul className="divide-y">
-            {users.map((u) => {
+            {filteredUsers.map((u) => {
               const led = departments.find((d) => d.leaderId === u.id);
               return (
                 <li key={u.id} className="flex items-center justify-between px-5 py-4">

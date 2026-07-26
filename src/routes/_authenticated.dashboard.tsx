@@ -69,7 +69,14 @@ function Dashboard() {
   );
 
   const activeMembers = members.filter((m) => m.status !== "inactive").length;
-  const upcoming = events.filter((e) => e.date >= format(new Date(), "yyyy-MM-dd")).length;
+  const todayStr = format(new Date(), "yyyy-MM-dd");
+  // listEventsFn orders newest-first (desc), which is the wrong direction for
+  // "what's coming up soonest" — sort ascending here so the nearest event
+  // leads the list.
+  const upcomingEvents = events
+    .filter((e) => e.date >= todayStr)
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const upcoming = upcomingEvents.length;
   const monthAgo = format(subDays(new Date(), 30), "yyyy-MM-dd");
   const newMembers = members.filter((m) => (m.joinDate ?? "") >= monthAgo).length;
 
@@ -242,26 +249,23 @@ function Dashboard() {
             <CardTitle className="font-display">Upcoming events</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {events
-              .filter((e) => e.date >= format(new Date(), "yyyy-MM-dd"))
-              .slice(0, 5)
-              .map((e) => (
-                <div
-                  key={e.id}
-                  className="flex items-start justify-between gap-3 border-l-2 border-primary/60 pl-3"
-                >
-                  <div>
-                    <div className="font-medium">{e.title}</div>
-                    <div className="text-xs text-muted-foreground capitalize">
-                      {e.type.replace("_", " ")}
-                    </div>
-                  </div>
-                  <div className="text-xs text-muted-foreground whitespace-nowrap">
-                    {format(new Date(e.date), "MMM d")}
+            {upcomingEvents.slice(0, 5).map((e) => (
+              <div
+                key={e.id}
+                className="flex items-start justify-between gap-3 border-l-2 border-primary/60 pl-3"
+              >
+                <div>
+                  <div className="font-medium">{e.title}</div>
+                  <div className="text-xs text-muted-foreground capitalize">
+                    {e.type.replace("_", " ")}
                   </div>
                 </div>
-              ))}
-            {events.filter((e) => e.date >= format(new Date(), "yyyy-MM-dd")).length === 0 && (
+                <div className="text-xs text-muted-foreground whitespace-nowrap">
+                  {format(new Date(e.date), "MMM d")}
+                </div>
+              </div>
+            ))}
+            {upcomingEvents.length === 0 && (
               <p className="text-sm text-muted-foreground">No upcoming events.</p>
             )}
           </CardContent>

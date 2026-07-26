@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Pencil } from "lucide-react";
+import { Plus, Pencil, Search } from "lucide-react";
 import {
   listHouseholdsFn,
   createHouseholdFn,
@@ -49,6 +49,7 @@ function HouseholdsPage() {
   const [editing, setEditing] = useState<OrgHousehold | null>(null);
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<CollectionView>("tiles");
+  const [q, setQ] = useState("");
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteHouseholdFn({ data: { id } }),
@@ -146,6 +147,14 @@ function HouseholdsPage() {
     );
   }
 
+  const filteredHouseholds = households.filter((h) => {
+    if (!q) return true;
+    const hhMembers = members.filter((m) => m.householdId === h.id);
+    const memberNames = hhMembers.map((m) => `${m.firstName} ${m.lastName}`).join(" ");
+    const s = `${h.name} ${h.address ?? ""} ${memberNames}`.toLowerCase();
+    return s.includes(q.toLowerCase());
+  });
+
   return (
     <div>
       <PageHeader
@@ -176,11 +185,24 @@ function HouseholdsPage() {
         }
       />
 
+      {households.length > 0 && (
+        <div className="relative mb-4 max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search households…"
+            className="pl-9"
+          />
+        </div>
+      )}
       {households.length === 0 ? (
         <p className="text-sm text-muted-foreground">No households yet.</p>
+      ) : filteredHouseholds.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No matches for "{q}".</p>
       ) : view === "tiles" ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {households.map((h) => (
+          {filteredHouseholds.map((h) => (
             <Card key={h.id}>
               <CardContent className="p-5">{renderHouseholdBody(h)}</CardContent>
             </Card>
@@ -190,7 +212,7 @@ function HouseholdsPage() {
         <Card>
           <CardContent className="p-0">
             <ul className="divide-y">
-              {households.map((h) => (
+              {filteredHouseholds.map((h) => (
                 <li key={h.id} className="p-4">
                   {renderHouseholdBody(h)}
                 </li>

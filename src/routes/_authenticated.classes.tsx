@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Pencil, GraduationCap } from "lucide-react";
+import { Plus, Pencil, GraduationCap, Search } from "lucide-react";
 import { listClassesFn, createClassFn, updateClassFn, deleteClassFn } from "@/server/classes";
 import { listMembersFn } from "@/server/members";
 import { listOrgUsersFn } from "@/server/users";
@@ -55,6 +55,7 @@ function ClassesPage() {
   const members = membersQuery.data ?? [];
   const [editing, setEditing] = useState<OrgClass | null>(null);
   const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteClassFn({ data: { id } }),
@@ -73,6 +74,13 @@ function ClassesPage() {
       ? classes.filter((c) => c.facilitatorId === session.userId)
       : classes
   ).filter((c) => matchesBranchFilter(effectiveBranch, c.branchId ?? undefined));
+  const filteredClasses = visibleClasses.filter((c) => {
+    if (!q) return true;
+    const facilitator = users.find((u) => u.id === c.facilitatorId);
+    const s =
+      `${c.name} ${c.description ?? ""} ${c.meetingLocation ?? ""} ${facilitator?.fullName ?? ""}`.toLowerCase();
+    return s.includes(q.toLowerCase());
+  });
 
   return (
     <div>
@@ -104,8 +112,19 @@ function ClassesPage() {
           )
         }
       />
+      {visibleClasses.length > 0 && (
+        <div className="relative mb-4 max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search classes…"
+            className="pl-9"
+          />
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {visibleClasses.map((c) => {
+        {filteredClasses.map((c) => {
           const facilitator = users.find((u) => u.id === c.facilitatorId);
           const count = members.filter((m) => m.classId === c.id).length;
           return (
@@ -164,6 +183,9 @@ function ClassesPage() {
         })}
         {visibleClasses.length === 0 && (
           <p className="text-sm text-muted-foreground">No discipleship classes yet.</p>
+        )}
+        {visibleClasses.length > 0 && filteredClasses.length === 0 && (
+          <p className="col-span-full text-sm text-muted-foreground">No matches for "{q}".</p>
         )}
       </div>
     </div>

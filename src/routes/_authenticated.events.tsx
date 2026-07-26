@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Plus, Pencil, ChevronLeft, ChevronRight, Repeat, Trash2 } from "lucide-react";
+import { Plus, Pencil, ChevronLeft, ChevronRight, Repeat, Trash2, Search } from "lucide-react";
 import {
   listEventsFn,
   createEventFn,
@@ -116,6 +116,7 @@ function EventsPage() {
   const [defaultDate, setDefaultDate] = useState<string | undefined>(undefined);
   const [open, setOpen] = useState(false);
   const [dayDialogDate, setDayDialogDate] = useState<string | null>(null);
+  const [q, setQ] = useState("");
   const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
   const { base } = useDisplayCurrency(canToggle);
 
@@ -128,6 +129,8 @@ function EventsPage() {
     }
     return map;
   }, [events]);
+
+  const matchesQuery = (e: OrgEvent) => !q || e.title.toLowerCase().includes(q.toLowerCase());
 
   const days = useMemo(() => {
     const gridStart = startOfWeek(startOfMonth(viewMonth));
@@ -179,6 +182,16 @@ function EventsPage() {
           </div>
         }
       />
+
+      <div className="relative mb-4 max-w-sm">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search events by title…"
+          className="pl-9"
+        />
+      </div>
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -235,7 +248,7 @@ function EventsPage() {
         ))}
         {days.map((day) => {
           const dateStr = format(day, "yyyy-MM-dd");
-          const dayEvents = eventsByDate.get(dateStr) ?? [];
+          const dayEvents = (eventsByDate.get(dateStr) ?? []).filter(matchesQuery);
           const inMonth = isSameMonth(day, viewMonth);
           const isToday = isSameDay(day, new Date());
           return (

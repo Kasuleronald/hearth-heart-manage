@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Pencil, Target } from "lucide-react";
+import { Plus, Pencil, Target, Search } from "lucide-react";
 import {
   listProjectsFn,
   createProjectFn,
@@ -52,6 +52,7 @@ function ProjectsPage() {
   const givings = (givingsQuery.data ?? []).filter((g) => g.category === "project");
   const [editing, setEditing] = useState<OrgProject | null>(null);
   const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
   const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
   const { format: formatAmount, base } = useDisplayCurrency(canToggle);
 
@@ -66,6 +67,11 @@ function ProjectsPage() {
 
   const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd");
   const monthStart = format(startOfMonth(new Date()), "yyyy-MM-dd");
+  const filteredProjects = projects.filter((p) => {
+    if (!q) return true;
+    const s = `${p.name} ${p.scope ?? ""}`.toLowerCase();
+    return s.includes(q.toLowerCase());
+  });
 
   return (
     <div>
@@ -99,8 +105,19 @@ function ProjectsPage() {
         }
       />
 
+      {projects.length > 0 && (
+        <div className="relative mb-4 max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search projects…"
+            className="pl-9"
+          />
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {projects.map((p) => {
+        {filteredProjects.map((p) => {
           const linked = givings.filter((g) => g.projectId === p.id);
           const totalRaised = linked.reduce((sum, g) => sum + g.amount, 0);
           const thisWeek = linked
@@ -192,6 +209,9 @@ function ProjectsPage() {
             <Target className="mx-auto mb-2 h-6 w-6 text-muted-foreground/60" />
             No projects yet.
           </div>
+        )}
+        {projects.length > 0 && filteredProjects.length === 0 && (
+          <p className="col-span-full text-sm text-muted-foreground">No matches for "{q}".</p>
         )}
       </div>
 

@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, MessageCircleHeart } from "lucide-react";
+import { Plus, MessageCircleHeart, Search } from "lucide-react";
 import { TESTIMONY_CATEGORIES, type TestimonyCategory } from "@/lib/db";
 import { listTestimoniesFn, createTestimonyFn, deleteTestimonyFn } from "@/server/testimonies";
 import { listOrgUsersFn } from "@/server/users";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
@@ -46,6 +47,7 @@ function TestimoniesPage() {
   const sorted = testimoniesQuery.data ?? [];
   const users = usersQuery.data ?? [];
   const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteTestimonyFn({ data: { id } }),
@@ -57,6 +59,13 @@ function TestimoniesPage() {
   });
 
   if (!session) return null;
+
+  const filtered = sorted.filter((t) => {
+    if (!q) return true;
+    const author = users.find((u) => u.id === t.userId);
+    const s = `${t.body} ${t.category} ${author?.fullName ?? ""}`.toLowerCase();
+    return s.includes(q.toLowerCase());
+  });
 
   return (
     <div>
@@ -74,8 +83,19 @@ function TestimoniesPage() {
           </Dialog>
         }
       />
+      {sorted.length > 0 && (
+        <div className="relative mb-4 max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search testimonies…"
+            className="pl-9"
+          />
+        </div>
+      )}
       <div className="space-y-3">
-        {sorted.map((t) => {
+        {filtered.map((t) => {
           const author = users.find((u) => u.id === t.userId);
           return (
             <Card key={t.id}>
@@ -115,6 +135,9 @@ function TestimoniesPage() {
             <MessageCircleHeart className="mx-auto mb-2 h-6 w-6 text-muted-foreground/60" />
             No testimonies shared yet. Be the first!
           </div>
+        )}
+        {sorted.length > 0 && filtered.length === 0 && (
+          <p className="text-sm text-muted-foreground">No matches for "{q}".</p>
         )}
       </div>
     </div>

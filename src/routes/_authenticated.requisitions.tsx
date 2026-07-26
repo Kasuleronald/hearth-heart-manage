@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Plus, Check, X, ClipboardList } from "lucide-react";
+import { Plus, Check, X, ClipboardList, Search } from "lucide-react";
 import { listRequisitionsFn, decideRequisitionFn } from "@/server/requisitions";
 import { listDepartmentsFn } from "@/server/departments";
 import { listOrgUsersFn } from "@/server/users";
@@ -10,6 +10,7 @@ import { RequisitionDialog } from "@/components/requisition-dialog";
 import { CurrencyToggle } from "@/components/currency-toggle";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -63,6 +64,7 @@ function RequisitionsPage() {
   const departments = departmentsQuery.data ?? [];
   const users = usersQuery.data ?? [];
   const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
   const effectiveBranch = useEffectiveBranch(session?.branchId);
   const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
   const { format: formatAmount, base } = useDisplayCurrency(canToggle);
@@ -101,6 +103,13 @@ function RequisitionsPage() {
     return users.find((u) => u.id === id)?.fullName ?? "Unknown user";
   }
 
+  const visible = filtered.filter((r) => {
+    if (!q) return true;
+    const s =
+      `${departmentName(r.departmentId)} ${r.reason} ${userName(r.requestedBy)}`.toLowerCase();
+    return s.includes(q.toLowerCase());
+  });
+
   return (
     <div>
       <PageHeader
@@ -126,6 +135,15 @@ function RequisitionsPage() {
       />
 
       <Card className="p-4">
+        <div className="relative mb-4 max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={`Search ${departmentSingular.toLowerCase()}, reason, requester…`}
+            className="pl-9"
+          />
+        </div>
         <div className="rounded-md border">
           <Table>
             <TableHeader>
@@ -141,7 +159,7 @@ function RequisitionsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((r) => (
+              {visible.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="text-muted-foreground">
                     {format(new Date(r.createdAt), "MMM d, yyyy")}
@@ -186,7 +204,7 @@ function RequisitionsPage() {
                   )}
                 </TableRow>
               ))}
-              {filtered.length === 0 && (
+              {visible.length === 0 && (
                 <TableRow>
                   <TableCell
                     colSpan={canDecide ? 8 : 7}

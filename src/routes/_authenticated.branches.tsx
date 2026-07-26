@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Plus, Pencil, Building } from "lucide-react";
+import { Plus, Pencil, Building, Search } from "lucide-react";
 import { format } from "date-fns";
 import { listBranchesFn, createBranchFn, updateBranchFn, deleteBranchFn } from "@/server/branches";
 import { listOrgUsersFn } from "@/server/users";
@@ -48,6 +48,7 @@ function BranchesPage() {
   );
   const [editing, setEditing] = useState<OrgBranch | null>(null);
   const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteBranchFn({ data: { id } }),
@@ -63,6 +64,13 @@ function BranchesPage() {
   }, [session, navigate]);
 
   if (!session || !canManage) return null;
+
+  const filteredBranches = branches.filter((b) => {
+    if (!q) return true;
+    const leadPastor = users.find((u) => u.id === b.leadPastorId);
+    const s = `${b.name} ${b.address ?? ""} ${leadPastor?.fullName ?? ""}`.toLowerCase();
+    return s.includes(q.toLowerCase());
+  });
 
   return (
     <div>
@@ -92,8 +100,19 @@ function BranchesPage() {
         }
       />
 
+      {branches.length > 0 && (
+        <div className="relative mb-4 max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search branches…"
+            className="pl-9"
+          />
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {branches.map((b) => {
+        {filteredBranches.map((b) => {
           const leadPastor = users.find((u) => u.id === b.leadPastorId);
           return (
             <Card key={b.id}>
@@ -144,6 +163,9 @@ function BranchesPage() {
             <Building className="mx-auto mb-2 h-6 w-6 text-muted-foreground/60" />
             No branches yet — everything is church-wide by default.
           </div>
+        )}
+        {branches.length > 0 && filteredBranches.length === 0 && (
+          <p className="col-span-full text-sm text-muted-foreground">No matches for "{q}".</p>
         )}
       </div>
     </div>
