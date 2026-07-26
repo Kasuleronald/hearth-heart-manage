@@ -5,6 +5,7 @@ import { useState } from "react";
 import { db } from "@/lib/db";
 import { listDepartmentsFn } from "@/server/departments";
 import { listEventsFn } from "@/server/events";
+import { listMembersFn } from "@/server/members";
 import { useSession, canSubmitRequisitions } from "@/lib/auth";
 import { useCellTerm } from "@/lib/terminology";
 import { useWeekStartDay } from "@/lib/week";
@@ -32,7 +33,8 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 function Dashboard() {
   const { session } = useSession();
   const { singular: cellSingular, plural: cellPlural } = useCellTerm();
-  const members = useLiveQuery(() => db.members.toArray(), []) ?? [];
+  const membersQuery = useQuery({ queryKey: ["members"], queryFn: () => listMembersFn() });
+  const members = membersQuery.data ?? [];
   const cells = useLiveQuery(() => db.cells.toArray(), []) ?? [];
   const eventsQuery = useQuery({ queryKey: ["events"], queryFn: () => listEventsFn() });
   const events = eventsQuery.data ?? [];
