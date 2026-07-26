@@ -1,15 +1,14 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Plus, Pencil, Handshake } from "lucide-react";
-import { db } from "@/lib/db";
 import {
   listPartnersFn,
   createPartnerFn,
   updatePartnerFn,
   deletePartnerFn,
 } from "@/server/partners";
+import { listGivingsFn } from "@/server/givings";
 import { listOrgUsersFn } from "@/server/users";
 import { useBaseCurrency } from "@/lib/currency";
 import { useDisplayCurrency } from "@/lib/currency-toggle";
@@ -62,9 +61,8 @@ function PartnersPage() {
   const usersQuery = useQuery({ queryKey: ["org-users"], queryFn: () => listOrgUsersFn() });
   const partners = partnersQuery.data ?? [];
   const users = usersQuery.data ?? [];
-  // Givings isn't migrated yet — this stays a local read until that phase
-  // lands, so "given to date" may under-report in the meantime.
-  const givings = useLiveQuery(() => db.givings.toArray(), []) ?? [];
+  const givingsQuery = useQuery({ queryKey: ["givings"], queryFn: () => listGivingsFn() });
+  const givings = givingsQuery.data ?? [];
   const [editing, setEditing] = useState<OrgPartner | null>(null);
   const [open, setOpen] = useState(false);
   const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;

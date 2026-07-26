@@ -1,9 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
-import { useEffect, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { Plus, Pencil, Check, Ban, RotateCcw, HandCoins } from "lucide-react";
-import { db, uid, type Pledge, type PledgeCause, type PledgeStatus, type Project } from "@/lib/db";
-import { archiveOverduePledges } from "@/lib/pledges";
+import type { PledgeCause, PledgeStatus } from "@/lib/db";
+import {
+  listPledgesFn,
+  createPledgeFn,
+  updatePledgeFn,
+  decidePledgeFn,
+  restorePledgeFn,
+  deletePledgeFn,
+} from "@/server/pledges";
+import { listProjectsFn } from "@/server/projects";
+import { listOrgUsersFn } from "@/server/users";
 import { useBaseCurrency } from "@/lib/currency";
 import { useDisplayCurrency } from "@/lib/currency-toggle";
 import { CurrencyToggle } from "@/components/currency-toggle";
@@ -55,6 +64,9 @@ export const Route = createFileRoute("/_authenticated/pledges")({
   component: PledgesPage,
 });
 
+type OrgPledge = Awaited<ReturnType<typeof listPledgesFn>>[number];
+type OrgProject = Awaited<ReturnType<typeof listProjectsFn>>[number];
+
 const STATUS_STYLE: Record<PledgeStatus, string> = {
   active: "bg-secondary text-secondary-foreground",
   fulfilled: "bg-primary/15 text-primary",
@@ -63,20 +75,39 @@ const STATUS_STYLE: Record<PledgeStatus, string> = {
 };
 
 function PledgesPage() {
+  const queryClient = useQueryClient();
   const { session } = useSession();
-  const allPledges = useLiveQuery(() => db.pledges.toArray(), []) ?? [];
-  const projects = useLiveQuery(() => db.projects.orderBy("name").toArray(), []) ?? [];
-  const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
+  const pledgesQuery = useQuery({ queryKey: ["pledges"], queryFn: () => listPledgesFn() });
+  const projectsQuery = useQuery({ queryKey: ["projects"], queryFn: () => listProjectsFn() });
+  const usersQuery = useQuery({ queryKey: ["org-users"], queryFn: () => listOrgUsersFn() });
+  const allPledges = pledgesQuery.data ?? [];
+  const projects = projectsQuery.data ?? [];
+  const users = usersQuery.data ?? [];
   const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<Pledge | null>(null);
+  const [editing, setEditing] = useState<OrgPledge | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const effectiveBranch = useEffectiveBranch(session?.branchId);
   const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
   const { format: formatAmount, base } = useDisplayCurrency(canToggle);
 
-  useEffect(() => {
-    archiveOverduePledges();
-  }, []);
+  const decideMutation = useMutation({
+    mutationFn: (vars: { id: string; status: "fulfilled" | "banned" }) =>
+      decidePledgeFn({ data: vars }),
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["pledges"] });
+      toast.success(vars.status === "fulfilled" ? "Marked fulfilled" : "Pledge banned");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to update pledge"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deletePledgeFn({ data: { id } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pledges"] });
+      toast.success("Pledge deleted");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to delete pledge"),
+  });
 
   if (!session) return null;
 
@@ -88,23 +119,14 @@ function PledgesPage() {
   const scoped = canViewAll ? allPledges : allPledges.filter((p) => p.bookedBy === session.userId);
   const filtered = scoped.filter((p) => {
     if (statusFilter !== "all" && p.status !== statusFilter) return false;
-    if (!matchesBranchFilter(effectiveBranch, p.branchId)) return false;
+    if (!matchesBranchFilter(effectiveBranch, p.branchId ?? undefined)) return false;
     return true;
   });
   const sorted = [...filtered].sort((a, b) => (a.collectionDate < b.collectionDate ? 1 : -1));
 
-  function projectName(p: Pledge): string {
+  function projectName(p: OrgPledge): string {
     if (p.cause !== "project") return "";
     return projects.find((pr) => pr.id === p.projectId)?.name ?? "Unknown project";
-  }
-
-  async function decide(p: Pledge, status: "fulfilled" | "banned") {
-    try {
-      await db.pledges.update(p.id, { status });
-      toast.success(status === "fulfilled" ? "Marked fulfilled" : "Pledge banned");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to update pledge");
-    }
   }
 
   return (
@@ -134,7 +156,6 @@ function PledgesPage() {
                   key={editing?.id ?? "new"}
                   pledge={editing}
                   projects={projects}
-                  currentUserId={session.userId}
                   onClose={() => setOpen(false)}
                 />
               )}
@@ -222,7 +243,9 @@ function PledgesPage() {
                               size="icon"
                               variant="ghost"
                               aria-label={`Mark pledge from ${p.name} fulfilled`}
-                              onClick={() => decide(p, "fulfilled")}
+                              onClick={() =>
+                                decideMutation.mutate({ id: p.id, status: "fulfilled" })
+                              }
                             >
                               <Check className="h-4 w-4 text-primary" />
                             </Button>
@@ -230,7 +253,7 @@ function PledgesPage() {
                               size="icon"
                               variant="ghost"
                               aria-label={`Ban pledge from ${p.name}`}
-                              onClick={() => decide(p, "banned")}
+                              onClick={() => decideMutation.mutate({ id: p.id, status: "banned" })}
                             >
                               <Ban className="h-4 w-4 text-destructive" />
                             </Button>
@@ -245,14 +268,7 @@ function PledgesPage() {
                             title="Delete this pledge?"
                             description="This can't be undone."
                             onConfirm={async () => {
-                              try {
-                                await db.pledges.delete(p.id);
-                                toast.success("Pledge deleted");
-                              } catch (e) {
-                                toast.error(
-                                  e instanceof Error ? e.message : "Failed to delete pledge",
-                                );
-                              }
+                              await deleteMutation.mutateAsync(p.id);
                             }}
                           />
                         )}
@@ -283,14 +299,13 @@ function PledgesPage() {
 function PledgeDialog({
   pledge,
   projects,
-  currentUserId,
   onClose,
 }: {
-  pledge: Pledge | null;
-  projects: Project[];
-  currentUserId: string;
+  pledge: OrgPledge | null;
+  projects: OrgProject[];
   onClose: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [name, setName] = useState(pledge?.name ?? "");
   const [amount, setAmount] = useState(pledge ? String(pledge.amount) : "");
   const [collectionDate, setCollectionDate] = useState(pledge?.collectionDate ?? "");
@@ -300,7 +315,31 @@ function PledgeDialog({
   const [branchId, setBranchId] = useState(pledge?.branchId ?? "");
   const baseCurrency = useBaseCurrency();
 
-  async function save() {
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const numericAmount = Number(amount);
+      const input = {
+        name: name.trim(),
+        amount: numericAmount,
+        collectionDate,
+        cause,
+        projectId: cause === "project" ? projectId || undefined : undefined,
+        description: description || undefined,
+        branchId: branchId || undefined,
+      };
+      return pledge
+        ? updatePledgeFn({ data: { id: pledge.id, ...input } })
+        : createPledgeFn({ data: input });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pledges"] });
+      toast.success(pledge ? "Pledge updated" : "Pledge booked");
+      onClose();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to save pledge"),
+  });
+
+  function save() {
     if (!name.trim()) return toast.error("Enter who is pledging");
     const numericAmount = Number(amount);
     if (!amount || Number.isNaN(numericAmount) || numericAmount <= 0) {
@@ -308,25 +347,7 @@ function PledgeDialog({
     }
     if (!collectionDate) return toast.error("Enter a collection date");
     if (cause === "project" && !projectId) return toast.error("Select a project");
-    try {
-      await db.pledges.put({
-        id: pledge?.id ?? uid(),
-        name: name.trim(),
-        amount: numericAmount,
-        collectionDate,
-        cause,
-        projectId: cause === "project" ? projectId : undefined,
-        description: description || undefined,
-        bookedBy: pledge?.bookedBy ?? currentUserId,
-        status: pledge?.status ?? "active",
-        branchId: branchId || undefined,
-        createdAt: pledge?.createdAt ?? Date.now(),
-      });
-      toast.success(pledge ? "Pledge updated" : "Pledge booked");
-      onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save pledge");
-    }
+    saveMutation.mutate();
   }
 
   return (
@@ -413,23 +434,28 @@ function PledgeDialog({
   );
 }
 
-function RestorePledgeDialog({ pledge }: { pledge: Pledge }) {
+function RestorePledgeDialog({ pledge }: { pledge: OrgPledge }) {
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [newDate, setNewDate] = useState("");
 
-  async function restore() {
+  const restoreMutation = useMutation({
+    mutationFn: () => restorePledgeFn({ data: { id: pledge.id, collectionDate: newDate } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pledges"] });
+      toast.success("Pledge restored");
+      setOpen(false);
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to restore pledge"),
+  });
+
+  function restore() {
     const today = format(new Date(), "yyyy-MM-dd");
     if (!newDate || newDate <= today) {
       toast.error("Choose a future collection date");
       return;
     }
-    try {
-      await db.pledges.update(pledge.id, { status: "active", collectionDate: newDate });
-      toast.success("Pledge restored");
-      setOpen(false);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to restore pledge");
-    }
+    restoreMutation.mutate();
   }
 
   return (

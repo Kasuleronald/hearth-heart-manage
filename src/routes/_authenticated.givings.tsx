@@ -1,8 +1,13 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Plus, Pencil, HandCoins } from "lucide-react";
-import { db, uid, type Giving, type GivingCategory, type Partner, type Project } from "@/lib/db";
+import type { GivingCategory } from "@/lib/db";
+import { listGivingsFn, createGivingFn, updateGivingFn, deleteGivingFn } from "@/server/givings";
+import { listMembersFn } from "@/server/members";
+import { listPartnersFn } from "@/server/partners";
+import { listProjectsFn } from "@/server/projects";
+import { listOrgUsersFn } from "@/server/users";
 import { ExportMenu } from "@/components/export-menu";
 import { useBaseCurrency } from "@/lib/currency";
 import { useDisplayCurrency } from "@/lib/currency-toggle";
@@ -51,6 +56,11 @@ export const Route = createFileRoute("/_authenticated/givings")({
   component: GivingsPage,
 });
 
+type OrgGiving = Awaited<ReturnType<typeof listGivingsFn>>[number];
+type OrgMember = Awaited<ReturnType<typeof listMembersFn>>[number];
+type OrgPartner = Awaited<ReturnType<typeof listPartnersFn>>[number];
+type OrgProject = Awaited<ReturnType<typeof listProjectsFn>>[number];
+
 const CATEGORIES: { value: GivingCategory; label: string }[] = [
   { value: "love_offering", label: "Love Offering" },
   { value: "tithe", label: "Tithe" },
@@ -65,19 +75,34 @@ const CATEGORY_LABEL = Object.fromEntries(CATEGORIES.map((c) => [c.value, c.labe
 
 function GivingsPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { session } = useSession();
-  const givings = useLiveQuery(() => db.givings.orderBy("date").reverse().toArray(), []) ?? [];
-  const members = useLiveQuery(() => db.members.toArray(), []) ?? [];
-  const partners = useLiveQuery(() => db.partners.orderBy("name").toArray(), []) ?? [];
-  const projects = useLiveQuery(() => db.projects.orderBy("name").toArray(), []) ?? [];
-  const users = useLiveQuery(() => db.users.toArray(), []) ?? [];
+  const givingsQuery = useQuery({ queryKey: ["givings"], queryFn: () => listGivingsFn() });
+  const membersQuery = useQuery({ queryKey: ["members"], queryFn: () => listMembersFn() });
+  const partnersQuery = useQuery({ queryKey: ["partners"], queryFn: () => listPartnersFn() });
+  const projectsQuery = useQuery({ queryKey: ["projects"], queryFn: () => listProjectsFn() });
+  const usersQuery = useQuery({ queryKey: ["org-users"], queryFn: () => listOrgUsersFn() });
+  const givings = givingsQuery.data ?? [];
+  const members = membersQuery.data ?? [];
+  const partners = partnersQuery.data ?? [];
+  const projects = projectsQuery.data ?? [];
+  const users = usersQuery.data ?? [];
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [editing, setEditing] = useState<Giving | null>(null);
+  const [editing, setEditing] = useState<OrgGiving | null>(null);
   const [open, setOpen] = useState(false);
   const effectiveBranch = useEffectiveBranch(session?.branchId);
   const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
   const { format: formatAmount, convert, displayCode, base } = useDisplayCurrency(canToggle);
   const { singular: givingsSingular, plural: givingsPlural } = useGivingsTerm();
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteGivingFn({ data: { id } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["givings"] });
+      toast.success("Giving deleted");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to delete giving"),
+  });
 
   useEffect(() => {
     if (session && !canAccessGivings(session.role, session.allowedModules)) {
@@ -91,7 +116,7 @@ function GivingsPage() {
 
   const filtered = givings.filter((g) => {
     if (categoryFilter !== "all" && g.category !== categoryFilter) return false;
-    if (!matchesBranchFilter(effectiveBranch, g.branchId)) return false;
+    if (!matchesBranchFilter(effectiveBranch, g.branchId ?? undefined)) return false;
     return true;
   });
 
@@ -102,7 +127,7 @@ function GivingsPage() {
     total: thisMonth.filter((g) => g.category === c.value).reduce((sum, g) => sum + g.amount, 0),
   }));
 
-  function giverName(g: Giving): string {
+  function giverName(g: OrgGiving): string {
     if (g.memberId) {
       const m = members.find((mem) => mem.id === g.memberId);
       return m ? `${m.firstName} ${m.lastName}` : "Unknown member";
@@ -114,7 +139,7 @@ function GivingsPage() {
     return "Anonymous";
   }
 
-  function projectName(g: Giving): string {
+  function projectName(g: OrgGiving): string {
     if (g.projectId) return projects.find((p) => p.id === g.projectId)?.name ?? "Unknown project";
     return g.projectName ?? "";
   }
@@ -171,7 +196,6 @@ function GivingsPage() {
                   members={members}
                   partners={partners}
                   projects={projects}
-                  currentUserId={session.userId}
                   onClose={() => setOpen(false)}
                 />
               </Dialog>
@@ -261,14 +285,7 @@ function GivingsPage() {
                             title="Delete this giving record?"
                             description="This can't be undone."
                             onConfirm={async () => {
-                              try {
-                                await db.givings.delete(g.id);
-                                toast.success("Giving deleted");
-                              } catch (e) {
-                                toast.error(
-                                  e instanceof Error ? e.message : "Failed to delete giving",
-                                );
-                              }
+                              await deleteMutation.mutateAsync(g.id);
                             }}
                           />
                         </div>
@@ -301,16 +318,15 @@ function GivingDialog({
   members,
   partners,
   projects,
-  currentUserId,
   onClose,
 }: {
-  giving: Giving | null;
-  members: { id: string; firstName: string; lastName: string }[];
-  partners: Partner[];
-  projects: Project[];
-  currentUserId: string;
+  giving: OrgGiving | null;
+  members: OrgMember[];
+  partners: OrgPartner[];
+  projects: OrgProject[];
   onClose: () => void;
 }) {
+  const queryClient = useQueryClient();
   const { singular: givingsSingular } = useGivingsTerm();
   const [amount, setAmount] = useState(giving ? String(giving.amount) : "");
   const [category, setCategory] = useState<GivingCategory>(giving?.category ?? "tithe");
@@ -327,7 +343,33 @@ function GivingDialog({
   const [branchId, setBranchId] = useState(giving?.branchId ?? "");
   const baseCurrency = useBaseCurrency();
 
-  async function save() {
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const numericAmount = Number(amount);
+      const [giverType, giverId] = giverChoice.split(":");
+      const input = {
+        memberId: giverType === "member" ? giverId : undefined,
+        partnerId: giverType === "partner" ? giverId : undefined,
+        category,
+        amount: numericAmount,
+        projectId: category === "project" ? projectId || undefined : undefined,
+        date,
+        notes: notes || undefined,
+        branchId: branchId || undefined,
+      };
+      return giving
+        ? updateGivingFn({ data: { id: giving.id, ...input } })
+        : createGivingFn({ data: input });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["givings"] });
+      toast.success(giving ? "Giving updated" : "Giving recorded");
+      onClose();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to save giving"),
+  });
+
+  function save() {
     const numericAmount = Number(amount);
     if (!amount || Number.isNaN(numericAmount) || numericAmount <= 0) {
       toast.error("Enter a valid amount");
@@ -337,26 +379,7 @@ function GivingDialog({
       toast.error("Select a project");
       return;
     }
-    const [giverType, giverId] = giverChoice.split(":");
-    try {
-      await db.givings.put({
-        id: giving?.id ?? uid(),
-        memberId: giverType === "member" ? giverId : undefined,
-        partnerId: giverType === "partner" ? giverId : undefined,
-        category,
-        amount: numericAmount,
-        projectId: category === "project" ? projectId || undefined : undefined,
-        date,
-        notes: notes || undefined,
-        branchId: branchId || undefined,
-        createdBy: giving?.createdBy ?? currentUserId,
-        createdAt: giving?.createdAt ?? Date.now(),
-      });
-      toast.success(giving ? "Giving updated" : "Giving recorded");
-      onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save giving");
-    }
+    saveMutation.mutate();
   }
 
   return (

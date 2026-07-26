@@ -1,15 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Plus, Pencil, Target } from "lucide-react";
-import { db } from "@/lib/db";
 import {
   listProjectsFn,
   createProjectFn,
   updateProjectFn,
   deleteProjectFn,
 } from "@/server/projects";
+import { listGivingsFn } from "@/server/givings";
 import { listOrgUsersFn } from "@/server/users";
 import { useBaseCurrency } from "@/lib/currency";
 import { useDisplayCurrency } from "@/lib/currency-toggle";
@@ -49,10 +48,8 @@ function ProjectsPage() {
   const usersQuery = useQuery({ queryKey: ["org-users"], queryFn: () => listOrgUsersFn() });
   const projects = projectsQuery.data ?? [];
   const users = usersQuery.data ?? [];
-  // Givings isn't migrated yet — this stays a local read until that phase
-  // lands, so progress may under-report in the meantime.
-  const givings =
-    useLiveQuery(() => db.givings.where("category").equals("project").toArray(), []) ?? [];
+  const givingsQuery = useQuery({ queryKey: ["givings"], queryFn: () => listGivingsFn() });
+  const givings = (givingsQuery.data ?? []).filter((g) => g.category === "project");
   const [editing, setEditing] = useState<OrgProject | null>(null);
   const [open, setOpen] = useState(false);
   const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
