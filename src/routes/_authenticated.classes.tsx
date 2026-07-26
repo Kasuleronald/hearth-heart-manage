@@ -1,8 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Plus, Pencil, GraduationCap } from "lucide-react";
-import { db, deleteClassCascade, uid, type DiscipleshipClass } from "@/lib/db";
+import { listClassesFn, createClassFn, updateClassFn, deleteClassFn } from "@/server/classes";
+import { listMembersFn } from "@/server/members";
+import { listOrgUsersFn } from "@/server/users";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,20 +37,34 @@ export const Route = createFileRoute("/_authenticated/classes")({
   component: ClassesPage,
 });
 
+type OrgClass = Awaited<ReturnType<typeof listClassesFn>>[number];
+
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 function ClassesPage() {
+  const queryClient = useQueryClient();
   const { session } = useSession();
   const { leaderLabel } = useCellTerm();
-  const classes = useLiveQuery(() => db.classes.orderBy("name").toArray(), []) ?? [];
-  const users =
-    useLiveQuery(
-      () => db.users.filter((u) => u.role === "cell_leader" || u.role === "pastor").toArray(),
-      [],
-    ) ?? [];
-  const members = useLiveQuery(() => db.members.toArray(), []) ?? [];
-  const [editing, setEditing] = useState<DiscipleshipClass | null>(null);
+  const classesQuery = useQuery({ queryKey: ["classes"], queryFn: () => listClassesFn() });
+  const usersQuery = useQuery({ queryKey: ["org-users"], queryFn: () => listOrgUsersFn() });
+  const membersQuery = useQuery({ queryKey: ["members"], queryFn: () => listMembersFn() });
+  const classes = classesQuery.data ?? [];
+  const users = (usersQuery.data ?? []).filter(
+    (u) => u.role === "cell_leader" || u.role === "pastor",
+  );
+  const members = membersQuery.data ?? [];
+  const [editing, setEditing] = useState<OrgClass | null>(null);
   const [open, setOpen] = useState(false);
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteClassFn({ data: { id } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["classes"] });
+      queryClient.invalidateQueries({ queryKey: ["members"] });
+      toast.success("Class deleted");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to delete class"),
+  });
 
   const canManage = session ? session.role === "admin" || session.role === "pastor" : false;
   const effectiveBranch = useEffectiveBranch(session?.branchId);
@@ -56,7 +72,7 @@ function ClassesPage() {
     session?.role === "cell_leader"
       ? classes.filter((c) => c.facilitatorId === session.userId)
       : classes
-  ).filter((c) => matchesBranchFilter(effectiveBranch, c.branchId));
+  ).filter((c) => matchesBranchFilter(effectiveBranch, c.branchId ?? undefined));
 
   return (
     <div>
@@ -123,14 +139,7 @@ function ClassesPage() {
                           title={`Delete "${c.name}"?`}
                           description="This also removes all of its sessions and attendance history. Members are unlinked, not deleted. This can't be undone."
                           onConfirm={async () => {
-                            try {
-                              await deleteClassCascade(c.id);
-                              toast.success("Class deleted");
-                            } catch (e) {
-                              toast.error(
-                                e instanceof Error ? e.message : "Failed to delete class",
-                              );
-                            }
+                            await deleteMutation.mutateAsync(c.id);
                           }}
                         />
                       )}
@@ -167,11 +176,12 @@ function ClassDialog({
   leaderLabel,
   onClose,
 }: {
-  cls: DiscipleshipClass | null;
+  cls: OrgClass | null;
   users: { id: string; fullName: string; role: string }[];
   leaderLabel: string;
   onClose: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [name, setName] = useState(cls?.name ?? "");
   const [meetingDay, setMeetingDay] = useState(cls?.meetingDay ?? "");
   const [meetingLocation, setMeetingLocation] = useState(cls?.meetingLocation ?? "");
@@ -179,24 +189,31 @@ function ClassDialog({
   const [description, setDescription] = useState(cls?.description ?? "");
   const [branchId, setBranchId] = useState(cls?.branchId ?? "");
 
-  async function save() {
-    if (!name.trim()) return toast.error("Name is required");
-    try {
-      await db.classes.put({
-        id: cls?.id ?? uid(),
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const input = {
         name: name.trim(),
         meetingDay: meetingDay || undefined,
         meetingLocation: meetingLocation || undefined,
         facilitatorId: facilitatorId || undefined,
         description: description || undefined,
         branchId: branchId || undefined,
-        createdAt: cls?.createdAt ?? Date.now(),
-      });
+      };
+      return cls
+        ? updateClassFn({ data: { id: cls.id, ...input } })
+        : createClassFn({ data: input });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["classes"] });
       toast.success(cls ? "Class updated" : "Class created");
       onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save class");
-    }
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to save class"),
+  });
+
+  function save() {
+    if (!name.trim()) return toast.error("Name is required");
+    saveMutation.mutate();
   }
 
   return (

@@ -1,8 +1,19 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { ArrowLeft, Plus, Pencil } from "lucide-react";
-import { db, uid, type ClassSession, type Member } from "@/lib/db";
+import {
+  getClassFn,
+  listClassSessionsFn,
+  createClassSessionFn,
+  updateClassSessionFn,
+  deleteClassSessionFn,
+  listClassAttendanceFn,
+  setClassAttendanceFn,
+  setClassMembershipFn,
+} from "@/server/classes";
+import { listMembersFn } from "@/server/members";
+import { listOrgUsersFn } from "@/server/users";
 import { useBaseCurrency } from "@/lib/currency";
 import { useDisplayCurrency } from "@/lib/currency-toggle";
 import { PageHeader } from "@/components/page-header";
@@ -34,33 +45,57 @@ export const Route = createFileRoute("/_authenticated/classes/$id")({
   ),
 });
 
+type OrgClassSession = Awaited<ReturnType<typeof listClassSessionsFn>>[number];
+type OrgMember = Awaited<ReturnType<typeof listMembersFn>>[number];
+
 function ClassDetail() {
   const { id } = Route.useParams();
+  const queryClient = useQueryClient();
   const { session } = useSession();
-  const cls = useLiveQuery(() => db.classes.get(id), [id]);
-  const facilitator = useLiveQuery(
-    () => (cls?.facilitatorId ? db.users.get(cls.facilitatorId) : undefined),
-    [cls?.facilitatorId],
-  );
-  const members = useLiveQuery(() => db.members.where("classId").equals(id).toArray(), [id]) ?? [];
-  const allMembers = useLiveQuery(() => db.members.toArray(), []) ?? [];
-  const sessions =
-    useLiveQuery(
-      () => db.classSessions.where("classId").equals(id).reverse().sortBy("date"),
-      [id],
-    ) ?? [];
+  const clsQuery = useQuery({
+    queryKey: ["classes", id],
+    queryFn: () => getClassFn({ data: { id } }),
+    retry: false,
+  });
+  const usersQuery = useQuery({ queryKey: ["org-users"], queryFn: () => listOrgUsersFn() });
+  const allMembersQuery = useQuery({ queryKey: ["members"], queryFn: () => listMembersFn() });
+  const sessionsQuery = useQuery({
+    queryKey: ["class-sessions", id],
+    queryFn: () => listClassSessionsFn({ data: { classId: id } }),
+  });
+  const cls = clsQuery.data;
+  const allMembers = allMembersQuery.data ?? [];
+  const members = allMembers.filter((m) => m.classId === id);
+  const sessions = sessionsQuery.data ?? [];
+  const facilitator = (usersQuery.data ?? []).find((u) => u.id === cls?.facilitatorId);
   const [addingMember, setAddingMember] = useState(false);
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
-  const [editingSession, setEditingSession] = useState<ClassSession | null>(null);
-  const [attSession, setAttSession] = useState<ClassSession | null>(null);
+  const [editingSession, setEditingSession] = useState<OrgClassSession | null>(null);
+  const [attSession, setAttSession] = useState<OrgClassSession | null>(null);
   const canToggle = session ? canToggleCurrency(session.role, session.financeTier) : false;
   const { format: formatAmount, base } = useDisplayCurrency(canToggle);
 
-  if (cls === undefined) return null;
-  if (!cls) throw notFound();
-  if (session && !canAccessRecordBranch(session.branchId, cls.branchId)) throw notFound();
+  const setMembershipMutation = useMutation({
+    mutationFn: (vars: { memberId: string; classId: string | null }) =>
+      setClassMembershipFn({ data: vars }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["members"] }),
+  });
 
-  const canEdit = session ? canEditClass(session.role, cls.facilitatorId, session.userId) : false;
+  const deleteSessionMutation = useMutation({
+    mutationFn: (sessionId: string) => deleteClassSessionFn({ data: { id: sessionId } }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["class-sessions", id] }),
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to delete session"),
+  });
+
+  if (clsQuery.isLoading) return null;
+  if (clsQuery.isError || !cls) throw notFound();
+  if (session && !canAccessRecordBranch(session.branchId, cls.branchId ?? undefined)) {
+    throw notFound();
+  }
+
+  const canEdit = session
+    ? canEditClass(session.role, cls.facilitatorId ?? undefined, session.userId)
+    : false;
   const unassigned = allMembers.filter((m) => !m.classId);
 
   return (
@@ -109,8 +144,8 @@ function ClassDetail() {
                             <li key={m.id}>
                               <button
                                 className="w-full rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
-                                onClick={async () => {
-                                  await db.members.update(m.id, { classId: cls.id });
+                                onClick={() => {
+                                  setMembershipMutation.mutate({ memberId: m.id, classId: cls.id });
                                   toast.success(`Added ${m.firstName} to ${cls.name}`);
                                 }}
                               >
@@ -137,9 +172,9 @@ function ClassDetail() {
                   {canEdit && (
                     <button
                       className="text-xs text-muted-foreground hover:text-destructive"
-                      onClick={async () => {
-                        await db.members.update(m.id, { classId: undefined });
-                      }}
+                      onClick={() =>
+                        setMembershipMutation.mutate({ memberId: m.id, classId: null })
+                      }
                     >
                       Remove
                     </button>
@@ -173,7 +208,7 @@ function ClassDetail() {
                   <SessionDialog
                     key={editingSession?.id ?? "new"}
                     classId={cls.id}
-                    classBranchId={cls.branchId}
+                    classBranchId={cls.branchId ?? undefined}
                     session={editingSession}
                     onClose={() => setSessionDialogOpen(false)}
                   />
@@ -211,14 +246,7 @@ function ClassDetail() {
                         title="Delete this session?"
                         description="This also removes its attendance records. This can't be undone."
                         onConfirm={async () => {
-                          try {
-                            await db.classAttendance.where("sessionId").equals(s.id).delete();
-                            await db.classSessions.delete(s.id);
-                          } catch (e) {
-                            toast.error(
-                              e instanceof Error ? e.message : "Failed to delete session",
-                            );
-                          }
+                          await deleteSessionMutation.mutateAsync(s.id);
                         }}
                       />
                     </div>
@@ -254,9 +282,10 @@ function SessionDialog({
 }: {
   classId: string;
   classBranchId: string | undefined;
-  session: ClassSession | null;
+  session: OrgClassSession | null;
   onClose: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [date, setDate] = useState(session?.date ?? format(new Date(), "yyyy-MM-dd"));
   const [topic, setTopic] = useState(session?.topic ?? "");
   const [notes, setNotes] = useState(session?.notes ?? "");
@@ -264,6 +293,39 @@ function SessionDialog({
     session?.offertoryAmount != null ? String(session.offertoryAmount) : "",
   );
   const baseCurrency = useBaseCurrency();
+
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const amount = offertoryAmount ? Number(offertoryAmount) : undefined;
+      const input = {
+        classId,
+        date,
+        topic: topic || undefined,
+        notes: notes || undefined,
+        offertoryAmount: amount,
+        branchId: session?.branchId ?? classBranchId,
+      };
+      return session
+        ? updateClassSessionFn({ data: { id: session.id, ...input } })
+        : createClassSessionFn({ data: input });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["class-sessions", classId] });
+      toast.success(session ? "Session updated" : "Session created — mark attendance next.");
+      onClose();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to save session"),
+  });
+
+  function save() {
+    const amount = offertoryAmount ? Number(offertoryAmount) : undefined;
+    if (offertoryAmount && Number.isNaN(amount)) {
+      toast.error("Enter a valid offertory amount");
+      return;
+    }
+    saveMutation.mutate();
+  }
+
   return (
     <DialogContent>
       <DialogHeader>
@@ -304,35 +366,7 @@ function SessionDialog({
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button
-          onClick={async () => {
-            try {
-              const amount = offertoryAmount ? Number(offertoryAmount) : undefined;
-              if (offertoryAmount && Number.isNaN(amount)) {
-                toast.error("Enter a valid offertory amount");
-                return;
-              }
-              await db.classSessions.put({
-                id: session?.id ?? uid(),
-                classId,
-                date,
-                topic: topic || undefined,
-                notes: notes || undefined,
-                offertoryAmount: amount,
-                branchId: session?.branchId ?? classBranchId,
-                createdAt: session?.createdAt ?? Date.now(),
-              });
-              toast.success(
-                session ? "Session updated" : "Session created — mark attendance next.",
-              );
-              onClose();
-            } catch (e) {
-              toast.error(e instanceof Error ? e.message : "Failed to save session");
-            }
-          }}
-        >
-          {session ? "Save changes" : "Create"}
-        </Button>
+        <Button onClick={save}>{session ? "Save changes" : "Create"}</Button>
       </DialogFooter>
     </DialogContent>
   );
@@ -345,30 +379,32 @@ function AttendanceDialog({
   canEdit,
   onClose,
 }: {
-  session: ClassSession;
-  roster: Member[];
-  allMembers: Member[];
+  session: OrgClassSession;
+  roster: OrgMember[];
+  allMembers: OrgMember[];
   canEdit: boolean;
   onClose: () => void;
 }) {
-  const records =
-    useLiveQuery(
-      () => db.classAttendance.where("sessionId").equals(session.id).toArray(),
-      [session.id],
-    ) ?? [];
+  const queryClient = useQueryClient();
+  const attendanceQuery = useQuery({
+    queryKey: ["class-attendance", session.id],
+    queryFn: () => listClassAttendanceFn({ data: { sessionId: session.id } }),
+  });
+  const records = attendanceQuery.data ?? [];
   const map = new Map(records.map((r) => [r.memberId, r]));
   const presentIds = new Set(records.filter((r) => r.present).map((r) => r.memberId));
 
   const displayedIds = new Set([...roster.map((m) => m.id), ...records.map((r) => r.memberId)]);
   const displayed = allMembers.filter((m) => displayedIds.has(m.id));
 
-  async function toggle(memberId: string, present: boolean) {
-    const existing = map.get(memberId);
-    if (existing) {
-      await db.classAttendance.update(existing.id, { present });
-    } else {
-      await db.classAttendance.add({ id: uid(), sessionId: session.id, memberId, present });
-    }
+  const toggleMutation = useMutation({
+    mutationFn: (vars: { memberId: string; present: boolean }) =>
+      setClassAttendanceFn({ data: { sessionId: session.id, ...vars } }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["class-attendance", session.id] }),
+  });
+
+  function toggle(memberId: string, present: boolean) {
+    toggleMutation.mutate({ memberId, present });
   }
 
   return (
